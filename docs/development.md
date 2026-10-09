@@ -1,0 +1,185 @@
+# Development and desktop operation
+
+This guide covers the initial layout: FastAPI runs natively on Windows so host memory monitoring sees the physical machine; Docker runs PostgreSQL only. Model runtimes are not installed by these steps. The target desktop has user-reported Windows 11, 32 GB system RAM, and an RTX 5090 with 32 GB VRAM; those values have not yet been measured by the application.
+
+## Prerequisites
+
+- Docker Desktop with the Compose plugin.
+- `uv` for locked Python dependencies. On Windows, install it with `winget install --id=astral-sh.uv -e`, or use the [official uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+- Node.js 24 LTS and npm for Vite development and frontend builds. This matches the current development setup; see the [official Node.js release schedule](https://nodejs.org/en/about/previous-releases).
+- PowerShell 7.4 or newer for the documented database backup and restore examples.
+
+The Python project supports Python 3.10 and newer. This guide uses Python 3.12, installed and selected by `uv`; its lockfile records the exact resolved dependencies. The development machine and target desktop each need their own `.env` file. Do not copy credentials from one machine to the other.
+
+## First-time setup
+
+Run these commands from the repository root in PowerShell. `init_env.py` creates a private, machine-specific `.env`; it refuses to overwrite an existing one.
+
+```powershell
+uv python install 3.12
+uv sync --locked --project backend --python 3.12
+uv run --locked --project backend python scripts/init_env.py
+docker compose config --quiet
+docker compose up -d --wait db
+uv run --locked --project backend alembic -c backend/alembic.ini upgrade head
+```
+
+The Compose file pins PostgreSQL 17.11 Bookworm, binds its published port to loopback, and stores database files in the `postgres_data` named volume. The default host port is 5439. To change it, set `GS_DB_PORT` in `.env`; keep `GS_DATABASE_URL` in sync with that port. The generator creates matching database credentials in both variables. The PostgreSQL container only reads `POSTGRES_PASSWORD` when it initializes a new volume, so changing `.env` does not rotate a password in an existing database.
+
+If Docker reports that the database is unhealthy, inspect `docker compose logs db` and `docker compose ps`. Do not delete the named volume to troubleshoot; it contains persistent application data.
+
+## Run the API and frontend
+
+Use separate PowerShell terminals, from the repository root unless noted.
+
+API:
+
+```powershell
+uv run --locked --project backend uvicorn generationstation.app:create_app --factory --host 127.0.0.1 --port 8000
+```
+
+Frontend:
+
+```powershell
+Set-Location frontend
+npm ci
+npm run dev
+```
+
+Open the Vite URL printed by the command, normally `http://localhost:5173`. Vite proxies `/api` and `/health` to the local API. The API's `/health` endpoint does not require a token; `/api/*` requests require `Authorization: Bearer <token>` using `GS_API_TOKEN` from `.env`. For a local API smoke check, read the token locally without pasting it into chat or a URL:
+
+```powershell
+$env:GS_API_TOKEN = (Get-Content .env | Where-Object { $_ -match '^GS_API_TOKEN=' } | Select-Object -First 1).Split('=', 2)[1]
+Invoke-RestMethod http://127.0.0.1:8000/api/host -Headers @{ Authorization = "Bearer $env:GS_API_TOKEN" }
+Remove-Item Env:GS_API_TOKEN
+```
+
+The root `.env` is ignored by Git. Avoid commands that echo it or include its contents in shell history. The current API token is a host setting. A client connecting to a different machine must supply that machine's bearer token through the app's connection settings; never embed it in the server URL. The browser's server URL is a client preference, not `GS_DATABASE_URL`.
+
+## Migrations and frontend build
+
+After pulling schema changes, apply Alembic migrations from the repository root:
+
+```powershell
+uv run --locked --project backend alembic -c backend/alembic.ini upgrade head
+```
+
+Create and review a migration when changing persistent schema; do not rely on API startup to create or alter tables. To see the current migration revision:
+
+```powershell
+uv run --locked --project backend alembic -c backend/alembic.ini current
+```
+
+Build the static frontend bundle:
+
+```powershell
+Set-Location frontend
+npm ci
+npm run build
+```
+
+The API serves `frontend/dist` when that directory exists. For local UI work, the Vite development server is more convenient. The frontend build does not package or containerize the API or inference processes.
+
+## Remote browser access through Tailscale
+
+The current Tailscale address `100.109.129.35` is temporary. Configure the browser client with the desktop's current server origin, including scheme and port (for example `http://<current-tailscale-ip>:8000` on a trusted private tailnet). Keep the URL editable in client settings; do not bake the current address into source code or `.env`. Send the API token as an Authorization header, never as a URL query parameter.
+
+The dashboard now provides an editable server address and access-token field. It saves the server address on that device, keeps the token in memory only, and sends it as a bearer header. Remote access is not yet accepted on the desktop; the API/UI integration and tailnet deployment still need desktop verification. Restrict the Windows Firewall rule to the Tailscale interface/devices that need access, and confirm the policy on the tailnet. The API process must bind to an address reachable from the laptop (often `0.0.0.0`); do not expose it through router port forwarding. PostgreSQL remains bound to `127.0.0.1` and must not be opened to the tailnet. CORS only controls browser origins and is not authentication. Use HTTPS if the service is reachable outside a trusted Tailscale connection.
+
+For a separately served frontend, put its exact origin in `GS_ALLOWED_ORIGINS` as a JSON list in `.env`, for example `GS_ALLOWED_ORIGINS=["http://localhost:5173"]`. A same-origin production UI normally does not need a CORS origin. Restart the API after changing settings.
+
+## Verification commands
+
+Run the backend checks from the repository root:
+
+```powershell
+uv run --locked --project backend pytest backend/tests -m "not database"
+uv run --locked --project backend ruff check backend
+```
+
+The PostgreSQL integration tests create and remove a random schema, but run them only against a dedicated disposable test database. Create it once:
+
+```powershell
+docker compose exec -T db createdb -U generationstation generationstation_test
+```
+
+Set the test URL from the generated application URL without printing the credential, then run the database-marked checks:
+
+```powershell
+$databaseUrl = (Get-Content .env | Where-Object { $_ -match '^GS_DATABASE_URL=' } | Select-Object -First 1).Split('=', 2)[1]
+$env:GS_TEST_DATABASE_URL = $databaseUrl -replace '/generationstation$', '/generationstation_test'
+uv run --locked --project backend pytest backend/tests -m database
+Remove-Item Env:GS_TEST_DATABASE_URL
+```
+
+When finished with the dedicated test database, remove only that database:
+
+```powershell
+docker compose exec -T db dropdb -U generationstation generationstation_test
+```
+
+Do not set `GS_TEST_DATABASE_URL` to the application database or another database containing data you need. The integration test drops its random schema when it exits.
+
+Run the frontend production type-check/build:
+
+```powershell
+Set-Location frontend
+npm ci
+npm run build
+```
+
+Install Playwright's Chromium browser once, then run the end-to-end suite from `frontend/`:
+
+```powershell
+Set-Location frontend
+npm ci
+npx playwright install chromium
+npm run test:e2e
+```
+
+The Playwright config starts the Vite server on `127.0.0.1:4173` and launches Chromium. Browser tests live under `frontend/tests/`. Database integration tests must use a disposable database configured through `GS_TEST_DATABASE_URL`; never point destructive tests at the working development database.
+
+## Backup and safe restore
+
+Back up PostgreSQL before database upgrades, before restoring, and on a regular schedule once desktop use begins. This saves database rows and schema only; it does not back up model weights, generated outputs, `.env`, or other files. Keep backups in the ignored `backups/` directory and copy them to storage separate from the Docker volume. PowerShell 7.4+ preserves native command output bytes when using `>`; the `<` operator is reserved for future use, so the restore below copies the SQL file into the container and invokes `psql -f`. See Microsoft's [PowerShell language reference](https://learn.microsoft.com/en-us/powershell/scripting/lang-spec/chapter-07#712-redirection-operators) and [redirection guide](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection).
+
+Create a plain SQL backup while the database is running:
+
+```powershell
+New-Item -ItemType Directory -Force backups | Out-Null
+$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+docker compose exec -T db pg_dump --no-owner --no-privileges -U generationstation -d generationstation > "backups/generationstation-$stamp.sql"
+if ($LASTEXITCODE -ne 0) { throw 'Database backup failed.' }
+```
+
+Restore into a **new empty database** first. This leaves the current database intact for rollback. Set `$backup` to the desired file and choose a fresh database name:
+
+```powershell
+$backup = '.\backups\generationstation-YYYYMMDD-HHMMSS.sql'
+$backupPath = (Resolve-Path $backup).Path
+$restoreDb = 'generationstation_restore'
+$containerFile = '/tmp/generationstation-restore.sql'
+docker compose exec -T db psql -U generationstation -d postgres -c "CREATE DATABASE $restoreDb OWNER generationstation;"
+if ($LASTEXITCODE -ne 0) { throw 'Could not create the empty restore database.' }
+try {
+    docker compose cp $backupPath "db:$containerFile"
+    if ($LASTEXITCODE -ne 0) { throw 'Could not copy the backup into the database container.' }
+    docker compose exec -T db psql -v ON_ERROR_STOP=1 -U generationstation -d $restoreDb -f $containerFile
+    if ($LASTEXITCODE -ne 0) { throw 'Database restore failed; the original database remains unchanged.' }
+} finally {
+    docker compose exec -T db rm -f $containerFile
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Could not remove the temporary restore file from the container.' }
+}
+```
+
+Stop the API before switching it to the restored database. Update `GS_DATABASE_URL` in `.env` to point at `$restoreDb`, restart the API, and verify health and expected records. Keep the original database until verification succeeds. To roll back, stop the API and point `GS_DATABASE_URL` back to `generationstation`. Once the restore is accepted, schedule a separate maintenance window to rename/swap databases; do not drop the original as part of an unverified restore. Never run `docker compose down -v` as a backup or restore step: it deletes the named database volume.
+
+## Stop services
+
+Stop the API and Vite with Ctrl+C, then stop only the database container:
+
+```powershell
+docker compose down
+```
+
+The named database volume remains. Model weights, generated outputs, and runtime caches belong outside source control and should use their own explicit backup plan.

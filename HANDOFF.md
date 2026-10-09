@@ -1,0 +1,93 @@
+# ModelDock session handoff
+
+> Update, 2026-10-09: renamed to **Generation Station**, now at `/home/sforse/git/generationstation`. Desktop: Ryzen 7 5800X3D, 32 GB DDR4 RAM, 2 TB NVMe SSD (total capacity). GPU: NVIDIA RTX 5090 with 32 GB VRAM. OS: Windows 11. Free storage remains unknown. Accepted stack: React/TypeScript/Vite, native Windows Python/FastAPI, SQLAlchemy/Alembic, and PostgreSQL 17.11 in a persistent Docker container. Tailscale desktop address: `100.109.129.35` (configurable, may change). Local M1 prototype is implemented and passes backend/browser verification; PostgreSQL live integration and target-desktop acceptance remain pending. M2/M3 are pending. See `docs/context.md`, `docs/plan.md`, and `docs/development.md` for current status and setup; the original handoff below is a historical snapshot.
+
+Prepared: 2026-10-08. Project path: `/home/sforse/git/modeldock`.
+
+## Current handoff
+
+The stack decision and local M1 prototype are complete. Follow `docs/development.md` to start the app. Backend tests pass (32); the PostgreSQL-only integration test was skipped because no database service was available here. All seven Playwright browser tests and the frontend build pass. M1 still needs a Windows desktop deployment, real RAM/VRAM comparison, and authenticated Tailscale browser acceptance; do not mark it complete based on laptop-only work. M2 admission/fake-worker lifecycle and M3 real-model verification are pending. The first workload and exact checkpoint/runtime remain undecided. Never claim candidate model support until it is demonstrated on the desktop.
+
+The first-session notes below are retained as a historical record and contain superseded questions and paths. For current facts and decisions, use `docs/context.md` and `docs/plan.md`.
+
+## Historical first-session handoff
+
+Read `AGENTS.md`, `docs/context.md`, and `docs/plan.md`. The user is moving into a fresh session in this project directory to continue planning and then implementation.
+
+## What the user wants
+
+ModelDock is a web application that manages multiple AI models on a desktop with limited system RAM and VRAM. The laptop is a browser client and development machine; the separate desktop hosts inference and supplies the memory telemetry.
+
+Confirmed requirements:
+
+- Working project name: **ModelDock**.
+- Explicit **Load** and **Unload** controls for models.
+- Show current desktop RAM and VRAM usage.
+- Refuse model loading when the desktop lacks sufficient capacity. Enforce this in the backend, independently of browser controls.
+
+Candidate models named by the user: MiniMax H3 for video, Qwen-Image 2.1 for images, YuE2 for music, and Qwen3.8-Flash-Next for agentic coding. These are desired candidates; compatibility and fit on the desktop have not been established. Source links are in the plan. Validate exact checkpoints, quantizations, and runtimes before promising support.
+
+## Proposed stack — not yet explicitly accepted
+
+- Frontend: **React + TypeScript + Vite**, matching Playtab's frontend stack.
+- Backend: **Python + FastAPI**, served by Uvicorn.
+- Persistence: **SQLite**; weights and generated artifacts stay on the desktop filesystem.
+- Browser communication: REST commands and server-sent events for live telemetry/status.
+- Monitoring: psutil for RAM; GPU vendor adapters, using NVML if the desktop has NVIDIA GPUs.
+- Execution: supervised worker subprocesses with separate runtime environments.
+- Deployment: backend serves compiled frontend assets; one desktop service and one scheduler owner initially.
+
+The user asked for a language/framework recommendation, received these recommendations, then requested this handoff. Do not record the stack as an explicitly approved user decision.
+
+## Plan and first usable release
+
+The detailed plan in `docs/plan.md` includes architecture, API sketch, lifecycle, admission policy, interface behavior, acceptance criteria, and validation.
+
+1. **M0:** Agree on stack, obtain desktop inventory, select first feasible model/runtime.
+2. **M1:** Web shell and real desktop RAM/VRAM telemetry, including stale/disconnected states.
+3. **M2:** Admission controller and lifecycle with a fake worker; reservations, refusal reasons, idempotency, cleanup, and restart reconciliation.
+4. **M3:** First real model on the desktop; load, prove inference works, unload, verify memory release, and refuse an oversized load.
+5. **M4:** Second runtime and reliable switching between model types.
+6. **M5:** Generation jobs, outputs, cancellation, remaining compatible modalities, and coding-client integration.
+7. **M6:** Priority/eviction policies, measured concurrency, and desktop service operation.
+
+**M3 is the first usable release.** Prioritize reliable manual model management before automatic scheduling and elaborate generation interfaces.
+
+## Important architectural constraints
+
+- Monitor the desktop host, not the laptop or an accidentally isolated container's memory view.
+- Check RAM and each relevant GPU independently, with configurable headroom and loading peaks. VRAM cannot simply be pooled across GPUs.
+- Unknown profiles, stale telemetry, or unsupported accounting refuse normal loading.
+- Tie profiles to exact model/runtime/configuration and workload limits. Weight file size alone is insufficient.
+- Serialize lifecycle operations initially. Reserve capacity atomically and avoid double counting reservations already represented in telemetry.
+- CPU offload consumes RAM; swap is not ordinary available capacity.
+- Recheck actual telemetry after unload; do not assume the estimated footprint was released.
+- External applications can allocate memory after admission. Handle allocation failure and cleanup; do not promise an absolute OOM guarantee.
+- Later generation requests require their own memory checks for context length, resolution, duration, batch size, and other workload settings.
+- Keep model execution outside the API process. Handle readiness, process trees, crashes, and stale persisted state explicitly.
+
+
+
+| Page | ID | Local authoritative source |
+| --- | --- | --- |
+
+
+
+```sh
+```
+
+
+## Work completed and not completed
+
+
+No application code, dependency installation, runtime installation, model downloads, deployment, tests, or desktop benchmarks have been performed. No project Git initialization or commit was performed. Check repository boundaries before the first Git operation because this folder lives among sister projects in a shared workspace.
+
+## Missing inputs and next action
+
+The user has not yet supplied:
+
+- Desktop OS, CPU, GPU vendor/model/count, per-GPU VRAM, system RAM, and available SSD space.
+- Desktop network access method or existing VPN/private network.
+- First model/workload to implement and acceptable loading/generation latency.
+- Priority when coding and media jobs compete for memory.
+
