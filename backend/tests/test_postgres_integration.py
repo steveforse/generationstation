@@ -13,7 +13,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, insert, inspect, text
 from sqlalchemy.engine import make_url
 
-from generationstation.storage import Store, models
+from generationstation.storage import Store, model_runtime, models
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -72,6 +72,9 @@ def test_postgresql_migration_and_store_round_trip():
                     connection.execute(insert(models).values(
                         id="postgres-round-trip", name="Round trip", workload="test",
                     ))
+                    connection.execute(insert(model_runtime).values(
+                        model_id="postgres-round-trip", state="unloaded",
+                    ))
                 names = set(inspect(migration_engine).get_table_names(schema=schema))
                 assert names >= {"station", "models", "model_profiles", "model_runtime",
                                  "operations", "capacity_reservations", "alembic_version"}
@@ -86,6 +89,7 @@ def test_postgresql_migration_and_store_round_trip():
                 assert reopened_models[0]["id"] == "integration-model"
                 assert reopened_models[0]["profile"]["revision"] == 1
                 assert reopened_models[1]["id"] == "postgres-round-trip"
+                assert reopened_models[1]["state"] == "unloaded"
                 assert reopened_models[1]["profile"]["id"] is None
             finally:
                 reopened_store.close()
