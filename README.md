@@ -4,7 +4,7 @@ Generation Station is a browser dashboard for managing AI model processes on a s
 
 ## Current state
 
-The local M1/M2 prototype is implemented. Backend pytest reports 69 passed and one PostgreSQL-only integration test skipped; Ruff passes. The frontend build and all 11 Playwright tests pass. Live PostgreSQL and Windows desktop checks remain pending. M2's fixed fake worker performs no inference and loads no weights. M1 desktop acceptance and a verified real model (M3) remain pending. No candidate model is currently promised to fit or run.
+The M1/M2 prototype is implemented and host-side desktop checks pass: fresh Windows RAM/NVML telemetry, Tailscale API reachability with bearer authentication, PostgreSQL at Alembic `0002 (head)`, and a fake-worker load/unload cycle with zero active reservations afterward. The Windows backend suite passed 69 tests, the PostgreSQL migration/persistence test passed on a disposable database, Ruff passed, and the frontend build plus 11 Playwright tests pass. The laptop browser's full remote connect/reconnect flow remains to be verified. The fake worker performs no inference and loads no weights; no real model is promised to fit or run. Selecting the first M3 workload, model, and runtime remains open.
 
 ## Start local development
 

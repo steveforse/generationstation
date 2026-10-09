@@ -200,8 +200,15 @@ def test_environment_scope_recognizes_native_windows_and_wsl(monkeypatch, releas
 
 
 def test_scope_marks_container_runtime(monkeypatch):
+    class FakePath:
+        def __init__(self, value):
+            self.value = value
+
+        def exists(self):
+            return self.value == "/.dockerenv"
+
     monkeypatch.setattr(telemetry.platform, "release", lambda: "linux")
-    monkeypatch.setattr(telemetry.Path, "exists", lambda self: str(self) == "/.dockerenv")
+    monkeypatch.setattr(telemetry, "Path", FakePath)
     assert environment_scope() == "container"
 
 

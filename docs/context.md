@@ -17,7 +17,7 @@ Updated: 2026-10-09.
 - PostgreSQL in Docker with a persistent named volume replaces the SQLite proposal. Docker is available on both the development laptop and desktop (user-reported).
 - SQLAlchemy 2 and Alembic are selected for PostgreSQL access and schema migrations. PostgreSQL 17 is pinned to the maintained 17.11 Bookworm image; update the patch tag after checking official release/image metadata.
 - Model weights and generated outputs remain files outside the database and source control.
-- Tailscale provides current remote access. Desktop IP: `100.109.129.35`; it may change. The dashboard now has a configurable server URL and token field: it saves the URL on that device, keeps the token in memory, and sends bearer authentication. Local development uses API port 8000; desktop deployment and remote connectivity are not yet accepted.
+- Tailscale provides current remote access. Desktop IP: `100.109.129.35`; it may change. The dashboard has a configurable server URL and token field: it saves the URL on that device, keeps the token in memory, and sends bearer authentication. On 2026-10-09, the laptop reached the desktop API on port 8000; an unauthenticated API request returned HTTP 401, and the Vite-origin CORS preflight succeeded. Authenticated host telemetry and a simulation lifecycle were verified on the desktop. The full laptop-browser connection and reconnect path remains to be checked. SSH works through the local `generationstation-desktop` alias; update its `HostName` if the Tailscale address changes.
 
 ## Engineering recommendations and pending decisions
 
@@ -29,20 +29,19 @@ Updated: 2026-10-09.
 
 ## Desktop inventory
 
-User-reported on 2026-10-08; not yet measured on the host:
+Hardware was reported on 2026-10-08. Windows checks on 2026-10-09 confirmed the CPU, OS, RAM capacity, and GPU; memory type and SSD model remain user-reported:
 
 - CPU: AMD Ryzen 7 5800X3D.
 - System RAM: 32 GB DDR4.
-- Storage: 2 TB NVMe SSD total capacity; free space unknown.
+- Storage: 2 TB NVMe SSD; the Windows C: volume reports 2,047,359,315,968 bytes total and 448,952,270,848 bytes free at the inventory check.
 - GPU: NVIDIA RTX 5090 with 32 GB dedicated VRAM.
 - OS: Windows 11.
 
-Installed RAM is not the available model budget; admission still requires live host telemetry and headroom.
+The native Windows API reported a live host-scoped sample at `2026-10-09T14:12:44Z`: system RAM 34,280,030,208 bytes total, 24,476,930,048 available, and 9,803,100,160 used; RTX 5090 VRAM 34,190,917,632 bytes total, 32,506,490,880 available, and 1,684,426,752 used. The sample was 0.81 seconds old and `stale=false`. `nvidia-smi` reported driver 617.14. These are changing baseline measurements, not a model-fit result. The CPU was confirmed as an AMD Ryzen 7 5800X3D, and the C: volume had about 418 GiB free. Runtime compatibility and peak memory during real inference remain unverified.
 
 ## Open inputs
 
-- Available SSD space.
-- Production application port and desktop deployment access. Local development currently uses API port 8000; the dashboard token-entry flow and bearer-authenticated API requests are implemented, but remote access has not yet been verified on the desktop.
+- The laptop browser's authenticated connection and reconnect experience against the desktop still needs an end-to-end check. The API is reachable over the current Tailscale route on port 8000; the address is temporary.
 - Which model/workload to support first and exact checkpoint/runtime/quantization.
 - Priority when coding and media compete for memory.
 - Acceptable cold load time and generation latency.
@@ -55,4 +54,4 @@ Do not use this laptop's hardware as a substitute for the desktop inventory.
 
 ## Current state and next action
 
-The local M1/M2 prototype is implemented. Backend pytest reports 69 passed and one PostgreSQL-only integration test skipped because `GS_TEST_DATABASE_URL` was not configured; Ruff passes. The frontend build and all 11 Playwright tests pass. Compose configuration and Alembic offline SQL validate. These local checks do not include a live PostgreSQL migration/admission run or a Windows desktop run. M1 desktop acceptance remains pending: deploy the service, compare actual RAM/VRAM telemetry, and verify Tailscale access. M2's fixed fake worker performs no inference and loads no weights; PostgreSQL-backed reservation/advisory-lock behavior and desktop end-to-end operation remain unverified. M3 (a verified real model) remains pending. No desktop memory measurements, runtime compatibility, or model fit have been established. Tailscale's current address remains configurable and must not be treated as permanent. Next: complete live PostgreSQL and desktop validation, then select a first workload and establish its profile before M3. Do not claim desktop acceptance based on local development or treat a fake worker as model support.
+The local M1/M2 prototype is implemented. On the Windows desktop, the API reported fresh RAM and NVML telemetry, the PostgreSQL application database was healthy at Alembic revision `0002 (head)`, and a dedicated PostgreSQL migration/persistence/locking integration check passed. A 1 GiB RAM / 1 GiB RTX 5090 fake-worker profile reached `simulation_ready`, unloaded cleanly, and left zero active capacity reservations; the temporary profile was deleted while its model identity and operation history were retained by design. The fake worker starts no operating-system process, opens no model files, and runs no inference. The Windows backend suite passed 69 tests and Ruff passed. The local frontend build and 11 Playwright tests pass. Desktop API routing and bearer authentication were verified, but the laptop browser's full connection/reconnect path remains open. M3 (a verified real model) remains pending: select a workload, then check its exact model, runtime, available weights, and measured memory profile. Do not treat a fake-worker result as model support.
