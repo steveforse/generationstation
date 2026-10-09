@@ -1,6 +1,8 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 
 const token = 'test-token-with-enough-length-for-fixture-only'
+const gpuUuid = 'GPU-5b5f7f4e-0000-0000-0000-000000000000'
+const profileUuid = '11111111-2222-4333-8444-555555555555'
 
 function fixtureHost(label = 'Fixture desktop', stale = false, instance = 'fixture-instance') {
   return {
@@ -8,12 +10,75 @@ function fixtureHost(label = 'Fixture desktop', stale = false, instance = 'fixtu
     host: { hostname: label.toLowerCase().replaceAll(' ', '-'), os: 'Windows', label, role: 'desktop', scope: 'host' },
     ram: { total_bytes: 32 * 1024 ** 3, available_bytes: 20 * 1024 ** 3, used_bytes: 12 * 1024 ** 3 },
     ram_error: null,
-    gpus: [{ id: 'gpu-fixture-0', name: 'Fixture GPU', memory: { total_bytes: 32 * 1024 ** 3, available_bytes: 28 * 1024 ** 3, used_bytes: 4 * 1024 ** 3 }, error: null }],
+    gpus: [{ id: gpuUuid, name: 'Fixture GPU', memory: { total_bytes: 32 * 1024 ** 3, available_bytes: 28 * 1024 ** 3, used_bytes: 4 * 1024 ** 3 }, error: null }],
     gpu_error: null,
     observed_at: '2026-10-08T00:00:00+00:00', sequence: 1, age_seconds: 0,
-    stale, stale_after_seconds: 2, status: stale ? 'stale' : 'live', loading_enabled: false,
-    loading_reason: 'Unavailable in the preview.',
+    stale, stale_after_seconds: 2, status: stale ? 'stale' : 'live', loading_enabled: !stale,
+    loading_reason: stale ? 'A fresh host sample is required.' : 'The desktop host has fresh telemetry.',
   }
+}
+
+function profileRecord(modelId = 'fixture-model') {
+  return { id: profileUuid, model_id: modelId, name: 'Fixture model', workload: 'browser fixture', ram_peak_bytes: 4 * 1024 ** 3, gpu_vram_bytes_by_id: { [gpuUuid]: 2 * 1024 ** 3 }, mode: 'simulation', revision: 1 }
+}
+
+function modelRecord(profile: ReturnType<typeof profileRecord>, state = 'unloaded') {
+  return { id: profile.model_id, name: profile.name, workload: profile.workload, state, loading_enabled: ['unloaded', 'error'].includes(state), loading_reason: 'Fresh desktop telemetry is available.', profile: { id: profile.id, revision: profile.revision } }
+}
+
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string } = {}) {
+  const profiles = options.initialProfile ? [profileRecord()] : []
+  const models = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
+  const operations: Array<Record<string, unknown>> = []
+  let rejected = !!options.refuseLoad
+  let postProfileBody: Record<string, unknown> | null = null
+  let loadProfileId: unknown = null
+  await page.route('**/api/models', (route) => route.fulfill({ json: { models } }))
+  await page.route('**/api/profiles', async (route) => {
+    if (route.request().method() === 'GET') { await route.fulfill({ json: { profiles } }); return }
+    postProfileBody = route.request().postDataJSON()
+    const body = postProfileBody as Record<string, unknown>
+    const created = { id: profileUuid, model_id: body.id, name: body.name, workload: body.workload,
+      ram_peak_bytes: body.ram_peak_bytes, gpu_vram_bytes_by_id: body.gpu_vram_bytes_by_id,
+      mode: body.mode, revision: 1 }
+    profiles.push(created as ReturnType<typeof profileRecord>)
+    models.push(modelRecord(created as ReturnType<typeof profileRecord>))
+    await route.fulfill({ status: 201, json: { profile: created } })
+  })
+  await page.route('**/api/operations?limit=100', (route) => route.fulfill({ json: { operations } }))
+  await page.route('**/api/operations/*', async (route) => {
+    const id = route.request().url().split('/').pop() ?? ''
+    const operation = operations.find((item) => item.id === id)
+    if (!operation) { await route.fulfill({ status: 404, json: { detail: 'Operation not found.' } }); return }
+    if (operation.action === 'load' && operation.status === 'loading') {
+      operation.status = 'simulation_ready'
+      const model = models.find((item) => item.id === operation.model_id)
+      if (model) { model.state = 'simulation_ready'; model.loading_enabled = false }
+    } else if (operation.action === 'unload' && operation.status === 'unloading') {
+      operation.status = 'unloaded'
+      const model = models.find((item) => item.id === operation.model_id)
+      if (model) { model.state = 'unloaded'; model.loading_enabled = true }
+    }
+    await route.fulfill({ json: operation })
+  })
+  await page.route('**/api/models/*/load', async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>
+    loadProfileId = body.profile_id
+    if (rejected) {
+      await route.fulfill({ status: 409, json: { detail: { code: 'INSUFFICIENT_VRAM', message: 'This profile exceeds currently available GPU memory.', resources: [{ resource: `gpu:${gpuUuid}`, required_bytes: 6 * 1024 ** 3, available_bytes: 3 * 1024 ** 3, headroom_bytes: 2 * 1024 ** 3 }] } } })
+      rejected = false
+      return
+    }
+    const operation = { id: 'operation-load-1', model_id: 'fixture-model', profile_id: body.profile_id, profile_revision: 1, action: 'load', status: 'loading', simulation: true, worker_type: 'fake' }
+    operations.unshift(operation)
+    await route.fulfill({ status: 202, json: operation })
+  })
+  await page.route('**/api/models/*/unload', async (route) => {
+    const operation = { id: 'operation-unload-1', model_id: 'fixture-model', profile_id: profileUuid, profile_revision: 1, action: 'unload', status: 'unloading', simulation: true, worker_type: 'fake' }
+    operations.unshift(operation)
+    await route.fulfill({ status: 202, json: operation })
+  })
+  return { profiles, models, operations, get postProfileBody() { return postProfileBody }, get loadProfileId() { return loadProfileId } }
 }
 
 async function installSseMock(page: Page) {
@@ -62,8 +127,9 @@ async function streamCount(page: Page) {
   return page.evaluate(() => (window as Window & { __gsStreamCount?: number }).__gsStreamCount ?? 0)
 }
 
-async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false) {
+async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string } = {}) {
   await installSseMock(page)
+  const api = await installM2Api(page, options)
   const host = fixtureHost(label, stale)
   await page.route('**/api/host', async (route: Route) => {
     if (route.request().headers().authorization !== `Bearer ${token}`) {
@@ -72,12 +138,12 @@ async function connectFixtures(page: Page, label = 'Fixture desktop', stale = fa
     }
     await route.fulfill({ json: host })
   })
-  await page.route('**/api/models', (route) => route.fulfill({ json: { models: [] } }))
   await page.goto('/')
   await page.getByLabel('Access token').fill(token)
   await page.getByRole('button', { name: 'Connect to host' }).click()
   await expect.poll(() => streamCount(page)).toBe(1)
   await expect.poll(() => pushFrame(page, host)).toBe(true)
+  return api
 }
 
 test('shows an honest disconnected screen on desktop and narrow mobile', async ({ page }) => {
@@ -86,7 +152,7 @@ test('shows an honest disconnected screen on desktop and narrow mobile', async (
   await expect(page.getByRole('heading', { name: 'System overview' })).toBeVisible()
   await expect(page.getByText('No host selected')).toBeVisible()
   await expect(page.getByText('Connect to view measurements')).toHaveCount(2)
-  await expect(page.getByText('No models installed yet')).toHaveCount(0)
+  await expect(page.getByText('No registered profiles')).toHaveCount(0)
   await page.screenshot({ path: 'test-results/screenshots/disconnected-desktop.png', fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.getByRole('heading', { name: 'System overview' })).toBeVisible()
@@ -94,23 +160,76 @@ test('shows an honest disconnected screen on desktop and narrow mobile', async (
   await page.screenshot({ path: 'test-results/screenshots/disconnected-mobile.png', fullPage: true })
 })
 
-test('authenticates, renders measured host values, and leaves models empty without inventing entries', async ({ page }) => {
+test('authenticates, renders measured host values, and leaves the profile catalog empty without inventing entries', async ({ page }) => {
   await connectFixtures(page)
   await expect(page.getByText('Fixture desktop')).toBeVisible()
   await expect(page.getByText('12 GiB')).toBeVisible()
   await expect(page.getByText('32 GiB').first()).toBeVisible()
   await expect(page.getByText('4 GiB')).toBeVisible()
-  await expect(page.getByText('No models installed yet')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Add model' })).toBeDisabled()
+  await expect(page.getByText('No registered profiles')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Register profile' })).toBeEnabled()
   await expect(page.getByText('Live telemetry is streaming from the host.')).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('generation-station.server-url'))).toBe('')
   expect(await page.evaluate(() => Object.keys(localStorage).some((key) => /token/i.test(key)))).toBe(false)
 })
 
+test('registers an explicit profile and binds VRAM to the selected reported UUID', async ({ page }) => {
+  const api = await connectFixtures(page)
+  await page.getByRole('button', { name: 'Register profile' }).click()
+  await expect(page.getByRole('form', { name: 'Register simulation model profile' })).toBeVisible()
+  await page.getByLabel('PROFILE ID').fill('my-fixture-profile')
+  await page.getByLabel('MODEL NAME').fill('A model label')
+  await page.getByLabel('WORKLOAD').fill('a workload chosen by the user')
+  await page.getByLabel('PEAK SYSTEM RAM (GiB)').fill('6.5')
+  await page.getByRole('button', { name: 'Add GPU requirement' }).click()
+  await page.getByLabel('GPU device 1').selectOption(gpuUuid)
+  await page.getByLabel('Peak VRAM GiB for GPU 1').fill('4')
+  await page.getByRole('button', { name: 'Register simulation profile' }).click()
+  await expect(page.getByText('A model label')).toBeVisible()
+  expect(api.postProfileBody).toMatchObject({ id: 'my-fixture-profile', name: 'A model label', workload: 'a workload chosen by the user', mode: 'simulation', ram_peak_bytes: 6.5 * 1024 ** 3, gpu_vram_bytes_by_id: { [gpuUuid]: 4 * 1024 ** 3 } })
+  await expect(page.getByText('Fake worker · no inference')).toBeVisible()
+  await expect(page.getByText('No model weights or outputs are used.')).toBeVisible()
+  await page.screenshot({ path: 'test-results/screenshots/fixture-profile-desktop.png', fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('button', { name: 'Load simulation' })).toBeEnabled()
+  await page.screenshot({ path: 'test-results/screenshots/fixture-profile-mobile.png', fullPage: true })
+})
+
+test('loads by capacity-approved request, polls simulation-ready, and unloads the fake worker', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { initialProfile: true })
+  await expect(page.getByRole('button', { name: 'Load simulation' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Load simulation' }).click()
+  expect(api.loadProfileId).toBe(profileUuid)
+  await expect(page.getByText('Load simulation · simulation ready')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Unload simulation' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Unload simulation' }).click()
+  await expect(page.getByText('Unload simulation · unloaded')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Load simulation' })).toBeEnabled()
+})
+
+test('renders server-side capacity refusal code and per-resource requirement details', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { initialProfile: true, refuseLoad: true })
+  await page.getByRole('button', { name: 'Load simulation' }).click()
+  await expect(page.getByText('INSUFFICIENT_VRAM')).toBeVisible()
+  await expect(page.getByText('Required 6 GiB')).toBeVisible()
+  await expect(page.getByText('Available 3 GiB')).toBeVisible()
+  await expect(page.getByText('Headroom 2 GiB')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Load simulation' })).toBeEnabled()
+})
+
+test('allows retry after a fully cleaned-up worker error state', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { initialProfile: true, initialState: 'error' })
+  await expect(page.getByText('Worker error')).toBeVisible()
+  await page.getByRole('button', { name: 'Retry simulation' }).click()
+  await expect(page.getByText('Load simulation · simulation ready')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Unload simulation' })).toBeEnabled()
+})
+
 test('clears old measurements on disconnect and marks telemetry stale', async ({ page }) => {
-  await connectFixtures(page, 'Fixture desktop', true)
+  await connectFixtures(page, 'Fixture desktop', true, { initialProfile: true })
   await expect(page.getByText('Telemetry stale')).toBeVisible()
   await expect(page.getByText('Last known measurement').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Load simulation' })).toBeDisabled()
   await page.getByRole('button', { name: 'Disconnect' }).first().click()
   await expect(page.getByText('Disconnected. Host measurements and model data have been cleared.')).toBeVisible()
   await expect(page.getByText('Fixture desktop')).toHaveCount(0)
@@ -121,10 +240,11 @@ test('marks fresh partial GPU telemetry clearly and shows the reported device er
   const host = fixtureHost('Partial telemetry desktop')
   host.status = 'degraded'
   host.gpu_error = 'NVML telemetry is unavailable.'
-  host.gpus = [{ id: 'gpu-fixture-0', name: 'Fixture GPU', memory: null, error: 'Driver did not expose memory counters.' }]
+  host.loading_enabled = false
+  host.gpus = [{ id: gpuUuid, name: 'Fixture GPU', memory: null, error: 'Driver did not expose memory counters.' }]
   await installSseMock(page)
+  await installM2Api(page)
   await page.route('**/api/host', (route) => route.fulfill({ json: host }))
-  await page.route('**/api/models', (route) => route.fulfill({ json: { models: [] } }))
   await page.goto('/')
   await page.getByLabel('Access token').fill(token)
   await page.getByRole('button', { name: 'Connect to host' }).click()
@@ -148,11 +268,11 @@ test('rejects invalid access tokens without opening the event stream', async ({ 
 
 test('drops the first host immediately when the server address changes', async ({ page }) => {
   await installSseMock(page)
+  await installM2Api(page)
   await page.route('**/api/host', async (route) => {
     const label = route.request().url().includes('two.test') ? 'Second desktop' : 'First desktop'
     await route.fulfill({ json: fixtureHost(label, false, label) })
   })
-  await page.route('**/api/models', (route) => route.fulfill({ json: { models: [] } }))
   await page.goto('/')
   await page.getByLabel('Server address').fill('http://one.test:8100')
   await page.getByLabel('Access token').fill(token)
@@ -176,8 +296,8 @@ test('reconnects after a stream outage longer than the watchdog and accepts the 
   const recovered = { ...fixtureHost('Recovered desktop', false, 'new-service-instance'), sequence: 2,
     ram: { total_bytes: 32 * 1024 ** 3, available_bytes: 15 * 1024 ** 3, used_bytes: 17 * 1024 ** 3 } }
   await installSseMock(page)
+  await installM2Api(page)
   await page.route('**/api/host', (route) => route.fulfill({ json: initial }))
-  await page.route('**/api/models', (route) => route.fulfill({ json: { models: [] } }))
   await page.goto('/')
   await page.getByLabel('Access token').fill(token)
   await page.getByRole('button', { name: 'Connect to host' }).click()
