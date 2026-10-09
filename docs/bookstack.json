@@ -1,0 +1,20 @@
+{
+  "book_id": 63,
+  "book_url": "https://bookstack.forse.co/books/modeldock",
+  "pages": [
+    {
+      "id": 64,
+      "name": "Project Context and Decisions",
+      "source": "docs/context.md",
+      "url": "https://bookstack.forse.co/books/modeldock/page/project-context-and-decisions",
+      "updated_at": "2026-10-09T03:16:26.000000Z"
+    },
+    {
+      "id": 65,
+      "name": "Architecture and Implementation Plan",
+      "source": "docs/plan.md",
+      "url": "https://bookstack.forse.co/books/modeldock/page/architecture-and-implementation-plan",
+      "updated_at": "2026-10-09T03:16:30.000000Z"
+    }
+  ]
+}
