@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Activity, AlertCircle, ArrowUpRight, ChevronDown,
   CircleHelp, Cpu, Database, LockKeyhole, MemoryStick,
-  Monitor, RefreshCw, Server, Settings2, ShieldCheck, Sparkles, Wifi, WifiOff,
+  Monitor, Plus, RefreshCw, Server, Settings2, ShieldCheck, Sparkles, Wifi, WifiOff,
   X,
 } from 'lucide-react'
 
@@ -17,7 +17,15 @@ type Host = {
   loading_reason: string
 }
 type Snapshot = { data: Host; arrivedAt: number }
-type Model = { id: string; name: string; workload: string }
+type Model = { id: string; name: string; workload: string; state: string; loading_enabled: boolean; loading_reason?: string | null }
+type ModelProfile = { id: string; model_id: string; name: string; workload: string; ram_peak_bytes: number; gpu_vram_bytes_by_id: Record<string, number>; mode: 'simulation' }
+type Operation = { id: string; model_id: string; action: string; status: string; simulation: boolean; worker_type: string; created_at?: string; updated_at?: string; error_code?: string | null; error_message?: string | null; refusal?: Refusal | null }
+type RefusalResource = { resource: string; required_bytes: number; available_bytes: number; headroom_bytes?: number }
+type Refusal = { code: string; message: string; resources?: RefusalResource[] }
+type ApiErrorBody = { detail?: string | Refusal; [key: string]: unknown }
+class ApiError extends Error {
+  constructor(readonly status: number, readonly body: ApiErrorBody) { super(typeof body.detail === 'string' ? body.detail : body.detail?.message ?? `Host request failed (${status}).`) }
+}
 type Connection = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error'
 
 const URL_KEY = 'generation-station.server-url'
@@ -95,7 +103,56 @@ function isCatalog(value: unknown): value is { models: Model[] } {
   return ((value as { models: unknown[] }).models).every((entry) => !!entry && typeof entry === 'object'
     && typeof (entry as Record<string, unknown>).id === 'string'
     && typeof (entry as Record<string, unknown>).name === 'string'
-    && typeof (entry as Record<string, unknown>).workload === 'string')
+    && typeof (entry as Record<string, unknown>).workload === 'string'
+    && typeof (entry as Record<string, unknown>).state === 'string'
+    && typeof (entry as Record<string, unknown>).loading_enabled === 'boolean')
+}
+
+function isProfiles(value: unknown): value is { profiles: ModelProfile[] } {
+  if (!value || typeof value !== 'object' || !Array.isArray((value as Record<string, unknown>).profiles)) return false
+  return ((value as { profiles: unknown[] }).profiles).every((entry) => {
+    if (!entry || typeof entry !== 'object') return false
+    const profile = entry as Record<string, unknown>
+    if (!(typeof profile.model_id === 'string' || typeof profile.id === 'string') || typeof profile.name !== 'string' || typeof profile.workload !== 'string'
+        || !isFiniteNumber(profile.ram_peak_bytes) || profile.ram_peak_bytes <= 0 || profile.mode !== 'simulation'
+        || !profile.gpu_vram_bytes_by_id || typeof profile.gpu_vram_bytes_by_id !== 'object' || Array.isArray(profile.gpu_vram_bytes_by_id)) return false
+    return Object.values(profile.gpu_vram_bytes_by_id as Record<string, unknown>).every((bytes) => isFiniteNumber(bytes) && bytes > 0)
+  })
+}
+
+function isOperation(value: unknown): value is Operation {
+  if (!value || typeof value !== 'object') return false
+  const operation = value as Record<string, unknown>
+  return typeof operation.id === 'string' && typeof operation.model_id === 'string'
+    && typeof operation.action === 'string' && typeof operation.status === 'string'
+    && operation.simulation === true && operation.worker_type === 'fake'
+}
+
+function isOperations(value: unknown): value is { operations: Operation[] } {
+  return !!value && typeof value === 'object' && Array.isArray((value as Record<string, unknown>).operations)
+    && ((value as { operations: unknown[] }).operations).every(isOperation)
+}
+
+function isRefusal(value: unknown): value is Refusal {
+  if (!value || typeof value !== 'object') return false
+  const refusal = value as Record<string, unknown>
+  return typeof refusal.code === 'string' && typeof refusal.message === 'string'
+    && (refusal.resources === undefined || (Array.isArray(refusal.resources) && refusal.resources.every((item) => {
+      if (!item || typeof item !== 'object') return false
+      const resource = item as Record<string, unknown>
+      return typeof resource.resource === 'string' && isFiniteNumber(resource.required_bytes)
+        && isFiniteNumber(resource.available_bytes)
+        && (resource.headroom_bytes === undefined || isFiniteNumber(resource.headroom_bytes))
+    })))
+}
+
+function isTerminalOperation(status: string) {
+  return ['simulation_ready', 'unloaded', 'refused', 'failed', 'cleanup_failed'].includes(status)
+}
+
+function idempotencyKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
 }
 
 function sseBoundary(value: string) { return /\r\n\r\n|\n\n|\r\r/.exec(value) }
@@ -111,6 +168,35 @@ function readWithWatchdog<T>(promise: Promise<T>, controller: AbortController, m
 }
 
 function apiUrl(base: string, path: string) { return `${base}${path}` }
+
+async function requestApi(base: string, token: string, path: string, init: RequestInit = {}, parentSignal?: AbortSignal) {
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  parentSignal?.addEventListener('abort', abort, { once: true })
+  const timer = window.setTimeout(abort, 10_000)
+  try {
+    const response = await fetch(apiUrl(base, path), {
+      ...init,
+      headers: { Authorization: `Bearer ${token}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+    let body: unknown = null
+    if (response.status !== 204) {
+      try { body = await response.json() }
+      catch { throw new Error('The host returned an invalid JSON response.') }
+    }
+    if (!response.ok) throw new ApiError(response.status, body && typeof body === 'object' ? body as ApiErrorBody : {})
+    return body
+  } catch (error) {
+    if (parentSignal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    if (controller.signal.aborted) throw new Error('Host request timed out. Check the connection and try again.')
+    throw error
+  } finally {
+    window.clearTimeout(timer)
+    parentSignal?.removeEventListener('abort', abort)
+  }
+}
 
 function parseSseBlock(block: string): { event: string; data: string } | null {
   let event = 'message'
@@ -146,7 +232,12 @@ export default function App() {
   const [message, setMessage] = useState('Connect to a Generation Station host to see live resource usage.')
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [models, setModels] = useState<Model[] | null>(null)
-  const [modelsError, setModelsError] = useState('')
+  const [profiles, setProfiles] = useState<ModelProfile[] | null>(null)
+  const [catalogError, setCatalogError] = useState('')
+  const [operations, setOperations] = useState<Operation[]>([])
+  const [pendingModelId, setPendingModelId] = useState<string | null>(null)
+  const [refusals, setRefusals] = useState<Record<string, Refusal>>({})
+  const [actionError, setActionError] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(true)
   const [clock, setClock] = useState(() => new Date())
   const sessionRef = useRef<AbortController | null>(null)
@@ -165,7 +256,12 @@ export default function App() {
     setSnapshot(null)
     instanceRef.current = null
     setModels(null)
-    setModelsError('')
+    setProfiles(null)
+    setCatalogError('')
+    setOperations([])
+    setRefusals({})
+    setActionError('')
+    setPendingModelId(null)
     setConnection('idle')
   }, [])
 
@@ -228,6 +324,25 @@ export default function App() {
         controller.signal.removeEventListener('abort', abortRequest)
       }
     }
+    const refreshCatalog = async () => {
+      try {
+        const [modelsResult, profilesResult] = await Promise.all([fetchJson('/api/models'), fetchJson('/api/profiles')])
+        assertCurrent()
+        if (!isCatalog(modelsResult) || !isProfiles(profilesResult)) throw new Error('The host returned an invalid model profile catalog.')
+        setModels(modelsResult.models)
+        setProfiles(profilesResult.profiles.map((profile) => ({ ...profile, id: profile.id || profile.model_id, model_id: profile.model_id || profile.id })))
+        void fetchJson('/api/operations?limit=100').then((result) => {
+          if (controller.signal.aborted || generationRef.current !== currentGeneration) return
+          if (isOperations(result)) setOperations(result.operations.slice(0, 8))
+        }).catch(() => undefined)
+        setCatalogError('')
+      } catch (error) {
+        if (controller.signal.aborted || generationRef.current !== currentGeneration) return
+        setModels(null)
+        setProfiles(null)
+        setCatalogError(error instanceof Error ? error.message : 'Model profile catalog is unavailable.')
+      }
+    }
     try {
       const initial = await fetchJson('/api/host') as unknown
       assertCurrent()
@@ -235,15 +350,7 @@ export default function App() {
       instanceRef.current = initial.instance_id
       setSnapshot({ data: initial, arrivedAt: performance.now() })
       setMessage('Host found. Waiting for the next live telemetry sample…')
-      void fetchJson('/api/models').then((result) => {
-        if (controller.signal.aborted || generationRef.current !== currentGeneration) return
-        if (!isCatalog(result)) throw new Error('The host returned an invalid model catalog.')
-        setModels(result.models)
-        setModelsError('')
-      }).catch((error: unknown) => {
-        if (controller.signal.aborted || generationRef.current !== currentGeneration) return
-        setModelsError(error instanceof Error ? error.message : 'Model catalog is unavailable.')
-      })
+      void refreshCatalog()
       let retry = 0
       while (!controller.signal.aborted && generationRef.current === currentGeneration) {
         const streamController = new AbortController()
@@ -295,14 +402,8 @@ export default function App() {
                 setMessage('Live telemetry is streaming from the host.')
                 if (changedInstance) {
                   setModels(null)
-                  void fetchJson('/api/models').then((result) => {
-                    if (controller.signal.aborted || generationRef.current !== currentGeneration) return
-                    if (!isCatalog(result)) throw new Error('The host returned an invalid model catalog.')
-                    setModels(result.models)
-                    setModelsError('')
-                  }).catch(() => {
-                    if (!controller.signal.aborted && generationRef.current === currentGeneration) setModelsError('Model catalog is unavailable for the new host service instance.')
-                  })
+                  setProfiles(null)
+                  void refreshCatalog()
                 }
               }
               boundary = sseBoundary(buffer)
@@ -332,6 +433,96 @@ export default function App() {
     }
   }
 
+  const refreshCatalogNow = async (base: string, token: string, signal: AbortSignal, generation: number) => {
+    const [modelsResult, profilesResult] = await Promise.all([
+      requestApi(base, token, '/api/models', {}, signal),
+      requestApi(base, token, '/api/profiles', {}, signal),
+    ])
+    if (signal.aborted || generationRef.current !== generation) return
+    if (!isCatalog(modelsResult) || !isProfiles(profilesResult)) throw new Error('The host returned an invalid model profile catalog.')
+    setModels(modelsResult.models)
+    setProfiles(profilesResult.profiles.map((profile) => ({ ...profile, id: profile.id || profile.model_id, model_id: profile.model_id || profile.id })))
+    const operationsResult = await requestApi(base, token, '/api/operations?limit=100', {}, signal).catch(() => null)
+    if (signal.aborted || generationRef.current !== generation) return
+    if (isOperations(operationsResult)) setOperations(operationsResult.operations.slice(0, 8))
+    setCatalogError('')
+  }
+
+  const registerProfile = async (profile: { id: string; name: string; workload: string; ram_peak_bytes: number; gpu_vram_bytes_by_id: Record<string, number>; mode: 'simulation' }) => {
+    if (!host || connection !== 'connected' || stale || !sessionRef.current) return false
+    const generation = generationRef.current
+    const signal = sessionRef.current.signal
+    const base = normalizeBase(serverUrl)
+    const token = accessToken.trim()
+    setCatalogError('')
+    setActionError('')
+    try {
+      await requestApi(base, token, '/api/profiles', { method: 'POST', body: JSON.stringify(profile) }, signal)
+      await refreshCatalogNow(base, token, signal, generation)
+      return true
+    } catch (error) {
+      if (signal.aborted || generationRef.current !== generation) return false
+      if (error instanceof ApiError && error.status === 401) {
+        clearHost()
+        setConnection('error')
+        setMessage('The access token was rejected. Check the token and reconnect.')
+        return false
+      }
+      setActionError(error instanceof Error ? error.message : 'Could not register the simulation profile.')
+      return false
+    }
+  }
+
+  const runLifecycle = async (model: Model, action: 'load' | 'unload', profile: ModelProfile) => {
+    if (!host || connection !== 'connected' || stale || !sessionRef.current) return
+    const generation = generationRef.current
+    const signal = sessionRef.current.signal
+    const base = normalizeBase(serverUrl)
+    const token = accessToken.trim()
+    setPendingModelId(model.id)
+    setActionError('')
+    setRefusals((previous) => { const next = { ...previous }; delete next[model.id]; return next })
+    try {
+      const accepted = await requestApi(base, token, `/api/models/${encodeURIComponent(model.id)}/${action}`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey() },
+        ...(action === 'load' ? { body: JSON.stringify({ profile_id: profile.id }) } : {}),
+      }, signal) as Record<string, unknown>
+      const operationId = typeof accepted.operation_id === 'string' ? accepted.operation_id : accepted.id
+      if (typeof operationId !== 'string') throw new Error('The host did not return an operation ID.')
+      let latest: Operation = {
+        id: operationId, model_id: model.id, action, status: String(accepted.status ?? (action === 'load' ? 'loading' : 'unloading')),
+        simulation: accepted.simulation === true, worker_type: String(accepted.worker_type ?? 'fake'),
+      }
+      if (!isOperation(latest)) throw new Error('The host returned a non-simulation lifecycle operation.')
+      const saveOperation = (operation: Operation) => setOperations((items) => [operation, ...items.filter((item) => item.id !== operation.id)].slice(0, 8))
+      saveOperation(latest)
+      for (let attempt = 0; attempt < 60 && !isTerminalOperation(latest.status); attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 350))
+        if (signal.aborted || generationRef.current !== generation) return
+        const result = await requestApi(base, token, `/api/operations/${encodeURIComponent(latest.id)}`, {}, signal)
+        if (!isOperation(result)) throw new Error('The host returned an invalid operation status.')
+        latest = result
+        saveOperation(latest)
+      }
+      if (!isTerminalOperation(latest.status)) setActionError('The worker operation is still in progress. Its latest state is shown below.')
+      await refreshCatalogNow(base, token, signal, generation)
+    } catch (error) {
+      if (signal.aborted || generationRef.current !== generation) return
+      if (error instanceof ApiError && error.status === 409) {
+        const value = isRefusal(error.body.detail) ? error.body.detail : isRefusal(error.body) ? error.body as Refusal : null
+        if (value) setRefusals((previous) => ({ ...previous, [model.id]: value }))
+        else setActionError(error.message)
+      } else if (error instanceof ApiError && error.status === 401) {
+        clearHost()
+        setConnection('error')
+        setMessage('The access token was rejected. Check the token and reconnect.')
+      } else setActionError(error instanceof Error ? error.message : 'The host could not complete this operation.')
+    } finally {
+      if (generationRef.current === generation) setPendingModelId(null)
+    }
+  }
+
   const disconnect = () => {
     clearHost()
     setMessage('Disconnected. Host measurements and model data have been cleared.')
@@ -351,7 +542,7 @@ export default function App() {
       <nav aria-label="Main navigation">
         <div className="nav-label">WORKSPACE</div>
         <a className="nav-item active" href="#overview" aria-label="Overview"><Activity size={17} /><span>Overview</span><span className="nav-indicator" /></a>
-        <a className="nav-item disabled-link" href="#models" aria-disabled="true" aria-label="Models, coming soon"><Cpu size={17} /><span>Models</span><span className="soon-tag">SOON</span></a>
+        <a className="nav-item" href="#models" aria-label="Model profiles"><Cpu size={17} /><span>Profiles</span></a>
       </nav>
       <div className="sidebar-footer"><div className="secure-badge"><ShieldCheck size={17} /><span>Host reported data</span></div><p>Your models run on the connected machine. Measurements describe the service process environment.</p><span className="version">PREVIEW · 0.1</span></div>
     </aside>
@@ -380,10 +571,7 @@ export default function App() {
           <GpuCard host={host} age={age} stale={stale} isCurrent={!!snapshot && connection !== 'idle'} />
         </section>
 
-        <section id="models" className="models-section"><div className="section-heading model-heading"><div><h2>Installed models</h2><p>Choose what to load onto your host</p></div><button className="button button-primary" disabled title="Model loading is unavailable in this preview"><Cpu size={15} /> Add model</button></div>
-          {modelsError ? <div className="inline-alert"><AlertCircle size={17} /><span>{modelsError}</span></div> : models && models.length > 0 ? <div className="model-placeholder">{models.map((model) => <div className="model-row" key={model.id}><div className="model-icon"><Cpu size={18} /></div><div><strong>{model.name ?? model.id}</strong><small>Runtime details are not available in this preview.</small></div><button className="button button-secondary" disabled title="Model loading is unavailable in this preview">Load</button></div>)}</div> : <div className="empty-models"><div className="empty-illustration"><Database size={22} /><span><Cpu size={15} /></span></div><div><strong>{models?.length === 0 ? 'No models installed yet' : 'Model catalog is waiting'}</strong><p>{models?.length === 0 ? 'Once a model is registered on this host, it will appear here with its runtime and memory profile.' : connection === 'idle' ? 'Connect to your host to see its registered model catalog.' : 'Loading model catalog from the connected host.'}</p></div><div className="empty-status"><span className="status-dot" />{models?.length === 0 ? 'EMPTY CATALOG' : 'HOST REQUIRED'}</div></div>}
-          <div className="model-footnote"><CircleHelp size={14} /><span>Load and unload controls will be enabled when the host has verified capacity checks and a supported runtime.</span></div>
-        </section>
+        <ProfileManager key={`${serverUrl}|${host?.instance_id ?? 'disconnected'}`} profiles={profiles} models={models} host={host} fresh={connection === 'connected' && !stale} catalogError={catalogError} actionError={actionError} operations={operations} pendingModelId={pendingModelId} refusals={refusals} onRegister={registerProfile} onLifecycle={runLifecycle} />
 
         <section className="settings-section"><button className="settings-toggle" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}><span className="settings-title"><Settings2 size={17} /><span><strong>Connection settings</strong><small>Choose the Generation Station host to monitor</small></span></span><ChevronDown size={17} className={settingsOpen ? 'chevron-open' : ''} /></button>
           {settingsOpen && <div className="settings-content"><div className="settings-fields"><label className="field"><span>SERVER ADDRESS</span><div className="input-wrap"><Server size={16} /><input aria-label="Server address" type="url" autoComplete="url" placeholder="Same origin · or https://host:port" value={serverUrl} onChange={(event) => invalidateOnEdit('url', event.target.value)} /></div><small>Leave blank when the dashboard is served by the host. Remote addresses are saved on this device.</small></label><label className="field"><span>ACCESS TOKEN</span><div className="input-wrap"><LockKeyhole size={16} /><input aria-label="Access token" type="password" autoComplete="new-password" placeholder="Paste the host access token" value={accessToken} onChange={(event) => invalidateOnEdit('token', event.target.value)} /></div><small>Held in memory only. It is not saved in the URL or browser storage.</small></label></div><div className="settings-bottom"><div className="settings-note"><ShieldCheck size={16} /><span>Measurements describe the host service process environment.</span></div><div className="settings-buttons">{connection !== 'idle' && <button className="button button-secondary" onClick={disconnect}><X size={15} /> Disconnect</button>}<button className="button button-primary" onClick={connect} disabled={connection === 'connecting'}><Wifi size={15} /> {connection === 'connecting' ? 'Connecting…' : connection === 'reconnecting' ? 'Reconnect now' : 'Connect to host'} <ArrowUpRight size={14} /></button></div></div></div>}
@@ -419,4 +607,116 @@ function GpuCard({ host, age, stale, isCurrent }: { host?: Host; age: number | n
   if (gpus.length === 0) return <article className="resource-card"><div className="resource-card-top"><div className="resource-title"><span className="resource-icon icon-blue"><Cpu size={17} /></span><div><h3>Graphics memory</h3><span>GPU telemetry</span></div></div><span className="icon-help" title="VRAM is measured with NVIDIA NVML." aria-label="Graphics memory information"><CircleHelp size={16} /></span></div><div className="gpu-unavailable"><div className="gpu-empty-icon"><Cpu size={20} /></div><strong>GPU memory unavailable</strong><p>{host.gpu_error ?? 'No GPU devices have been reported by the host.'}</p></div><div className="resource-card-bottom"><span className="sample-copy">{humanAge(age)}</span><span className="capacity-label">NO DATA</span></div></article>
   const capacityState = stale ? 'STALE' : availableDevices === 0 ? 'NO DATA' : availableDevices < gpus.length || host.gpu_error ? 'PARTIAL' : 'MEASURED'
   return <article className={`resource-card gpu-card ${stale ? 'resource-stale' : ''}`}><div className="resource-card-top"><div className="resource-title"><span className="resource-icon icon-blue"><Cpu size={17} /></span><div><h3>Graphics memory</h3><span>{gpus.length} physical GPU{gpus.length === 1 ? '' : 's'}</span></div></div><span className="icon-help" title="VRAM is measured with NVIDIA NVML." aria-label="Graphics memory information"><CircleHelp size={16} /></span></div><div className="gpu-list">{gpus.map((gpu, i) => <div className="gpu-item" key={gpu.id}><div className="gpu-name"><strong>{gpu.name}</strong><span>DEVICE {String(i + 1).padStart(2, '0')}</span></div>{gpu.memory ? <><div className="resource-value-row gpu-value"><strong>{formatBytes(gpu.memory.used_bytes)}</strong><span>of {formatBytes(gpu.memory.total_bytes)}</span></div><div className="progress-track" role="progressbar" aria-label={`${gpu.name} used`} aria-valuenow={Math.round(gpu.memory.used_bytes / gpu.memory.total_bytes * 100)} aria-valuemin={0} aria-valuemax={100}><div className="progress-fill icon-blue" style={{ width: `${Math.min(100, gpu.memory.used_bytes / gpu.memory.total_bytes * 100)}%` }} /></div><div className="resource-stats"><span><span className="stats-dot used-dot" />Used <b>{(gpu.memory.used_bytes / gpu.memory.total_bytes * 100).toFixed(0)}%</b></span><span><span className="stats-dot available-dot" />Available <b>{formatBytes(gpu.memory.available_bytes)}</b></span></div></> : <div className="gpu-error"><AlertCircle size={14} />{gpu.error ?? host.gpu_error ?? 'VRAM accounting unavailable for this device.'}</div>}</div>)}</div><div className="resource-card-bottom"><span className={stale ? 'stale-copy' : 'sample-copy'}>{stale ? 'Last known measurement' : humanAge(age)}{host.gpu_error ? ` · ${host.gpu_error}` : ''}</span><span className="capacity-label">{capacityState}</span></div></article>
+}
+
+function ProfileManager({ profiles, models, host, fresh, catalogError, actionError, operations, pendingModelId, refusals, onRegister, onLifecycle }: {
+  profiles: ModelProfile[] | null; models: Model[] | null; host?: Host; fresh: boolean; catalogError: string; actionError: string
+  operations: Operation[]; pendingModelId: string | null; refusals: Record<string, Refusal>
+  onRegister: (profile: { id: string; name: string; workload: string; ram_peak_bytes: number; gpu_vram_bytes_by_id: Record<string, number>; mode: 'simulation' }) => Promise<boolean>
+  onLifecycle: (model: Model, action: 'load' | 'unload', profile: ModelProfile) => Promise<void>
+}) {
+  const [formOpen, setFormOpen] = useState(false)
+  const [modelId, setModelId] = useState('')
+  const [name, setName] = useState('')
+  const [workload, setWorkload] = useState('')
+  const [ramGib, setRamGib] = useState('')
+  const [gpuNeeds, setGpuNeeds] = useState<Array<{ deviceId: string; gib: string }>>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
+  const gpus = host?.gpus ?? []
+  const canRegister = fresh && !!host
+  const gigabyte = 1024 ** 3
+  const ramBytes = Number(ramGib) * gigabyte
+  const gpuMap: Record<string, number> = {}
+  let validGpuRows = true
+  for (const requirement of gpuNeeds) {
+    const bytes = Number(requirement.gib) * gigabyte
+    if (!requirement.deviceId || !Number.isSafeInteger(Math.round(bytes)) || bytes <= 0 || gpuMap[requirement.deviceId]) validGpuRows = false
+    if (requirement.deviceId && Number.isSafeInteger(Math.round(bytes)) && bytes > 0) gpuMap[requirement.deviceId] = Math.round(bytes)
+  }
+  const formValid = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(modelId.trim())
+    && name.trim().length > 0 && name.trim().length <= 200 && workload.trim().length > 0 && workload.trim().length <= 40
+    && Number.isSafeInteger(Math.round(ramBytes)) && ramBytes > 0 && validGpuRows
+    && gpuNeeds.every((need) => need.deviceId && gpus.some((gpu) => gpu.id === need.deviceId))
+
+  const resetForm = () => { setModelId(''); setName(''); setWorkload(''); setRamGib(''); setGpuNeeds([]); setFormError('') }
+  const addGpuNeed = () => {
+    const selected = new Set(gpuNeeds.map((need) => need.deviceId))
+    const first = gpus.find((gpu) => !selected.has(gpu.id))
+    if (first) setGpuNeeds((items) => [...items, { deviceId: first.id, gib: '' }])
+  }
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setFormError('')
+    if (!canRegister) { setFormError('Connect to a host with a fresh telemetry sample before registering a profile.'); return }
+    if (!formValid) { setFormError('Enter a valid profile ID, model name, workload, and positive memory requirements for reported devices.'); return }
+    setSubmitting(true)
+    const ok = await onRegister({ id: modelId.trim(), name: name.trim(), workload: workload.trim(), ram_peak_bytes: Math.round(ramBytes), gpu_vram_bytes_by_id: gpuMap, mode: 'simulation' })
+    setSubmitting(false)
+    if (ok) { resetForm(); setFormOpen(false) }
+  }
+
+  const operatingHost = fresh && host?.loading_enabled === true && host.host.role === 'desktop' && host.host.scope === 'host' && host.ram !== null
+  const stateLabel = (state: string) => ({ unloaded: 'Unloaded', checking: 'Checking capacity', loading: 'Loading simulation worker', simulation_ready: 'Simulation ready', unloading: 'Unloading simulation worker', error: 'Worker error', unavailable: 'Unavailable' }[state] ?? state.replaceAll('_', ' '))
+
+  return <section id="models" className="models-section" aria-labelledby="profile-heading">
+    <div className="section-heading model-heading"><div><h2 id="profile-heading">Model profiles</h2><p>Register memory requirements, then exercise capacity checks</p></div><button className="button button-primary" onClick={() => { setFormOpen(!formOpen); setFormError('') }} disabled={!canRegister} title={!canRegister ? 'A fresh connected host sample is needed to bind exact GPU IDs.' : undefined}><Plus size={15} /> Register profile</button></div>
+    <div className="simulation-notice"><span className="simulation-badge">SIMULATION WORKER</span><strong>No inference</strong><span>This M2 worker tests admission and lifecycle only. It does not read model weights, run commands, or generate output.</span></div>
+    {!fresh && <div className="profile-gate"><AlertCircle size={16} /><span>Connect to a host with fresh telemetry before registering a profile or using Load/Unload.</span></div>}
+    {catalogError && <div className="inline-alert"><AlertCircle size={17} /><span>{catalogError}</span></div>}
+    {actionError && <div className="inline-alert"><AlertCircle size={17} /><span>{actionError}</span></div>}
+    {formOpen && <form className="profile-form" onSubmit={submit} aria-label="Register simulation model profile">
+      <div className="profile-form-heading"><div><strong>New simulation profile</strong><small>Memory values are explicit peak requirements. They are not inferred from model files.</small></div><span className="simulation-badge">SIMULATION ONLY</span></div>
+      <div className="profile-form-grid">
+        <label className="field"><span>PROFILE ID</span><input className="text-input" required minLength={1} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,63}" value={modelId} onChange={(event) => setModelId(event.target.value)} placeholder="my-model-profile" /><small>Letters, numbers, dot, underscore, and hyphen.</small></label>
+        <label className="field"><span>MODEL NAME</span><input className="text-input" required maxLength={200} value={name} onChange={(event) => setName(event.target.value)} placeholder="A label you choose" /></label>
+        <label className="field"><span>WORKLOAD</span><input className="text-input" required maxLength={40} value={workload} onChange={(event) => setWorkload(event.target.value)} placeholder="Your workload label" /><small>Free text. No model or runtime is assumed.</small></label>
+        <label className="field"><span>PEAK SYSTEM RAM (GiB)</span><input className="text-input" type="number" required min="0.000001" step="any" value={ramGib} onChange={(event) => setRamGib(event.target.value)} placeholder="For example, 12" /><small>{ramBytes > 0 && Number.isSafeInteger(Math.round(ramBytes)) ? `${Math.round(ramBytes).toLocaleString()} bytes (GiB × 1,073,741,824)` : 'Enter a positive RAM requirement.'}</small></label>
+      </div>
+      <div className="gpu-requirements-head"><div><strong>Per-device VRAM requirements</strong><small>Select the UUID reported by this connected host for each GPU requirement.</small></div><button className="button button-secondary" type="button" onClick={addGpuNeed} disabled={!gpus.length || gpuNeeds.length >= gpus.length}>Add GPU requirement</button></div>
+      {gpuNeeds.length === 0 && <p className="gpu-form-empty">No GPU requirement added. Use this only if the simulation profile does not need VRAM.</p>}
+      <div className="gpu-requirements">{gpuNeeds.map((need, index) => {
+        const usedElsewhere = new Set(gpuNeeds.filter((_, other) => other !== index).map((item) => item.deviceId))
+        return <div className="gpu-requirement-row" key={index}>
+          <label className="field"><span>GPU DEVICE {index + 1}</span><select className="text-input" aria-label={`GPU device ${index + 1}`} required value={need.deviceId} onChange={(event) => setGpuNeeds((items) => items.map((item, row) => row === index ? { ...item, deviceId: event.target.value } : item))}><option value="">Choose a reported GPU</option>{gpus.filter((gpu) => !usedElsewhere.has(gpu.id)).map((gpu) => <option key={gpu.id} value={gpu.id}>{gpu.name} · {gpu.id}</option>)}</select></label>
+          <label className="field"><span>PEAK VRAM (GiB)</span><input className="text-input" type="number" required min="0.000001" step="any" aria-label={`Peak VRAM GiB for GPU ${index + 1}`} value={need.gib} onChange={(event) => setGpuNeeds((items) => items.map((item, row) => row === index ? { ...item, gib: event.target.value } : item))} placeholder="For example, 8" /><small>{Number(need.gib) > 0 && Number.isSafeInteger(Math.round(Number(need.gib) * gigabyte)) ? `${Math.round(Number(need.gib) * gigabyte).toLocaleString()} bytes` : 'Enter a positive VRAM requirement.'}</small></label>
+          <button className="remove-requirement" type="button" aria-label={`Remove GPU requirement ${index + 1}`} onClick={() => setGpuNeeds((items) => items.filter((_, row) => row !== index))}><X size={16} /></button>
+        </div>
+      })}</div>
+      {formError && <div className="form-error" role="alert"><AlertCircle size={15} />{formError}</div>}
+      <div className="profile-form-actions"><span>Server admission checks remain authoritative for every load.</span><div><button className="button button-secondary" type="button" onClick={() => { resetForm(); setFormOpen(false) }}>Cancel</button><button className="button button-primary" type="submit" disabled={!formValid || !canRegister || submitting}>{submitting ? 'Registering…' : 'Register simulation profile'}</button></div></div>
+    </form>}
+    {profiles === null && !catalogError ? <div className="empty-models"><div className="empty-illustration"><Database size={22} /></div><div><strong>Profile catalog is waiting</strong><p>Connect to a host to read its registered profiles from the server.</p></div></div> : profiles?.length === 0 ? <div className="empty-models"><div className="empty-illustration"><Database size={22} /></div><div><strong>No registered profiles</strong><p>Register an explicit memory profile to try the test worker.</p></div><div className="empty-status">EMPTY CATALOG</div></div> : <div className="profile-list">{(profiles ?? []).map((profile) => {
+      const model = models?.find((item) => item.id === profile.model_id)
+      const requiredGpuIds = Object.keys(profile.gpu_vram_bytes_by_id)
+      const missingGpu = requiredGpuIds.find((id) => !gpus.some((gpu) => gpu.id === id))
+      const selectedGpusValid = requiredGpuIds.every((id) => {
+        const gpu = gpus.find((item) => item.id === id)
+        return !!gpu?.memory && !gpu.error
+      })
+      const canLoad = !!operatingHost && !!host?.ram && !!model?.loading_enabled && selectedGpusValid && ['unloaded', 'error'].includes(model.state) && pendingModelId !== model.id
+      const canUnload = !!operatingHost && model?.state === 'simulation_ready' && pendingModelId !== model.id
+      const disabledReason = !fresh ? 'A fresh telemetry sample is required.'
+        : !host?.loading_enabled ? host?.loading_reason ?? 'The host has not confirmed lifecycle eligibility.'
+        : !operatingHost ? 'Lifecycle testing requires a desktop host measured directly in host scope.'
+          : !host?.ram ? 'System RAM telemetry is unavailable.'
+        : ['unloaded', 'error'].includes(model?.state ?? '') && missingGpu ? `Required GPU UUID is not present: ${missingGpu}`
+          : ['unloaded', 'error'].includes(model?.state ?? '') && !selectedGpusValid ? 'Required GPU memory telemetry is unavailable.'
+                : model?.loading_reason ?? `Action unavailable while state is ${model?.state ?? 'unknown'}.`
+      return <article className="profile-card" key={profile.model_id}>
+        <div className="profile-card-main"><div className="model-icon"><Cpu size={18} /></div><div className="profile-card-title"><div><strong>{profile.name}</strong><span className="profile-id">{profile.model_id} · {profile.workload}</span></div><span className={`model-state state-${model?.state ?? 'unknown'}`}>{pendingModelId === model?.id ? 'Working…' : stateLabel(model?.state ?? 'unknown')}</span></div></div>
+        <div className="profile-data-grid"><div><span>PEAK SYSTEM RAM</span><strong>{formatBytes(profile.ram_peak_bytes)}</strong></div><div><span>GPU MEMORY TARGETS</span><strong>{requiredGpuIds.length || 'None'}</strong></div><div><span>EXECUTION</span><strong className="sim-execution">Fake worker · no inference</strong></div></div>
+        {requiredGpuIds.length > 0 && <div className="profile-gpu-list">{requiredGpuIds.map((id) => { const gpu = gpus.find((item) => item.id === id); return <div key={id}><span>{gpu?.name ?? 'Unreported GPU'}</span><code>{id}</code><strong>{formatBytes(profile.gpu_vram_bytes_by_id[id])}</strong></div> })}</div>}
+        {!model && <p className="profile-warning">The host profile exists, but its model lifecycle state is not in the model catalog.</p>}
+        {refusals[profile.model_id] && <RefusalDetails refusal={refusals[profile.model_id]} />}
+        <div className="profile-card-footer"><span className="worker-caption"><span className="simulation-badge">SIMULATION</span> No model weights or outputs are used.</span>{model && <div className="profile-actions">{['unloaded', 'error'].includes(model.state) ? <button className="button button-primary" disabled={!canLoad} title={!canLoad ? disabledReason : 'Server checks capacity before starting the fake worker.'} onClick={() => void onLifecycle(model, 'load', profile)}><ArrowUpRight size={14} />{model.state === 'error' ? 'Retry simulation' : 'Load simulation'}</button> : model.state === 'simulation_ready' ? <button className="button button-secondary" disabled={!canUnload} title={!canUnload ? disabledReason : 'Stop the fake worker.'} onClick={() => void onLifecycle(model, 'unload', profile)}><X size={14} />Unload simulation</button> : <button className="button button-secondary" disabled title={disabledReason}>{stateLabel(model.state)}</button>}</div>}</div>
+      </article>
+    })}</div>}
+    <div className="model-footnote"><CircleHelp size={14} /><span>Load requests are checked again by the host. Browser state is never the capacity authority.</span></div>
+    {operations.length > 0 && <section className="operations-section" aria-labelledby="operations-heading"><div className="section-heading"><div><h3 id="operations-heading">Recent worker operations</h3><p>Status is polled from the host; no progress percentage is invented.</p></div><span className="simulation-badge">FAKE WORKER</span></div><div className="operation-list">{operations.map((operation) => <div className="operation-row" key={operation.id}><span className={`operation-mark op-${operation.status}`}><Activity size={15} /></span><div className="operation-copy"><strong>{operation.action === 'load' ? 'Load simulation' : 'Unload simulation'} · {operation.status.replaceAll('_', ' ')}</strong><small>{operation.model_id} · operation {operation.id}</small>{operation.error_message && <small className="operation-error">{operation.error_code ? `${operation.error_code}: ` : ''}{operation.error_message}</small>}</div><span className="simulation-badge">NO INFERENCE</span></div>)}</div></section>}
+  </section>
+}
+
+function RefusalDetails({ refusal }: { refusal: Refusal }) {
+  return <div className="refusal-details" role="alert"><div><AlertCircle size={15} /><strong>{refusal.code}</strong><span>{refusal.message}</span></div>{refusal.resources?.map((resource, index) => <div className="refusal-resource" key={`${resource.resource}-${index}`}><strong>{resource.resource}</strong><span>Required {formatBytes(resource.required_bytes)}</span><span>Available {formatBytes(resource.available_bytes)}</span>{resource.headroom_bytes !== undefined && <span>Headroom {formatBytes(resource.headroom_bytes)}</span>}</div>)}</div>
 }

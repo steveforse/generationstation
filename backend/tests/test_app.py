@@ -78,20 +78,6 @@ def test_database_errors_return_generic_response_without_connection_details():
     assert response.json()["detail"] == "Database unavailable. Try again shortly."
 
 
-def test_lifecycle_routes_always_refuse_direct_requests():
-    app = create_app(settings=settings(), store=FakeStore(), monitor=FakeMonitor({
-        "ram": {"total_bytes": 1, "available_bytes": 1, "used_bytes": 0},
-        "gpus": [], "stale": False, "loading_enabled": True,
-    }))
-    with TestClient(app) as client:
-        headers = {"Authorization": f"Bearer {TOKEN}"}
-        load = client.post("/api/models/example/load", headers=headers)
-        unload = client.post("/api/models/example/unload", headers=headers)
-    assert load.status_code == unload.status_code == 409
-    assert load.json()["detail"]["code"] == "LIFECYCLE_UNAVAILABLE"
-    assert unload.json()["detail"]["code"] == "LIFECYCLE_UNAVAILABLE"
-
-
 def test_unknown_api_routes_do_not_fall_through_to_frontend():
     app = create_app(settings=settings(), store=FakeStore(), monitor=FakeMonitor())
     with TestClient(app) as client:

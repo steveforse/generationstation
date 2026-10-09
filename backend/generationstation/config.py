@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = []
     sample_interval_seconds: float = Field(default=1, ge=0.2, le=10)
     stale_after_seconds: float = Field(default=5, ge=2, le=60)
+    ram_headroom_bytes: int = Field(default=4 * 1024**3, ge=0, le=2**63 - 1)
+    gpu_headroom_bytes: int = Field(default=2 * 1024**3, ge=0, le=2**63 - 1)
+    worker_ready_timeout_seconds: float = Field(default=30, gt=0, le=120)
+    worker_stop_timeout_seconds: float = Field(default=15, gt=0, le=120)
 
     @model_validator(mode="after")
     def stale_window_exceeds_sample_interval(self):

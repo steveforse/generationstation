@@ -4,7 +4,7 @@ Generation Station is a browser dashboard for managing AI model processes on a s
 
 ## Current state
 
-The M1 local prototype is implemented and verified. The accepted stack is React + TypeScript + Vite, native Windows Python + FastAPI, SQLAlchemy + Alembic, and PostgreSQL 17.11 in Docker. Desktop deployment and telemetry checks are still needed for M1 acceptance. Capacity admission and a fake worker (M2), followed by a verified real model (M3), remain pending. No candidate model is currently promised to fit or run.
+The local M1/M2 prototype is implemented. Backend pytest reports 69 passed and one PostgreSQL-only integration test skipped; Ruff passes. The frontend build and all 11 Playwright tests pass. Live PostgreSQL and Windows desktop checks remain pending. M2's fixed fake worker performs no inference and loads no weights. M1 desktop acceptance and a verified real model (M3) remain pending. No candidate model is currently promised to fit or run.
 
 ## Start local development
 
