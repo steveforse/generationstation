@@ -92,6 +92,21 @@ reservations = Table(
     Column("released_at", DateTime(timezone=True)),
 )
 
+generation_jobs = Table(
+    "generation_jobs", metadata,
+    Column("id", String(36), primary_key=True),
+    Column("model_id", String(64), ForeignKey("models.id", ondelete="CASCADE"), nullable=False),
+    Column("load_operation_id", String(36)),
+    Column("inputs", JSONB, nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("progress", String(200)),
+    Column("outputs", JSONB, nullable=False),
+    Column("error_message", String(2000)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True)),
+)
+
 SCHEDULER_LOCK_ID = 746238190
 ADMISSION_LOCK_ID = 746238191
 
@@ -537,6 +552,42 @@ class Store:
                     reservations.c.operation_id == (op["reservation_operation_id"]
                                                      or (op["id"] if op["action"] == "load" else None)),
                 ).values(active=False, released_at=now))
+
+    # ----- generation jobs ---------------------------------------------------------------
+
+    def create_job(self, *, job_id, model_id, load_operation_id, inputs):
+        now = self._now()
+        row = {"id": job_id, "model_id": model_id, "load_operation_id": load_operation_id, "inputs": inputs,
+               "status": "queued", "progress": None, "outputs": [], "error_message": None,
+               "created_at": now, "updated_at": now, "finished_at": None}
+        with self.engine.begin() as conn:
+            conn.execute(insert(generation_jobs).values(**row))
+        return row
+
+    def update_job(self, job_id, *, status, progress=None, outputs=None, error_message=None):
+        now = self._now()
+        values = {"status": status, "progress": progress, "updated_at": now}
+        if outputs is not None:
+            values["outputs"] = outputs
+        if error_message is not None:
+            values["error_message"] = error_message[:2000]
+        if status in {"done", "failed"}:
+            values["finished_at"] = now
+        with self.engine.begin() as conn:
+            conn.execute(update(generation_jobs).where(generation_jobs.c.id == job_id).values(**values))
+        return self.get_job(job_id)
+
+    def get_job(self, job_id):
+        with self.engine.connect() as conn:
+            row = conn.execute(select(generation_jobs).where(generation_jobs.c.id == job_id)).mappings().first()
+            return dict(row) if row else None
+
+    def list_jobs(self, model_id=None, limit=50):
+        query = select(generation_jobs).order_by(generation_jobs.c.created_at.desc()).limit(limit)
+        if model_id:
+            query = query.where(generation_jobs.c.model_id == model_id)
+        with self.engine.connect() as conn:
+            return [dict(row) for row in conn.execute(query).mappings()]
 
     def close(self):
         try:

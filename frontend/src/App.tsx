@@ -24,7 +24,11 @@ type SettingValue = string | number | boolean | null
 type Launch = { preset: string; settings: Record<string, SettingValue>; gpus: number[] }
 type RuntimeSetting = { key: string; label: string; kind: 'int' | 'bool' | 'choice' | 'optional_int'; minimum: number | null; maximum: number | null; unit: string | null; help: string; default: SettingValue; options: string[] | null }
 type RuntimePreset = { name: string; gpus: number[]; allowed_gpus: { index: number; name: string }[]; settings: RuntimeSetting[]; estimate: { ram_gib: number; gpu_min_free_gib: Record<string, number> } }
-type Runtime = { id: string; kind: string; name: string; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null }
+type InputField = { key: string; label: string; kind: 'text' | 'textarea' | 'int' | 'choice' | 'seed'; required: boolean; default: string | number | null; minimum: number | null; maximum: number | null; max_length: number | null; options: string[]; placeholder: string | null; help: string; advanced: boolean }
+type Generation = { output_kind: 'audio' | 'image' | 'video'; inputs: InputField[] }
+type Runtime = { id: string; kind: string; name: string; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null; max_gpus?: number | null; generation?: Generation | null }
+type JobOutput = { name: string; mime: string; bytes: number }
+type Job = { id: string; model_id: string; inputs: Record<string, string | number>; status: 'queued' | 'running' | 'done' | 'failed'; progress: string | null; outputs: JobOutput[]; error_message: string | null; created_at: string; finished_at: string | null }
 type RefusalResource = { resource: string; required_bytes: number; available_bytes: number; headroom_bytes?: number }
 type Refusal = { code: string; message: string; resources?: RefusalResource[] }
 type ApiErrorBody = { detail?: string | Refusal; [key: string]: unknown }
@@ -132,6 +136,18 @@ function isOperation(value: unknown): value is Operation {
     && typeof operation.action === 'string' && typeof operation.status === 'string'
     && ((operation.simulation === true && operation.worker_type === 'fake')
       || (operation.simulation === false && operation.worker_type === 'runtime'))
+}
+
+function isJob(value: unknown): value is Job {
+  if (!value || typeof value !== 'object') return false
+  const job = value as Record<string, unknown>
+  return typeof job.id === 'string' && typeof job.model_id === 'string' && typeof job.status === 'string'
+    && Array.isArray(job.outputs) && !!job.inputs && typeof job.inputs === 'object'
+}
+
+function isJobs(value: unknown): value is { jobs: Job[] } {
+  return !!value && typeof value === 'object' && Array.isArray((value as Record<string, unknown>).jobs)
+    && ((value as { jobs: unknown[] }).jobs).every(isJob)
 }
 
 function isRuntimes(value: unknown): value is { runtimes: Runtime[] } {
@@ -251,6 +267,8 @@ export default function App() {
   const [profiles, setProfiles] = useState<ModelProfile[] | null>(null)
   const [runtimes, setRuntimes] = useState<Runtime[] | null>(null)
   const [runtimeMessages, setRuntimeMessages] = useState<Record<string, string>>({})
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [jobErrors, setJobErrors] = useState<Record<string, string>>({})
   const [catalogError, setCatalogError] = useState('')
   const [operations, setOperations] = useState<Operation[]>([])
   const [pendingModelId, setPendingModelId] = useState<string | null>(null)
@@ -277,6 +295,8 @@ export default function App() {
     setProfiles(null)
     setRuntimes(null)
     setRuntimeMessages({})
+    setJobs([])
+    setJobErrors({})
     setCatalogError('')
     setOperations([])
     setRefusals({})
@@ -355,6 +375,10 @@ export default function App() {
           if (controller.signal.aborted || generationRef.current !== currentGeneration) return
           setRuntimes(isRuntimes(result) ? result.runtimes : [])
         }).catch(() => setRuntimes([]))
+        void fetchJson('/api/jobs?limit=20').then((result) => {
+          if (controller.signal.aborted || generationRef.current !== currentGeneration) return
+          if (isJobs(result)) setJobs(result.jobs)
+        }).catch(() => undefined)
         void fetchJson('/api/operations?limit=100').then((result) => {
           if (controller.signal.aborted || generationRef.current !== currentGeneration) return
           if (isOperations(result)) setOperations(result.operations.slice(0, 8))
@@ -466,13 +490,15 @@ export default function App() {
     if (!isCatalog(modelsResult) || !isProfiles(profilesResult)) throw new Error('The host returned an invalid model profile catalog.')
     setModels(modelsResult.models)
     setProfiles(profilesResult.profiles.map((profile) => ({ ...profile, id: profile.id || profile.model_id, model_id: profile.model_id || profile.id })))
-    const [operationsResult, runtimesResult] = await Promise.all([
+    const [operationsResult, runtimesResult, jobsResult] = await Promise.all([
       requestApi(base, token, '/api/operations?limit=100', {}, signal).catch(() => null),
       requestApi(base, token, '/api/runtimes', {}, signal).catch(() => null),
+      requestApi(base, token, '/api/jobs?limit=20', {}, signal).catch(() => null),
     ])
     if (signal.aborted || generationRef.current !== generation) return
     if (isOperations(operationsResult)) setOperations(operationsResult.operations.slice(0, 8))
     if (isRuntimes(runtimesResult)) setRuntimes(runtimesResult.runtimes)
+    if (isJobs(jobsResult)) setJobs(jobsResult.jobs)
     setCatalogError('')
   }
 
@@ -491,6 +517,45 @@ export default function App() {
     // refreshCatalogNow is recreated each render; the interval only needs these inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runtimeBusy, connection, serverUrl, accessToken])
+
+  const runJob = async (runtime: Runtime, inputs: Record<string, string | number | null>) => {
+    if (!host || connection !== 'connected' || !sessionRef.current) return false
+    const generation = generationRef.current
+    const signal = sessionRef.current.signal
+    const base = normalizeBase(serverUrl)
+    const token = accessToken.trim()
+    setJobErrors((previous) => ({ ...previous, [runtime.id]: '' }))
+    try {
+      const accepted = await requestApi(base, token, `/api/models/${encodeURIComponent(runtime.id)}/jobs`, { method: 'POST', body: JSON.stringify({ inputs }) }, signal)
+      if (!isJob(accepted)) throw new Error('The host returned an invalid job.')
+      let job: Job = accepted
+      const save = (item: Job) => setJobs((items) => [item, ...items.filter((other) => other.id !== item.id)].slice(0, 20))
+      save(job)
+      void (async () => {
+        while (job.status === 'queued' || job.status === 'running') {
+          await new Promise((resolve) => window.setTimeout(resolve, 3_000))
+          if (signal.aborted || generationRef.current !== generation) return
+          const next = await requestApi(base, token, `/api/jobs/${encodeURIComponent(job.id)}`, {}, signal).catch(() => null)
+          if (isJob(next)) { job = next; save(job) }
+        }
+      })()
+      return true
+    } catch (error) {
+      if (signal.aborted || generationRef.current !== generation) return false
+      setJobErrors((previous) => ({ ...previous, [runtime.id]: error instanceof Error ? error.message : 'The job could not be started.' }))
+      return false
+    }
+  }
+
+  // Files need the access token, so fetch them and hand the browser a local object URL.
+  const fileUrl = async (job: Job, output: JobOutput) => {
+    if (!sessionRef.current) throw new Error('Not connected.')
+    const response = await fetch(apiUrl(normalizeBase(serverUrl), `/api/jobs/${encodeURIComponent(job.id)}/files/${encodeURIComponent(output.name)}`), {
+      headers: { Authorization: `Bearer ${accessToken.trim()}` }, signal: sessionRef.current.signal, cache: 'no-store',
+    })
+    if (!response.ok) throw new Error(`The file could not be loaded (${response.status}).`)
+    return URL.createObjectURL(await response.blob())
+  }
 
   const runRuntime = async (runtime: Runtime, action: 'start' | 'stop', launch?: Launch) => {
     if (!host || connection !== 'connected' || stale || !sessionRef.current) return
@@ -669,7 +734,7 @@ export default function App() {
           <GpuCard host={host} age={age} stale={stale} isCurrent={!!snapshot && connection !== 'idle'} />
         </section>
 
-        <RuntimePanel runtimes={runtimes} models={models} host={host} fresh={connection === 'connected' && !stale} pendingModelId={pendingModelId} refusals={refusals} messages={runtimeMessages} onRun={runRuntime} />
+        <RuntimePanel runtimes={runtimes} models={models} host={host} fresh={connection === 'connected' && !stale} pendingModelId={pendingModelId} refusals={refusals} messages={runtimeMessages} onRun={runRuntime} jobs={jobs} jobErrors={jobErrors} onGenerate={runJob} fileUrl={fileUrl} />
 
         <ProfileManager key={`${serverUrl}|${host?.instance_id ?? 'disconnected'}`} profiles={profiles} models={models} host={host} fresh={connection === 'connected' && !stale} catalogError={catalogError} actionError={actionError} operations={operations} pendingModelId={pendingModelId} refusals={refusals} onRegister={registerProfile} onLifecycle={runLifecycle} />
 
@@ -838,22 +903,119 @@ function settingProblem(setting: RuntimeSetting, value: SettingValue) {
   return ''
 }
 
-function RuntimePanel({ runtimes, models, host, fresh, pendingModelId, refusals, messages, onRun }: {
+type GenerateHandlers = {
+  jobs: Job[]; jobErrors: Record<string, string>
+  onGenerate: (runtime: Runtime, inputs: Record<string, string | number | null>) => Promise<boolean>
+  fileUrl: (job: Job, output: JobOutput) => Promise<string>
+}
+
+function RuntimePanel({ runtimes, models, host, fresh, pendingModelId, refusals, messages, onRun, ...generate }: {
   runtimes: Runtime[] | null; models: Model[] | null; host?: Host; fresh: boolean; pendingModelId: string | null
   refusals: Record<string, Refusal>; messages: Record<string, string>
   onRun: (runtime: Runtime, action: 'start' | 'stop', launch?: Launch) => Promise<void>
-}) {
+} & GenerateHandlers) {
   if (!runtimes || runtimes.length === 0) return null
   return <section className="models-section runtime-section" aria-labelledby="runtime-heading">
     <div className="section-heading model-heading"><div><h2 id="runtime-heading">Model servers</h2><p>Real models that run on this machine. Starting one checks free RAM and VRAM first.</p></div></div>
-    {runtimes.map((runtime) => <RuntimeCard key={runtime.id} runtime={runtime} model={models?.find((item) => item.id === runtime.id)} host={host} fresh={fresh} pending={pendingModelId === runtime.id} refusal={refusals[runtime.id]} message={messages[runtime.id]} onRun={onRun} />)}
+    {runtimes.map((runtime) => <RuntimeCard key={runtime.id} runtime={runtime} model={models?.find((item) => item.id === runtime.id)} host={host} fresh={fresh} pending={pendingModelId === runtime.id} refusal={refusals[runtime.id]} message={messages[runtime.id]} onRun={onRun} {...generate} />)}
   </section>
 }
 
-function RuntimeCard({ runtime, model, host, fresh, pending, refusal, message, onRun }: {
+const makeLabel: Record<string, string> = { audio: 'Make a song', image: 'Make a picture', video: 'Make a video' }
+
+function GenerateForm({ runtime, generation, onGenerate, error }: { runtime: Runtime; generation: Generation; error?: string; onGenerate: GenerateHandlers['onGenerate'] }) {
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(generation.inputs.map((field) => [field.key, field.default == null ? '' : String(field.default)])))
+  const [advanced, setAdvanced] = useState(false)
+  const [sending, setSending] = useState(false)
+  const problem = (field: InputField) => {
+    const raw = values[field.key] ?? ''
+    if (!raw.trim()) return field.required ? 'Required.' : ''
+    if ((field.kind === 'text' || field.kind === 'textarea') && field.max_length && raw.length > field.max_length) return `At most ${field.max_length} characters.`
+    if (field.kind === 'int' || field.kind === 'seed') {
+      const number = Number(raw)
+      if (!Number.isInteger(number)) return 'Enter a whole number.'
+      if ((field.minimum !== null && number < field.minimum) || (field.maximum !== null && number > field.maximum)) return `Between ${field.minimum} and ${field.maximum}.`
+    }
+    return ''
+  }
+  const valid = generation.inputs.every((field) => !problem(field))
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!valid) return
+    const inputs: Record<string, string | number | null> = {}
+    for (const field of generation.inputs) {
+      const raw = (values[field.key] ?? '').trim()
+      if (!raw) continue
+      inputs[field.key] = field.kind === 'int' || field.kind === 'seed' ? Number(raw) : raw
+    }
+    setSending(true)
+    await onGenerate(runtime, inputs)
+    setSending(false)
+  }
+  const renderField = (field: InputField) => {
+    const id = `${runtime.id}-input-${field.key}`
+    const value = values[field.key] ?? ''
+    const set = (next: string) => setValues((current) => ({ ...current, [field.key]: next }))
+    return <label className={`field ${field.kind === 'textarea' ? 'field-wide' : ''}`} key={field.key} htmlFor={id}>
+      <span>{field.label.toUpperCase()}{field.required ? '' : ' (OPTIONAL)'}</span>
+      {field.kind === 'textarea' ? <textarea id={id} className="text-input generate-textarea" rows={10} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? undefined} value={value} onChange={(event) => set(event.target.value)} />
+        : field.kind === 'choice' ? <select id={id} className="text-input" value={value} onChange={(event) => set(event.target.value)}>{field.options.map((option) => <option key={option} value={option}>{option}</option>)}</select>
+          : <input id={id} className="text-input" type={field.kind === 'text' ? 'text' : 'number'} step={field.kind === 'text' ? undefined : 1} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? (field.kind === 'seed' ? 'Random' : undefined)} value={value} onChange={(event) => set(event.target.value)} />}
+      <small className={problem(field) && value ? 'field-problem' : ''}>{(value && problem(field)) || field.help}</small>
+    </label>
+  }
+  const basic = generation.inputs.filter((field) => !field.advanced)
+  const extra = generation.inputs.filter((field) => field.advanced)
+  return <form className="generate-form" onSubmit={submit} aria-label={makeLabel[generation.output_kind] ?? 'Make something'}>
+    <div className="generate-fields">{basic.map(renderField)}</div>
+    {extra.length > 0 && <><button type="button" className="text-button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}><ChevronDown size={14} className={advanced ? 'chevron-open' : ''} /> More options</button>
+      {advanced && <div className="generate-fields">{extra.map(renderField)}</div>}</>}
+    {error && <div className="form-error" role="alert"><AlertCircle size={15} />{error}</div>}
+    <div className="generate-actions"><button className="button button-primary" type="submit" disabled={!valid || sending}><Sparkles size={15} />{sending ? 'Sending…' : makeLabel[generation.output_kind] ?? 'Make it'}</button></div>
+  </form>
+}
+
+function JobList({ jobs, fileUrl }: { jobs: Job[]; fileUrl: GenerateHandlers['fileUrl'] }) {
+  if (jobs.length === 0) return null
+  return <div className="job-list" aria-label="Results">{jobs.map((job) => <JobRow key={job.id} job={job} fileUrl={fileUrl} />)}</div>
+}
+
+function JobRow({ job, fileUrl }: { job: Job; fileUrl: GenerateHandlers['fileUrl'] }) {
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const [error, setError] = useState('')
+  const media = job.outputs.filter((output) => /^(audio|image|video)\//.test(output.mime))
+  useEffect(() => {
+    if (job.status !== 'done') return
+    let cancelled = false
+    const made: string[] = []
+    void Promise.all(media.map(async (output) => {
+      const url = await fileUrl(job, output)
+      made.push(url)
+      if (!cancelled) setUrls((current) => ({ ...current, [output.name]: url }))
+    })).catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'The file could not be loaded.') })
+    return () => { cancelled = true; made.forEach((url) => URL.revokeObjectURL(url)) }
+    // Load each finished job's files once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.id, job.status])
+  const title = typeof job.inputs.style === 'string' ? job.inputs.style : typeof job.inputs.prompt === 'string' ? job.inputs.prompt : 'Untitled'
+  const statusText = { queued: 'Waiting its turn', running: job.progress ?? 'Working', done: job.progress ?? 'Done', failed: 'Did not work' }[job.status] ?? job.status
+  return <article className={`job-row job-${job.status}`}>
+    <div className="job-head"><strong>{title}</strong><span className={`model-state state-${job.status === 'done' ? 'ready' : job.status === 'failed' ? 'error' : 'loading'}`}>{statusText}</span></div>
+    {job.status === 'failed' && job.error_message && <small className="operation-error">{job.error_message}</small>}
+    {error && <small className="operation-error">{error}</small>}
+    {media.map((output) => <div className="job-media" key={output.name}>
+      {urls[output.name] ? (output.mime.startsWith('audio/') ? <audio controls src={urls[output.name]} aria-label={`Play ${title}`} />
+        : output.mime.startsWith('image/') ? <img src={urls[output.name]} alt={title} />
+          : <video controls src={urls[output.name]} />) : <small>Loading…</small>}
+      {urls[output.name] && <a className="text-button" href={urls[output.name]} download={output.name}>Download {output.name}</a>}
+    </div>)}
+  </article>
+}
+
+function RuntimeCard({ runtime, model, host, fresh, pending, refusal, message, onRun, jobs, jobErrors, onGenerate, fileUrl }: {
   runtime: Runtime; model?: Model; host?: Host; fresh: boolean; pending: boolean; refusal?: Refusal; message?: string
   onRun: (runtime: Runtime, action: 'start' | 'stop', launch?: Launch) => Promise<void>
-}) {
+} & GenerateHandlers) {
   const initialPreset = runtime.last_launch?.preset && runtime.presets[runtime.last_launch.preset] ? runtime.last_launch.preset : runtime.default_preset
   const [launch, setLaunch] = useState<Launch>(() => defaultLaunch(runtime, initialPreset))
   const [advanced, setAdvanced] = useState(false)
@@ -882,7 +1044,9 @@ function RuntimeCard({ runtime, model, host, fresh, pending, refusal, message, o
 
     {preset && <fieldset className="runtime-choice" disabled={!stopped || pending}>
       <legend>GPUs</legend>
-      {preset.allowed_gpus.map((gpu) => <label key={gpu.index} className={`runtime-option ${launch.gpus.includes(gpu.index) ? 'runtime-option-on' : ''}`}><input type="checkbox" checked={launch.gpus.includes(gpu.index)} onChange={(event) => setLaunch((current) => ({ ...current, gpus: event.target.checked ? [...current.gpus, gpu.index].sort() : current.gpus.filter((item) => item !== gpu.index) }))} /><span>{gpu.name}</span></label>)}
+      {preset.allowed_gpus.map((gpu) => <label key={gpu.index} className={`runtime-option ${launch.gpus.includes(gpu.index) ? 'runtime-option-on' : ''}`}>{runtime.max_gpus === 1
+        ? <input type="radio" name={`${runtime.id}-gpu`} checked={launch.gpus.includes(gpu.index)} onChange={() => setLaunch((current) => ({ ...current, gpus: [gpu.index] }))} />
+        : <input type="checkbox" checked={launch.gpus.includes(gpu.index)} onChange={(event) => setLaunch((current) => ({ ...current, gpus: event.target.checked ? [...current.gpus, gpu.index].sort() : current.gpus.filter((item) => item !== gpu.index) }))} />}<span>{gpu.name}</span></label>)}
       {launch.gpus.length === 0 && <small className="field-problem">Choose at least one GPU.</small>}
     </fieldset>}
 
@@ -911,6 +1075,8 @@ function RuntimeCard({ runtime, model, host, fresh, pending, refusal, message, o
 
     {refusal && <RefusalDetails refusal={refusal} gpus={host?.gpus} />}
     {message && <p className="runtime-message" aria-live="polite">{message}</p>}
+    {runtime.generation && state === 'ready' && <GenerateForm runtime={runtime} generation={runtime.generation} onGenerate={onGenerate} error={jobErrors[runtime.id]} />}
+    {runtime.generation && <JobList jobs={jobs.filter((job) => job.model_id === runtime.id)} fileUrl={fileUrl} />}
     <div className="profile-card-footer"><span className="worker-caption">{running && model ? 'Running. Stop it to free its RAM and VRAM.' : stopped ? 'Stopped. Nothing is using memory.' : 'Working. This can take several minutes.'}</span><div className="profile-actions">
       {stopped && <button className="button button-primary" disabled={!canStart} title={!fresh ? 'A fresh telemetry sample is required.' : !host?.loading_enabled ? host?.loading_reason : !valid ? 'Fix the highlighted settings first.' : undefined} onClick={() => void onRun(runtime, 'start', launch)}><ArrowUpRight size={14} />{state === 'error' ? 'Start again' : 'Start'}</button>}
       {running && <button className="button button-secondary" disabled={pending || !fresh} onClick={() => void onRun(runtime, 'stop')}><X size={14} />Stop</button>}

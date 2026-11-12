@@ -60,6 +60,23 @@ Estimates are conservative start requirements: free VRAM per GPU index and RAM (
 
 Each runtime's `kind` selects a model plugin; see [plugins.md](plugins.md) for the plugin contract and how to add one. For each start the service writes the plugin's files (for Basalt, `basalt-config.json`) to `runtime/launch/<operation>/` and the server output to `runtime/logs/<kind>-<operation>.log`. It runs `basalt.exe serve --config <file>` directly (no `.bat` or WSL), waits until `/v1/models` reports `loaded`, and records `ready`. If Basalt exits during the load, the operation fails with the last log lines. Once ready, the capacity reservation is released because telemetry now shows the real memory. Stopping ends only the process tree this service started, after checking the process start time so a reused PID is never touched. A ready Basalt keeps running when the API restarts and is re-adopted on the next start; a process left from an interrupted load is stopped. If a ready Basalt exits on its own, the model is marked failed with `WORKER_EXITED`.
 
+## YuE2 (songs)
+
+YuE2 runs in its own environment, not Generation Station's. On the desktop it was set up like this (CC BY-NC 4.0 weights from Hugging Face `m-a-p`):
+
+```powershell
+uv venv C:\ai\envs\yue2-worker --python 3.12
+uv pip install --python C:\ai\envs\yue2-worker\Scripts\python.exe "huggingface-hub==0.36.2"
+C:\ai\envs\yue2-worker\Scripts\hf.exe download m-a-p/YuE2-3B yue2_infer-0.1.5-py3-none-any.whl --local-dir C:\ai\downloads\yue2
+uv pip install --python C:\ai\envs\yue2-worker\Scripts\python.exe C:\ai\downloads\yue2\yue2_infer-0.1.5-py3-none-any.whl
+# yue2_infer pins torch==2.10.0, which PyPI serves CPU-only on Windows. Replace it with the CUDA build:
+uv pip install --python C:\ai\envs\yue2-worker\Scripts\python.exe "torch==2.10.0" --index-url https://download.pytorch.org/whl/cu128 --reinstall-package torch
+C:\ai\envs\yue2-worker\Scripts\hf.exe download m-a-p/YuE2-3B --local-dir C:\ai\models\yue2\YuE2-3B --exclude "*.whl"
+C:\ai\envs\yue2-worker\Scripts\hf.exe download m-a-p/YuE2-Vae --local-dir C:\ai\models\yue2\YuE2-Vae
+```
+
+Check with `C:\ai\envs\yue2-worker\Scripts\python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available())"`; it must print a `+cu128` version and `True`. The `yue2` entry in `runtimes.example.json` points at these folders and writes songs to `C:\ai\outputs\yue2`.
+
 ## Run the API and frontend
 
 Use separate PowerShell terminals, from the repository root unless noted.

@@ -34,6 +34,16 @@ def test_plugin_contract(kind):
             assert spec.minimum is not None and spec.maximum is not None and spec.minimum <= spec.maximum
     for method in ("launch", "probe"):
         assert getattr(type(plugin), method) is not getattr(RuntimePlugin, method), f"{kind} must implement {method}"
+    if plugin.generates:
+        assert plugin.output_kind in {"audio", "image", "video"}
+        for method in ("submit", "job_status", "output_dir"):
+            assert getattr(type(plugin), method) is not getattr(RuntimePlugin, method), f"{kind} must implement {method}"
+        for name, spec in plugin.inputs.items():
+            assert name.isidentifier() and spec.label and spec.help
+            if spec.kind in {"text", "textarea"}:
+                assert spec.max_length, f"{kind}.{name} needs a max_length"
+            if spec.kind == "choice":
+                assert spec.options and (spec.default is None or spec.default in spec.options)
 
 
 # ----- catalog ---------------------------------------------------------------------------------

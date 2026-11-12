@@ -33,6 +33,22 @@ class SettingSpec(BaseModel):
     help: str
 
 
+class InputSpec(BaseModel):
+    """One field of a generation form (what the person types to make a song, image, ...)."""
+    model_config = ConfigDict(frozen=True)
+    label: str
+    kind: Literal["text", "textarea", "int", "choice", "seed"]
+    required: bool = False
+    default: str | int | None = None
+    minimum: int | None = None
+    maximum: int | None = None
+    max_length: int | None = None
+    options: tuple[str, ...] = ()
+    placeholder: str | None = None
+    help: str
+    advanced: bool = False
+
+
 class Estimate(BaseModel):
     """Conservative start requirements. Estimates, not measurements; edit them as you measure."""
     model_config = ConfigDict(extra="forbid")
@@ -98,6 +114,14 @@ class RuntimePlugin:
     title: ClassVar[str]
     runtime_model: ClassVar[type[BaseRuntime]]
     settings: ClassVar[dict[str, SettingSpec]] = {}
+    max_gpus: ClassVar[int | None] = None
+    # A plugin that makes things (songs, images) lists its form fields and implements submit/job_status.
+    inputs: ClassVar[dict[str, InputSpec]] = {}
+    output_kind: ClassVar[str | None] = None  # "audio", "image" or "video"
+
+    @property
+    def generates(self) -> bool:
+        return bool(self.inputs)
 
     # ----- catalog -----------------------------------------------------------------------
 
@@ -131,4 +155,17 @@ class RuntimePlugin:
 
     def probe(self, runtime: BaseRuntime) -> ProbeStatus | None:
         """Ask the running server whether its model is loaded. None means it is not answering."""
+        raise NotImplementedError
+
+    # ----- generation (only for plugins with `inputs`) --------------------------------------
+
+    def output_dir(self, runtime: BaseRuntime) -> Path:
+        raise NotImplementedError
+
+    def submit(self, runtime: BaseRuntime, job_id: str, inputs: dict) -> dict:
+        """Queue a job on the running server. Return the worker's job record."""
+        raise NotImplementedError
+
+    def job_status(self, runtime: BaseRuntime, job_id: str) -> dict | None:
+        """Return the worker's job record, or None if the server is not answering."""
         raise NotImplementedError
