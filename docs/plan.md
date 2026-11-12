@@ -43,18 +43,18 @@ Exact dependencies are locked for the current prototype. The desktop now has abo
 - Process supervision owns each started process tree, checks PID start times before stopping, re-adopts a ready process after an API restart, stops orphans of interrupted loads, detects crashes, and refuses `PORT_IN_USE` when a runtime runs outside the app. Estimate-based admission reserves capacity until readiness.
 - Generation: workers speak the `workers/gs_worker.py` protocol; jobs are stored in PostgreSQL (migration 0004) with inputs validated against each plugin's form; finished files are served only from the job's own output folder.
 - Dashboard (multi-host since 2026-11-12, branch `feature/multi-host-ui`): sidebar with Overview, Connections, and a section per saved host listing its services and Test profiles; hash routes (`#/overview`, `#/connections`, `#/hosts/<host>/services/<model>`, `#/hosts/<host>/profiles`). Each host has its own session (telemetry stream, catalog, actions), and saved hosts reconnect on the next visit. Service pages hold model, GPU and advanced settings, start/stop, refusals naming the GPU, the plugin-generated form ("Make a song"), results with playback and download, and the service's history.
-- 95 backend tests (including PostgreSQL tests with stand-in Basalt and worker processes) and 17 Playwright tests pass; Ruff passes.
+- The backend tests (including PostgreSQL tests with stand-in Basalt and worker processes) and Playwright tests pass; Ruff passes.
 
 ## Implementation status — 2026-10-10 (from BookStack; code not preserved)
 
-- The Windows backend suite passed 81 tests (one PostgreSQL-only test skipped) with a first SGLang-Diffusion container lifecycle slice; Playwright could not launch because Chromium was absent. See "Earlier attempt" under M3.
+- The Windows backend suite passed (the PostgreSQL-only test skipped) with a first SGLang-Diffusion container lifecycle slice; Playwright could not launch because Chromium was absent. See "Earlier attempt" under M3.
 
 ## Implementation status — 2026-10-09
 
 - The Windows-native API reports host identity and live physical RAM/NVML measurements. On 2026-10-09 it identified the desktop as Windows, reported the RTX 5090 and a fresh host-scope sample (`stale=false`), with sample age below one second.
 - The dashboard accepts a configurable server origin and bearer token; each host's URL and token are saved in that browser (accepted 2026-11-12). It validates host/catalog/profile/operation responses, streams authenticated telemetry, and shows stale, partial, disconnected, and reconnecting states. It exposes explicitly labeled simulation-profile and fake-worker controls when host data permits; the backend still checks every load request.
 - PostgreSQL 17.11 runs as the configured Docker Compose service with a named data volume. The application database was healthy at Alembic revision `0002 (head)`. The PostgreSQL migration/persistence/scheduler-lock integration test passed on a separate disposable test database. A live fake-worker load/unload also exercised desktop PostgreSQL admission and reservation release; active reservations returned to zero.
-- The Windows backend suite passed 69 tests and Ruff passed. The PostgreSQL-only test passed separately against a disposable database. Frontend production build and all 11 Playwright tests pass. The browser's authenticated remote connection/reconnect flow has not yet been exercised end to end.
+- The Windows backend suite and Ruff passed. The PostgreSQL-only test passed separately against a disposable database. Frontend production build and the Playwright tests pass. The browser's authenticated remote connection/reconnect flow has not yet been exercised end to end.
 - M2 profile/admission routes and the process-local fake-worker lifecycle are implemented. Unit tests cover refusal, per-device accounting, reservations, idempotency, operation cleanup, and restart reconciliation. On the desktop, an explicit low-resource fake profile reached `simulation_ready`, then `unloaded`; it reserved no active capacity afterward. Its temporary profile was deleted while model identity and operation history were retained, as designed. The fake worker starts no OS process, opens no model files, and runs no inference. M3 real inference remains unimplemented.
 
 ## Components and contracts
