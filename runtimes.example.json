@@ -19,7 +19,10 @@
           "name": "DeepSeek V4.1 Flash",
           "alias": "DeepSeek-V4.1-Flash-1017 GSQ-RCO-IQ2_XXS",
           "model_path": "C:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS.basalt",
-          "gpus": [0, 1],
+          "gpus": [
+            0,
+            1
+          ],
           "env": {
             "BASALT_ENGRAM_FILE": "C:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
             "BASALT_ENGRAM_OFFSET": "416"
@@ -32,15 +35,30 @@
             "ram_reserve_mib": 0,
             "conversation_cache_mib": 4096
           },
-          "estimate": { "ram_gib": 16, "gpu_min_free_gib": { "0": 24, "1": 10 } }
+          "estimate": {
+            "ram_gib": 16,
+            "gpu_min_free_gib": {
+              "0": 24,
+              "1": 10
+            }
+          }
         },
         "fn": {
           "name": "Qwen3.8 Flash-Next",
           "alias": "Qwen3.8-Flash-Next GSQ-RCO-IQ3_S",
           "model_path": "C:\\ai\\models\\basalt-fn-win\\Qwen3.8-FN-GSQ-RCO-IQ3_S.v2.basalt",
-          "gpus": [0, 1],
-          "fixed": { "ple-io": "direct" },
-          "kv_options": ["int8", "k8v4", "q4_0"],
+          "gpus": [
+            0,
+            1
+          ],
+          "fixed": {
+            "ple-io": "direct"
+          },
+          "kv_options": [
+            "int8",
+            "k8v4",
+            "q4_0"
+          ],
           "settings": {
             "max_context": 262144,
             "kv": "int8",
@@ -50,7 +68,51 @@
             "resident_budget_gib": null,
             "ram_reserve_mib": 2048
           },
-          "estimate": { "ram_gib": 40, "gpu_min_free_gib": { "0": 24, "1": 10 } }
+          "estimate": {
+            "ram_gib": 40,
+            "gpu_min_free_gib": {
+              "0": 24,
+              "1": 10
+            }
+          }
+        }
+      }
+    },
+    "yue2": {
+      "kind": "yue2",
+      "name": "YuE2 songs",
+      "workload": "music",
+      "python": "C:\\ai\\envs\\yue2-worker\\Scripts\\python.exe",
+      "output_dir": "C:\\ai\\outputs\\yue2",
+      "port": 8170,
+      "ready_timeout_seconds": 900,
+      "stop_timeout_seconds": 30,
+      "default_preset": "songs",
+      "presets": {
+        "songs": {
+          "name": "YuE2 3B",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "options": {
+            "model_dir": "C:\\ai\\models\\yue2\\YuE2-3B",
+            "vae_dir": "C:\\ai\\models\\yue2\\YuE2-Vae"
+          },
+          "settings": {
+            "memory_budget_gib": 24,
+            "quantization": "none"
+          },
+          "estimate": {
+            "ram_gib": 8,
+            "gpu_min_free_gib": {
+              "0": 14,
+              "1": 14
+            }
+          }
         }
       }
     }

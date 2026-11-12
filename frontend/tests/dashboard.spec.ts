@@ -48,7 +48,23 @@ function runtimeFixture() {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean } = {}) {
+function songRuntimeFixture() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  return {
+    id: 'yue2', kind: 'yue2', plugin: 'YuE2', name: 'YuE2 songs', workload: 'music', port: 8170, default_preset: 'songs', last_launch: null, max_gpus: 1,
+    presets: { songs: { name: 'YuE2 3B', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 24, gpu_min_free_gib: { 0: 14, 1: 14 } }, settings: [] } },
+    generation: { output_kind: 'audio', inputs: [
+      field('style', 'Style', 'text', { required: true, max_length: 400, placeholder: 'Upbeat indie pop' }),
+      field('lyrics', 'Lyrics', 'textarea', { required: true, max_length: 8000 }),
+      field('mode', 'Melody planning', 'choice', { options: ['full', 'melody', 'off'], default: 'full', advanced: true }),
+      field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true }),
+    ] },
+  }
+}
+
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -58,7 +74,24 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: options.runtime ? [runtimeFixture()] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: options.runtime ? [runtimeFixture()] : options.songs ? [songRuntimeFixture()] : [] } }))
+  if (options.songs) models.push({ id: 'yue2', name: 'YuE2 songs', workload: 'music', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  const jobs: Array<Record<string, unknown>> = []
+  let jobBody: Record<string, unknown> | null = null
+  await page.route('**/api/jobs?limit=20', (route) => route.fulfill({ json: { jobs } }))
+  await page.route('**/api/models/*/jobs', async (route) => {
+    jobBody = route.request().postDataJSON() as Record<string, unknown>
+    const job = { id: 'job-00000001', model_id: 'yue2', inputs: { mode: 'full', ...(jobBody.inputs as object) }, status: 'queued', progress: null, outputs: [], error_message: null, created_at: '2026-11-12T00:00:00Z', finished_at: null }
+    jobs.unshift(job)
+    await route.fulfill({ status: 202, json: job })
+  })
+  await page.route('**/api/jobs/job-00000001', async (route) => {
+    const job = jobs[0]
+    if (job.status === 'queued') Object.assign(job, { status: 'running', progress: 'Composing the song' })
+    else Object.assign(job, { status: 'done', progress: 'Done: 1 seconds, seed 42', outputs: [{ name: 'song.wav', mime: 'audio/wav', bytes: 44 }], finished_at: '2026-11-12T00:01:00Z' })
+    await route.fulfill({ json: job })
+  })
+  await page.route('**/api/jobs/job-00000001/files/song.wav', (route) => route.fulfill({ status: 200, contentType: 'audio/wav', body: Buffer.alloc(44) }))
   await page.route('**/api/runtimes/*/start', async (route) => {
     startBody = route.request().postDataJSON() as Record<string, unknown>
     if (refuseStart) {
@@ -122,7 +155,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
     if (model && runtime) model.state = 'unloading'
     await route.fulfill({ status: 202, json: operation })
   })
-  return { profiles, models, operations, get postProfileBody() { return postProfileBody }, get loadProfileId() { return loadProfileId }, get startBody() { return startBody } }
+  return { profiles, models, operations, get postProfileBody() { return postProfileBody }, get loadProfileId() { return loadProfileId }, get startBody() { return startBody }, get jobBody() { return jobBody } }
 }
 
 async function installSseMock(page: Page) {
@@ -171,7 +204,7 @@ async function streamCount(page: Page) {
   return page.evaluate(() => (window as Window & { __gsStreamCount?: number }).__gsStreamCount ?? 0)
 }
 
-async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean } = {}) {
+async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean } = {}) {
   await installSseMock(page)
   const api = await installM2Api(page, options)
   const host = fixtureHost(label, stale)
@@ -407,4 +440,23 @@ test('shows a model server capacity refusal with the GPU name instead of its UUI
   await expect(refusal.getByText('Required 24 GiB')).toBeVisible()
   await expect(page.getByText(gpuUuid)).toHaveCount(0)
   await expect(page.getByText('Stopped', { exact: true })).toBeVisible()
+})
+
+test('makes a song from lyrics and style, shows progress, then plays and offers the file', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { songs: true })
+  await expect(page.getByText('Running', { exact: true })).toBeVisible()
+  await expect(page.getByRole('radio', { name: 'Second GPU' })).toBeChecked()
+  const form = page.getByRole('form', { name: 'Make a song' })
+  await expect(form.getByRole('button', { name: 'Make a song' })).toBeDisabled()
+  await form.getByLabel(/^STYLE/).fill('Upbeat indie pop, female vocals')
+  await form.getByLabel(/^LYRICS/).fill('[Verse]\nSunlight on the kitchen floor\n\n[Chorus]\nSing it back to me')
+  await form.getByRole('button', { name: 'More options' }).click()
+  await form.getByLabel(/^SEED/).fill('42')
+  await page.screenshot({ path: 'test-results/screenshots/make-a-song.png', fullPage: true })
+  await form.getByRole('button', { name: 'Make a song' }).click()
+  await expect(page.getByText('Waiting its turn').or(page.getByText('Composing the song'))).toBeVisible()
+  expect(api.jobBody).toEqual({ inputs: { style: 'Upbeat indie pop, female vocals', lyrics: '[Verse]\nSunlight on the kitchen floor\n\n[Chorus]\nSing it back to me', mode: 'full', seed: 42 } })
+  await expect(page.getByText('Done: 1 seconds, seed 42')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByLabel('Play Upbeat indie pop, female vocals')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Download song.wav' })).toBeVisible()
 })

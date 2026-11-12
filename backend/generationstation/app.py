@@ -13,13 +13,14 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .config import ROOT, Settings
+from .generation import GenerationManager
 from .lifecycle import IdempotencyConflict, LifecycleError, LifecycleManager
 from .process_worker import ProcessSupervisor
 from .runtimes import load_catalog
@@ -170,6 +171,18 @@ class RuntimeStartRequest(BaseModel):
         return value
 
 
+class JobRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    inputs: dict[StrictStr, StrictStr | StrictInt | None] = Field(default_factory=dict)
+
+    @field_validator("inputs")
+    @classmethod
+    def bounded(cls, value):
+        if len(value) > 32:
+            raise ValueError("Too many inputs.")
+        return value
+
+
 def create_app(settings=None, store=None, monitor=None, worker=None, catalog=None, runtime_adapter=None):
     settings = settings or Settings()
     store = store if store is not None else Store(settings.database_url.get_secret_value())
@@ -179,6 +192,7 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         runtime_adapter = ProcessSupervisor(settings.runtime_dir)
     lifecycle = LifecycleManager(store, settings, worker=worker, catalog=catalog,
                                  runtime_adapter=runtime_adapter)
+    generation = GenerationManager(store, catalog)
     access_logger = _access_logger()
     instance_id = None
 
@@ -288,6 +302,25 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
                       idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128)):
         return lifecycle.create_runtime_load(model_id, payload.preset, payload.settings, payload.gpus,
                                              idempotency_key, snapshot())
+
+    @api.post("/models/{model_id}/jobs", status_code=202)
+    def create_job(model_id: str, payload: JobRequest):
+        return generation.create(model_id, payload.inputs)
+
+    @api.get("/jobs")
+    def jobs(model_id: str | None = None, limit: int = 50):
+        if not 1 <= limit <= 200:
+            raise HTTPException(422, "limit must be between 1 and 200")
+        return generation.list(model_id, limit)
+
+    @api.get("/jobs/{job_id}")
+    def job(job_id: str):
+        return generation.get(job_id)
+
+    @api.get("/jobs/{job_id}/files/{name}")
+    def job_file(job_id: str, name: str):
+        path, mime = generation.output_path(job_id, name)
+        return FileResponse(path, media_type=mime, filename=name)
 
     @api.get("/profiles")
     def profiles():

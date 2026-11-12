@@ -1,6 +1,6 @@
 # Generation Station implementation plan
 
-Date: 2026-10-09. Status: React/TypeScript/Vite, native Windows Python/FastAPI, SQLAlchemy/Alembic, and Docker PostgreSQL accepted. Local M1/M2 checks pass. Desktop RAM/NVML telemetry, Tailscale API reachability/authentication, PostgreSQL revision `0002 (head)`, and a simulation load/unload check passed. The laptop browser's full remote connection/reconnect flow remains pending. M3 remains pending.
+Date: 2026-11-12. Status: React/TypeScript/Vite, native Windows Python/FastAPI, SQLAlchemy/Alembic, and Docker PostgreSQL accepted. M1/M2 passed desktop acceptance on 2026-10-09. M3 is in progress on `feature/basalt-runtime`: the model plugin system, Basalt (text) and YuE2 (music) plugins, the worker protocol and generation jobs are implemented, and both models ran for real on the desktop (Basalt DeepSeek answered a chat request; YuE2 made a song). An earlier Qwen Image 2.1 / SGLang-Diffusion attempt on 2026-10-10 was recorded but its code was not preserved (see M3). The laptop browser's full remote connection/reconnect flow remains pending.
 
 ## Product boundary
 
@@ -19,7 +19,7 @@ Generation interfaces, automatic switching, downloads, and agent workflows follo
 | Host RAM | psutil | Use available physical memory for admission; show used and total separately. |
 | GPU telemetry | Vendor adapter; NVML for NVIDIA if applicable | Measure each physical GPU and expose unsupported/error states honestly. |
 | Browser updates | REST plus server-sent events | Commands are requests; telemetry and operation status stream to clients. |
-| Inference | Supervised subprocesses with independent environments | Allow different runtime dependencies and release process-owned allocations on exit. |
+| Inference | Model plugins: supervised native processes (Basalt) and per-model Python workers in their own environments (YuE2) | Allow different runtime dependencies and release process-owned allocations on exit. A containerized runtime (SGLang-Diffusion, selected for images on 2026-10-10) remains an option that needs Docker/WSL2 memory accounting. |
 | Verification | pytest, frontend unit tests, Playwright | Focus on admission races, recovery, and the actual browser workflow. |
 
 The backend serves the compiled frontend in production, giving one origin and one application endpoint. Node is needed for frontend development/building, not as a production UI server. Start with one API/scheduler process; inference runs outside it. Avoid multiplying scheduler ownership with multiple Uvicorn workers.
@@ -32,12 +32,24 @@ Rails provides a structured framework for applications centered on accounts, per
 
 - PostgreSQL runs in Docker with a persistent named volume and versioned schema migrations. Use separate local development and desktop database volumes; no automatic replication is implied. Pin the image version and use its documented data mount path at implementation time.
 - Keep database credentials external and restrict database access to the application/host. The browser connects to the application API, never directly to PostgreSQL. Volume persistence is separate from backup/restore, which must be documented.
-- Docker is reported available on both machines. This does not establish GPU-container support or make a container's memory view authoritative for the Windows host. The initial recommendation is a containerized database with a native Windows telemetry/supervisor service; verify Docker/WSL2 and driver support before selecting containerized inference.
+- Docker Desktop runs on the desktop. On 2026-10-10 the user selected Docker Desktop's Linux engine for an SGLang image worker while keeping the API and host telemetry native on Windows, and a one-shot container confirmed RTX 5090 passthrough. A container's memory view is not authoritative for the Windows host: admission for a container must also check Docker's WSL2 memory ceiling (`%USERPROFILE%\.wslconfig`, 26 GB since 2026-10-10). Since 2026-11-11 PostgreSQL runs on Docker Desktop; model workers run natively.
 - Current desktop access is through Tailscale at `100.109.129.35`. The browser accepts a configurable server origin (including scheme and port); the current IP is not baked into application code. On 2026-10-09, the laptop reached the API on port 8000, an unauthenticated API request returned 401, and the Vite-origin CORS preflight succeeded. Authenticated host telemetry and simulation operations were exercised on the desktop. The browser's full remote connection/reconnect flow remains pending. A local SSH alias, `generationstation-desktop`, uses the dedicated key and Windows account `Steve`; update its host address if Tailscale changes. Prefer a same-origin UI/API in deployment, with explicit trusted origins if a separate browser client is used.
 
-Exact dependencies are locked for the current prototype. The Windows host confirmed the reported Ryzen 7 5800X3D, 32 GB RAM, RTX 5090, and Windows 11. A host sample reported 34,280,030,208 bytes RAM total / 24,476,930,048 available and 34,190,917,632 bytes VRAM total / 32,506,490,880 available; C: reported about 418 GiB free and `nvidia-smi` reported driver 617.14. These are time-specific baseline observations; no real inference peak or runtime compatibility has been established. See `docs/context.md`.
+Exact dependencies are locked for the current prototype. The desktop now has about 125.5 GiB RAM, an RTX 5090 (32 GB) and an RTX 4080 (16 GB, drives the display), and Windows 11; October's sample (32 GB RAM, RTX 5090 only) is kept for history. Measured model peaks are recorded per run in `docs/context.md`.
 
-## Current implementation status — 2026-10-09
+## Current implementation status — 2026-11-12
+
+- Runtime catalog (`runtimes.json`, local; `runtimes.example.json` committed) selects a plugin per entry with `kind`. Plugins: `basalt` (native LLM server; DeepSeek V4.1 Flash and Qwen3.8 Flash-Next presets) and `yue2` (song worker). The browser can only choose a preset, GPUs, and the plugin's bounded settings.
+- Process supervision owns each started process tree, checks PID start times before stopping, re-adopts a ready process after an API restart, stops orphans of interrupted loads, detects crashes, and refuses `PORT_IN_USE` when a runtime runs outside the app. Estimate-based admission reserves capacity until readiness.
+- Generation: workers speak the `workers/gs_worker.py` protocol; jobs are stored in PostgreSQL (migration 0004) with inputs validated against each plugin's form; finished files are served only from the job's own output folder.
+- Dashboard: Model servers panel (model, GPU, advanced settings, start/stop, refusals naming the GPU), a form generated from the plugin ("Make a song"), and results with playback and download.
+- 95 backend tests (including PostgreSQL tests with stand-in Basalt and worker processes) and 15 Playwright tests pass; Ruff passes.
+
+## Implementation status — 2026-10-10 (from BookStack; code not preserved)
+
+- The Windows backend suite passed 81 tests (one PostgreSQL-only test skipped) with a first SGLang-Diffusion container lifecycle slice; Playwright could not launch because Chromium was absent. See "Earlier attempt" under M3.
+
+## Implementation status — 2026-10-09
 
 - The Windows-native API reports host identity and live physical RAM/NVML measurements. On 2026-10-09 it identified the desktop as Windows, reported the RTX 5090 and a fresh host-scope sample (`stale=false`), with sample age below one second.
 - The dashboard accepts a configurable server origin and bearer token; the URL is saved on that browser, while the token stays in memory. It validates host/catalog/profile/operation responses, streams authenticated telemetry, and shows stale, partial, disconnected, and reconnecting states. It exposes explicitly labeled simulation-profile and fake-worker controls when host data permits; the backend still checks every load request.
@@ -47,11 +59,11 @@ Exact dependencies are locked for the current prototype. The Windows host confir
 
 ## Components and contracts
 
-1. **Web UI:** host summary, model list/detail, load/unload buttons, operation history, connection health, settings.
+1. **Web UI:** host summary, model servers with start/stop and settings, generation forms built from plugins and their results, simulation profiles, operation history, connection health, settings.
 2. **Host monitor:** timestamped physical RAM and per-device VRAM readings, host identity, telemetry health. Start with a configurable one-second sample interval.
 3. **Model registry:** immutable model revision and file paths, runtime version, quantization, device assignment, offload settings, supported operating limits, and memory profile provenance.
 4. **Admission controller:** validates telemetry and profiles, calculates incremental requirements, reserves capacity, and records acceptance/refusal atomically under one scheduler owner.
-5. **Worker supervisor:** launches approved adapters, waits for readiness, tracks process identity, captures bounded logs, applies timeouts, and stops the owned process tree.
+5. **Worker supervisor:** launches only approved plugin launch descriptions, waits for readiness, tracks process (or, for a container runtime, container) identity, captures bounded logs, applies timeouts, and stops only the owned worker. Uncertain ownership or exit retains the capacity reservation.
 6. **Persistence:** registry/settings, operation records and state transitions. Store large artifacts on disk rather than in PostgreSQL.
 
 Adapters expose start, ready/health, stop, and status. Later adapters add execute, progress, and cancel. A runtime may be a Python package, compiled executable, or managed service. The browser never supplies arbitrary executable commands; adapters validate configuration and permitted model paths.
@@ -89,7 +101,7 @@ For each resource independently, compare additional peak demand with current ava
 
 ### M0 — Context and desktop inventory
 
-Deliver repository plan, BookStack context, stack decision, desktop inventory, and first model/runtime choice. The stack and user-reported inventory are recorded; selecting a first feasible workload and verifying desktop capabilities remain open. Check actual available weights and runtime compatibility. Done when we can identify one bounded workload that should fit the target host; candidates too large for the machine remain unsupported.
+Deliver repository plan, BookStack context, stack decision, desktop inventory, and first model/runtime choice. Done. On 2026-10-10 image generation (Qwen Image 2.1 on SGLang-Diffusion) was chosen first and Qwen Image 2.1 and Krea 2 Turbo weights were found on the desktop; on 2026-11-11 Basalt became the first runtime actually delivered, followed by YuE2. Candidates too large for the machine remain unsupported.
 
 ### M1 — Web shell and real host telemetry
 
@@ -117,7 +129,21 @@ This is the first usable release: manual model management with trustworthy host 
 
 Status 2026-11-11: in progress on `feature/basalt-runtime`. The first runtime is Basalt with DeepSeek V4.1 Flash and Qwen3.8 Flash-Next presets. Implemented: a local runtime catalog with allow-listed, bounded advanced settings (main-card and second-card VRAM reserve, RAM for overflow experts, RAM guard, conversation cache, context, KV precision where supported) and per-run GPU choice; generated Basalt configs; process supervision with readiness from `/v1/models`; estimate-based admission whose reservation is released at readiness; restart re-adoption; crash detection; `PORT_IN_USE` for a Basalt started elsewhere; and a dashboard panel. Verified: the full backend suite including PostgreSQL runtime tests with a stand-in process, and a live refusal on the desktop that started no process. A first real DeepSeek load on the RTX 5090 alone reached readiness in 51 s, answered a minimal chat request, and stopped in 6 s with VRAM and RAM released (measurements in `docs/context.md`). Remaining for acceptance: repeated load/unload cycles to look for retained allocations, a two-GPU load, a Flash-Next load, and the browser walkthrough.
 
-Model plugins (accepted 2026-11-11): every runtime kind is a plugin in this repository (`backend/generationstation/plugins/`), registered explicitly; Basalt is the first. The core keeps process supervision, admission and persistence; a plugin supplies its config schema, user settings, estimate, launch description and readiness probe. Contract and how-to: `docs/plugins.md`. After the refactor, a real DeepSeek start on the RTX 5090 reached readiness in 55 s, answered a chat request, and stopped with VRAM released. Next: the generation worker protocol with a stand-in plugin, then YuE2.
+Model plugins (accepted 2026-11-11): every runtime kind is a plugin in this repository (`backend/generationstation/plugins/`), registered explicitly; Basalt is the first. The core keeps process supervision, admission and persistence; a plugin supplies its config schema, user settings, estimate, launch description and readiness probe. Contract and how-to: `docs/plugins.md`. After the refactor, a real DeepSeek start on the RTX 5090 reached readiness in 55 s, answered a chat request, and stopped with VRAM released. The generation worker protocol (`workers/gs_worker.py`), the `WorkerPlugin` base, generation jobs (migration 0004, `/api/models/{id}/jobs`, `/api/jobs`), the dashboard's form-from-plugin and results list, and the YuE2 plugin are implemented. A real YuE2 song was made, fetched, and the worker stopped cleanly (`docs/context.md`). Next: Qwen Image and MiniMax H3 plugins, a simple page for the primary user separate from the admin dashboard, and the Proxmox split.
+
+#### Plugins and setup (summary of `docs/plugins.md` and `docs/development.md`)
+
+A plugin supplies its `runtimes.json` schema, user settings with bounds, a memory estimate, a launch description (command, environment, files) and a readiness probe; generation plugins add a form (`inputs`), an `output_kind`, and job submission. Workers run under the model's own Python and speak `GET /health`, `POST /generate`, `GET /jobs/{id}`, writing files to `<output_dir>/<job_id>/`. The core API adds `POST /api/models/{id}/jobs`, `GET /api/jobs`, `GET /api/jobs/{id}` and `GET /api/jobs/{id}/files/{name}`. On the desktop: Basalt at `C:\ai\basalt-win` with models under `C:\ai\models\basalt-*`; YuE2 weights at `C:\ai\models\yue2`, its environment at `C:\ai\envs\yue2-worker` (torch 2.10.0+cu128; the package's PyPI torch is CPU-only on Windows and must be replaced), songs written to `C:\ai\outputs\yue2`.
+
+#### Earlier attempt: Qwen Image 2.1 on SGLang-Diffusion (2026-10-10, code not preserved)
+
+Recorded in BookStack on 2026-10-10; on 2026-11-12 the code was not found in any local copy, the Git stash, or GitHub. Kept here because it is the groundwork for a Qwen Image plugin.
+
+Image generation was selected as the first modality, SGLang-Diffusion as the runtime, and Qwen Image 2.1 as the initial model candidate. Docker Desktop was running and the pinned SGLang 0.5.21 image (`lmsysorg/sglang@sha256:2dbe4c7f53230b09aaa8fa41891c13c51d9d2e253f486a70822aaf08783fff75`) was pulled; it is still present. A one-shot GPU passthrough container saw the RTX 5090. The desktop has the Comfy-Org Qwen Image 2.1 INT8 ConvRot DiT, Qwen3-VL 8B encoder, and BF16 VAE files at the documented model paths; their SHA256s are recorded in `docs/context.md`. Official sources establish that SGLang supports Qwen Image 2.1, exposes `--model-type diffusion`, `--model-id`, and `--component-weights-paths.<component>`, and has ConvRot INT8 support through its JIT kernels. This supports feasibility in principle but does not validate this exact DiT/encoder/VAE combination with this image. A set of 15 small config/tokenizer files totaling 16 MB from Qwen revision `d26bb61231c349cf6b7896fa83353113880e1ba3` is staged at the documented Diffusers path and was read-only mounted and tested. The official Qwen recipe requires this pipeline config structure; that staged set holds no model weights. The pulled image lacks `comfy-kitchen`; the official Qwen cookbook calls for a nightly image and says no published Docker image is verified. Its general 22.7 GiB RTX 4090 peak is not a measurement for this target or these quantized files. No model container, inference, or load/inference profile exists. Do not infer peak memory or fit from file sizes.
+
+The design that was implemented then: a server-side SGLang-Diffusion container adapter requiring a digest-pinned image already installed locally, a pinned local Qwen Diffusers config snapshot including every required component directory, exact allowlisted local component filenames, an explicit compatibility-verification gate, a measured per-device profile, and sufficient Docker/WSL2 memory in addition to physical Windows RAM. The web Load route could not pull images or download model assets; SGLang ran offline and component files mounted read-only. Container ownership was tied to a persisted nonce, runtime fingerprint, name, and Docker ID. Readiness checked the container's running state and loopback port mapping, then `/health` and `/v1/models` for the expected model ID. On uncertain cleanup or restart inspection, capacity stayed reserved. Automated Docker/HTTP fixtures validated this without starting a container or loading weights. Done-criteria then: verify the staged files against a supported pinned build, validate the checkpoint combination, and record host/VM RAM and VRAM peaks, runtime and model versions, checkpoint hashes, resolution, and generation settings before enabling loads.
+
+To rebuild it as a plugin: decide between SGLang in Docker (needs a container-aware supervisor and WSL2 memory admission) and a native Windows worker using Diffusers in its own environment (fits the existing worker protocol).
 
 Later Basalt work: one server holding both presets and switching with `POST /v1/load`; changing VRAM while running with `POST /v1/vram` to make room for a media model without a reload; showing VRAM as "Basalt may use up to N GiB" per card instead of the reserve to leave free.
 
@@ -145,16 +171,20 @@ Add explicit priority/eviction policies, measured concurrency, bounded logs/hist
 
 ```text
 generationstation/
-  frontend/                 React application
+  frontend/                       React dashboard and Playwright tests
   backend/generationstation/
-    api/                    HTTP and event endpoints
-    telemetry/              RAM and GPU providers
-    admission/              budgets and reservations
-    supervisor/             lifecycle and process ownership
-    adapters/               runtime integrations
-    storage/                persistence and migrations
-  tests/                    integration and desktop acceptance helpers
-  docs/                     plan, decisions, host profiles, BookStack mapping
+    app.py                        HTTP and event endpoints
+    telemetry.py                  RAM and GPU providers
+    admission.py                  budgets and reservations
+    lifecycle.py, process_worker.py  lifecycle and process ownership
+    runtimes.py                   runtime catalog, settings and input validation
+    generation.py                 generation jobs
+    plugins/                      one module per model kind (basalt, yue2, worker base)
+    storage.py                    persistence; migrations in backend/migrations
+  backend/tests/                  unit, PostgreSQL and stand-in process tests
+  workers/                        gs_worker protocol and model workers (run in model environments)
+  docs/                           plan, decisions, plugins, BookStack mapping
+  runtimes.example.json           catalog template (runtimes.json is local)
 ```
 
 ## Sources consulted
@@ -173,4 +203,10 @@ generationstation/
 - [psutil memory documentation](https://psutil.readthedocs.io/stable/index.html)
 - [NVIDIA NVML reference](https://docs.nvidia.com/deploy/nvml-api/latest/)
 
-Previously identified model sources must be checked again for the exact selected checkpoints at M0: [MiniMax H3](https://github.com/MiniMax-AI/MiniMax-H3), [Qwen-Image 2.1](https://qwen.ai/blog?id=qwen-image-2.1), [YuE2](https://arxiv.org/abs/2609.33757), [Qwen3.8-Flash-Next architecture](https://arxiv.org/abs/2608.30320). No desktop fit or runtime compatibility has been established in this planning session.
+- [YuE2-3B model card](https://huggingface.co/m-a-p/YuE2-3B) and [YuE2-Vae](https://huggingface.co/m-a-p/YuE2-Vae) (weights, `yue2_infer` package, VRAM and timing claims); the installed `yue2` package source for the pipeline API.
+- Basalt's local documentation in `C:\ai\basalt-win\docs` (configuration reference, models and router, running).
+- Gathered 2026-10-10 for Qwen Image (from BookStack): [Qwen Image 2.1 official model card](https://huggingface.co/Qwen/Qwen-Image-2.1), [Qwen Image 2.1 Diffusers pipeline](https://huggingface.co/docs/diffusers/main/api/pipelines/qwenimage21), [Comfy-Org's Qwen Image 2.1 model-file guide](https://github.com/Comfy-Org/docs/blob/main/tutorials/image/qwen/qwen-image-2-1.mdx); [Krea 2 official model card](https://huggingface.co/krea/Krea-2-Turbo), [Krea 2 Diffusers pipeline](https://huggingface.co/docs/diffusers/main/api/pipelines/krea2), [Krea's official inference code](https://github.com/krea-ai/krea-2), [Comfy-Org's Krea 2 model-file guide](https://github.com/Comfy-Org/docs/blob/main/tutorials/image/krea/krea-2.mdx); [Qwen Image 2.1 on GitHub](https://github.com/QwenLM/Qwen-Image-2.1), [SGLang-Diffusion quantization guide](https://docs.sglang.io/docs/sglang-diffusion/quantization), [installation guide](https://github.com/sgl-project/sglang/blob/main/docs/docs/sglang-diffusion/installation.mdx), and [Qwen Image 2.1 recipe](https://docs.sglang.io/cookbook/diffusion/Qwen/Qwen-Image-2.1).
+- [SGLang Qwen Image 2.1 pipeline source](https://github.com/sgl-project/sglang/blob/main/python/sglang/multimodal_gen/runtime/pipelines/qwen_image21.py) lists required config modules; [the official Qwen cookbook](https://github.com/sgl-project/sglang/blob/main/docs/cookbook/diffusion/Qwen-Image/Qwen-Image-2.1.mdx) specifies its local checkpoint directory and warns that no published Docker image is verified. The cookbook's tested configurations are not evidence that the desktop's exact quantized components or stable image work.
+- [Docker system info](https://docs.docker.com/reference/cli/docker/system/info/) reports daemon total memory; [Docker stats](https://docs.docker.com/reference/cli/docker/container/stats/) reports running-container memory usage (Linux CLI usage subtracts cache). A container runtime must intersect this live Docker capacity with host telemetry and still apply configured RAM headroom.
+
+Model sources to check again for exact checkpoints when their plugins are built: [MiniMax H3](https://github.com/MiniMax-AI/MiniMax-H3), [Qwen-Image 2.1](https://qwen.ai/blog?id=qwen-image-2.1), and [Qwen3.8-Flash-Next architecture](https://arxiv.org/abs/2608.30320). Desktop fit is established only for the measured runs in `docs/context.md`.

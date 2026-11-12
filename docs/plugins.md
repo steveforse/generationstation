@@ -32,6 +32,29 @@ GPU indices are NVML/`nvidia-smi` order. Plugins that start CUDA programs should
 
 `basalt.py` is the reference plugin.
 
-## Planned: generation plugins
+## Generation plugins (workers)
 
-Media models (YuE2 music, Qwen Image, MiniMax H3 video) have no server of their own. Each will get a small worker, run in its own Python environment so their dependencies do not conflict, that speaks one HTTP contract: `GET /health`, `POST /generate` returning a job ID, and `GET /jobs/{id}`, with outputs written to a folder. The plugin will also describe its generation form (for example lyrics, style, and length for YuE2) so the web app can build a simple page for it without new frontend code. Not implemented yet.
+Media models (YuE2 music now; Qwen Image and MiniMax H3 next) have no server of their own. Each gets a small worker in `workers/`, run with the python of the model's **own environment** (`python` in `runtimes.json`), so model dependencies never mix with Generation Station's or with each other's.
+
+`workers/gs_worker.py` is the shared, standard-library-only worker server. A worker module only supplies `load(config)` and `generate(model, inputs, job)`; see `workers/yue2_worker.py`. The protocol, on 127.0.0.1 only:
+
+| Request | Response |
+| --- | --- |
+| `GET /health` | `{"status": "loading" \| "loaded" \| "failed", "error"}` |
+| `POST /generate` with `{"job_id", "inputs"}` | 202 `{"job_id", "status": "queued", ...}` |
+| `GET /jobs/{job_id}` | `{"status": "queued" \| "running" \| "done" \| "failed", "progress", "outputs": [{"name", "mime", "bytes"}], "error"}` |
+
+Jobs run one at a time. Files go to `<output_dir>/<job_id>/`; `job.output(name, mime)` returns the path and records the file. `job.report(text)` sets the short progress line shown in the browser.
+
+A generation plugin subclasses `WorkerPlugin` (`plugins/worker.py`) and sets:
+
+- `worker_script`: the module in `workers/`.
+- `inputs`: the generation form, as `InputSpec`s (text, textarea, int, choice, seed; required, bounds, max length, placeholder, help, and `advanced` to tuck a field under "More options"). The core validates every request against it and refuses unknown fields; the browser builds the form from it, so a new model needs no frontend code.
+- `output_kind`: `audio`, `image` or `video`, which chooses the button ("Make a song") and the player.
+- `max_gpus`: 1 for single-card models; the UI then offers a single choice.
+
+The worker sees only the chosen card(s) (`CUDA_VISIBLE_DEVICES`, in `nvidia-smi` order), so it always uses `cuda:0`. Preset `options` (model folders, and so on) are owner-set and passed through to `load()`; start settings come from the plugin's `settings`.
+
+The core API: `POST /api/models/{id}/jobs` with `{"inputs": {...}}` (the model must be ready), `GET /api/jobs`, `GET /api/jobs/{id}` (refreshed from the worker while it runs), and `GET /api/jobs/{id}/files/{name}` (only files the job reported, inside the output folder). Jobs are stored in PostgreSQL; finished files stay available after the model stops. A job still running when its model stops is marked failed.
+
+`tests/stub_worker.py` is a stand-in worker (writes a one-second tone) used to test the whole path without a model.

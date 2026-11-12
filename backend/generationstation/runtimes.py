@@ -24,6 +24,7 @@ __all__ = [
     "load_catalog",
     "parse_catalog",
     "resolve_settings",
+    "validate_inputs",
 ]
 
 
@@ -119,6 +120,8 @@ def resolve_settings(plugin: RuntimePlugin, preset: BasePreset, overrides: dict 
         errors.append("Choose at least one GPU.")
     elif len(set(chosen)) != len(chosen) or not set(chosen) <= set(preset.allowed_gpus):
         errors.append("The GPU selection is not allowed for this preset.")
+    elif plugin.max_gpus is not None and len(chosen) > plugin.max_gpus:
+        errors.append(f"{plugin.title} runs on {plugin.max_gpus} GPU{'' if plugin.max_gpus == 1 else 's'} at a time.")
     if errors:
         raise SettingsError(errors)
     return values, sorted(chosen)
@@ -152,6 +155,49 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
             "allowed_gpus": [{"index": i, "name": names.get(i, f"GPU {i}")} for i in preset.allowed_gpus],
             "settings": settings, "estimate": preset.estimate.model_dump(),
         }
+    generation = None
+    if plugin.generates:
+        generation = {"output_kind": plugin.output_kind,
+                      "inputs": [{"key": key, **spec.model_dump()} for key, spec in plugin.inputs.items()]}
     return {"id": model_id, "kind": runtime.kind, "plugin": plugin.title, "name": runtime.name,
             "workload": runtime.workload, "port": runtime.port, "default_preset": runtime.default_preset,
-            "presets": presets}
+            "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation}
+
+
+def validate_inputs(plugin: RuntimePlugin, inputs: dict) -> dict:
+    """Check generation-form values against the plugin's input specs. Unknown fields are refused."""
+    if not isinstance(inputs, dict):
+        raise SettingsError(["Inputs must be an object."])
+    errors, result = [], {}
+    for key in inputs:
+        if key not in plugin.inputs:
+            errors.append(f"{key} is not an input of {plugin.title}.")
+    for key, spec in plugin.inputs.items():
+        value = inputs.get(key, spec.default)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            if spec.required:
+                errors.append(f"{spec.label} is required.")
+            continue
+        if spec.kind in {"text", "textarea"}:
+            if not isinstance(value, str):
+                errors.append(f"{spec.label} must be text.")
+                continue
+            value = value.strip()
+            if spec.max_length and len(value) > spec.max_length:
+                errors.append(f"{spec.label} is too long (at most {spec.max_length} characters).")
+                continue
+        elif spec.kind == "choice":
+            if value not in spec.options:
+                errors.append(f"{spec.label} must be one of {', '.join(spec.options)}.")
+                continue
+        else:  # int, seed
+            if type(value) is not int:
+                errors.append(f"{spec.label} must be a whole number.")
+                continue
+            if (spec.minimum is not None and value < spec.minimum) or (spec.maximum is not None and value > spec.maximum):
+                errors.append(f"{spec.label} must be between {spec.minimum} and {spec.maximum}.")
+                continue
+        result[key] = value
+    if errors:
+        raise SettingsError(errors)
+    return result
