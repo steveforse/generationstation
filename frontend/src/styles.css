@@ -43,3 +43,38 @@
 .job-media{display:flex;flex-direction:column;gap:6px}
 .job-media audio,.job-media video,.job-media img{width:100%;max-width:640px;border-radius:8px}
 .job-media .text-button{align-self:flex-start}
+
+/* Multi-host navigation and pages */
+.sidebar nav{overflow-y:auto;flex:1;min-height:0}
+.nav-host{margin-top:18px}
+.nav-host-label{display:flex;align-items:center;gap:8px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.nav-host-label span:last-child{overflow:hidden;text-overflow:ellipsis}
+.nav-item span:nth-of-type(1){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-state{margin-left:auto;font-size:10px;font-weight:700;color:#9a9db0;text-transform:uppercase;letter-spacing:.04em}
+.nav-state-on{color:#31b483}
+.nav-muted{color:#a4a7b5}
+.dot-error{background:#d4636b}
+.dot-warn{background:#d6a02b}
+.dot-idle{background:#c2c4cd}
+.host-overview{margin-bottom:34px}
+.host-overview .host-strip{margin-bottom:14px}
+.overview-connect{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.overview-connect .connection-banner{margin-bottom:0}
+.overview-connect>.button{align-self:flex-start}
+.overview-services{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:14px}
+.service-tile{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#fff;text-decoration:none;color:var(--ink)}
+.service-tile:hover{border-color:var(--purple)}
+.service-tile span:first-child{display:flex;flex-direction:column;gap:2px;min-width:0}
+.service-tile small{color:var(--muted);font-size:12px}
+.overview-recent{display:flex;flex-direction:column;gap:6px;margin-top:14px;font-size:13px}
+.overview-recent a{color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+.overview-recent a:hover{color:var(--purple)}
+.overview-recent small{color:var(--muted)}
+.connection-list{display:flex;flex-direction:column;gap:14px;margin:18px 0}
+.connection-card .connection-banner{margin-bottom:0}
+.connection-card .profile-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.host-form{margin-bottom:18px}
+@media (max-width:860px){.overview-services{grid-template-columns:1fr}}
+a.button{text-decoration:none;display:inline-flex;align-items:center;gap:7px}
+@media(max-width:800px){.nav-host{margin-top:10px}.nav-host-label{justify-content:center;padding:0 0 8px}.nav-host-label span:last-child{display:none}.nav-state{display:none}}
+.sidebar nav{overflow-x:hidden}

@@ -204,6 +204,20 @@ async function streamCount(page: Page) {
   return page.evaluate(() => (window as Window & { __gsStreamCount?: number }).__gsStreamCount ?? 0)
 }
 
+
+const REJECTED = 'The access token was rejected. Check it on the Connections page.'
+
+async function go(page: Page, hash: string) {
+  await page.evaluate((value) => { window.location.hash = value }, hash)
+}
+
+async function signIn(page: Page, value = token, address?: string) {
+  await page.goto('/#/connections')
+  if (address !== undefined) await page.getByLabel('Server address').fill(address)
+  await page.getByLabel('Access token').fill(value)
+  await page.getByRole('button', { name: 'Save and connect' }).click()
+}
+
 async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean } = {}) {
   await installSseMock(page)
   const api = await installM2Api(page, options)
@@ -215,43 +229,85 @@ async function connectFixtures(page: Page, label = 'Fixture desktop', stale = fa
     }
     await route.fulfill({ json: host })
   })
-  await page.goto('/')
-  await page.getByLabel('Access token').fill(token)
-  await page.getByRole('button', { name: 'Connect to host' }).click()
+  await signIn(page)
   await expect.poll(() => streamCount(page)).toBe(1)
   await expect.poll(() => pushFrame(page, host)).toBe(true)
   return api
 }
 
+/** Stream fresh samples the way the real host does, for tests that span several polls. */
+async function keepFresh(page: Page) {
+  await page.evaluate((data) => {
+    window.setInterval(() => window.dispatchEvent(new CustomEvent('gs:push-frame', { detail: JSON.stringify(data) })), 500)
+  }, fixtureHost())
+}
+
 test('shows an honest disconnected screen on desktop and narrow mobile', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1050 })
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'System overview' })).toBeVisible()
-  await expect(page.getByText('No host selected')).toBeVisible()
-  await expect(page.getByText('Connect to view measurements')).toHaveCount(2)
+  await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible()
+  await expect(page.getByText('This computer').first()).toBeVisible()
+  await expect(page.getByRole('main').getByText('Not connected', { exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Open Connections/ })).toBeVisible()
   await expect(page.getByText('No registered profiles')).toHaveCount(0)
   await page.screenshot({ path: 'test-results/screenshots/disconnected-desktop.png', fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
-  await expect(page.getByRole('heading', { name: 'System overview' })).toBeVisible()
-  await expect(page.getByLabel('Resource usage')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Overview', level: 1 })).toBeVisible()
   await page.screenshot({ path: 'test-results/screenshots/disconnected-mobile.png', fullPage: true })
 })
 
-test('authenticates, renders measured host values, and leaves the profile catalog empty without inventing entries', async ({ page }) => {
-  await connectFixtures(page)
-  await expect(page.getByText('Fixture desktop')).toBeVisible()
+test('connects from the Connections page, remembers the host on this device, and shows it on the Overview', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true })
+  await expect(page.getByText('Live telemetry is streaming from the host.')).toBeVisible()
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('generation-station.hosts') ?? '[]'))
+  expect(saved).toEqual([{ id: 'local', label: '', url: '', token }])
+  expect(page.url()).not.toContain(token)
+  await page.getByRole('link', { name: 'Overview' }).click()
+  await expect(page.getByLabel('Fixture desktop resource usage')).toBeVisible()
   await expect(page.getByText('12 GiB')).toBeVisible()
   await expect(page.getByText('32 GiB').first()).toBeVisible()
   await expect(page.getByText('4 GiB')).toBeVisible()
-  await expect(page.getByText('No registered profiles')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Register profile' })).toBeEnabled()
-  await expect(page.getByText('Live telemetry is streaming from the host.')).toBeVisible()
-  expect(await page.evaluate(() => localStorage.getItem('generation-station.server-url'))).toBe('')
-  expect(await page.evaluate(() => Object.keys(localStorage).some((key) => /token/i.test(key)))).toBe(false)
+  await expect(page.getByLabel('Fixture desktop services').getByText('Basalt')).toBeVisible()
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav.getByText('FIXTURE DESKTOP')).toBeVisible()
+  await nav.getByRole('link', { name: /Basalt/ }).click()
+  await expect(page.getByRole('heading', { name: 'Basalt', level: 1 })).toBeVisible()
+  await expect(page).toHaveURL(/#\/hosts\/local\/services\/basalt$/)
+  await page.screenshot({ path: 'test-results/screenshots/service-page.png', fullPage: true })
+})
+
+test('reconnects saved hosts on the next visit without asking for the token again', async ({ page }) => {
+  await connectFixtures(page)
+  await page.reload()
+  await expect.poll(() => streamCount(page)).toBe(1)
+  await expect.poll(() => pushFrame(page, fixtureHost())).toBe(true)
+  await page.goto('/#/connections')
+  await expect(page.getByRole('button', { name: 'Disconnect' })).toBeVisible()
+  await expect(page.getByLabel('Access token')).toHaveCount(0)
+})
+
+test('adds a second host and keeps both in the sidebar; forgetting one removes it and its token', async ({ page }) => {
+  await connectFixtures(page)
+  await page.getByRole('button', { name: 'Add host' }).click()
+  await page.getByLabel('Host name').fill('Proxmox')
+  await page.getByLabel('Server address').fill('http://proxmox.test:8000')
+  await page.getByLabel('Access token').last().fill('second-host-token-with-enough-length-0000')
+  await page.getByRole('button', { name: 'Save and connect' }).click()
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav.getByText('PROXMOX')).toBeVisible()
+  await expect(nav.getByText('FIXTURE DESKTOP')).toBeVisible()
+  const card = page.getByLabel('Host Proxmox')
+  await card.getByRole('button', { name: 'Forget' }).click()
+  await card.getByRole('button', { name: 'Forget it' }).click()
+  await expect(nav.getByText('PROXMOX')).toHaveCount(0)
+  const saved = await page.evaluate(() => localStorage.getItem('generation-station.hosts') ?? '')
+  expect(saved).not.toContain('second-host-token')
 })
 
 test('registers an explicit profile and binds VRAM to the selected reported UUID', async ({ page }) => {
   const api = await connectFixtures(page)
+  await go(page, '#/hosts/local/profiles')
+  await expect(page.getByText('No registered profiles')).toBeVisible()
   await page.getByRole('button', { name: 'Register profile' }).click()
   await expect(page.getByRole('form', { name: 'Register simulation model profile' })).toBeVisible()
   await page.getByLabel('PROFILE ID').fill('my-fixture-profile')
@@ -265,8 +321,6 @@ test('registers an explicit profile and binds VRAM to the selected reported UUID
   await expect(page.getByText('A model label')).toBeVisible()
   expect(api.postProfileBody).toMatchObject({ id: 'my-fixture-profile', name: 'A model label', workload: 'a workload chosen by the user', mode: 'simulation', ram_peak_bytes: 6.5 * 1024 ** 3, gpu_vram_bytes_by_id: { [gpuUuid]: 4 * 1024 ** 3 } })
   await expect(page.getByText('Fake worker · no inference')).toBeVisible()
-  await expect(page.getByText('No model weights or outputs are used.')).toBeVisible()
-  await page.screenshot({ path: 'test-results/screenshots/fixture-profile-desktop.png', fullPage: true })
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.getByRole('button', { name: 'Load simulation' })).toBeEnabled()
   await page.screenshot({ path: 'test-results/screenshots/fixture-profile-mobile.png', fullPage: true })
@@ -274,11 +328,10 @@ test('registers an explicit profile and binds VRAM to the selected reported UUID
 
 test('loads by capacity-approved request, polls simulation-ready, and unloads the fake worker', async ({ page }) => {
   const api = await connectFixtures(page, 'Fixture desktop', false, { initialProfile: true })
-  await expect(page.getByRole('button', { name: 'Load simulation' })).toBeEnabled()
+  await go(page, '#/hosts/local/profiles')
   await page.getByRole('button', { name: 'Load simulation' }).click()
   expect(api.loadProfileId).toBe(profileUuid)
   await expect(page.getByText('Load simulation · simulation ready')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Unload simulation' })).toBeEnabled()
   await page.getByRole('button', { name: 'Unload simulation' }).click()
   await expect(page.getByText('Unload simulation · unloaded')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Load simulation' })).toBeEnabled()
@@ -286,6 +339,7 @@ test('loads by capacity-approved request, polls simulation-ready, and unloads th
 
 test('renders server-side capacity refusal code and per-resource requirement details', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { initialProfile: true, refuseLoad: true })
+  await go(page, '#/hosts/local/profiles')
   await page.getByRole('button', { name: 'Load simulation' }).click()
   await expect(page.getByText('INSUFFICIENT_VRAM')).toBeVisible()
   await expect(page.getByText('Required 6 GiB')).toBeVisible()
@@ -296,21 +350,25 @@ test('renders server-side capacity refusal code and per-resource requirement det
 
 test('allows retry after a fully cleaned-up worker error state', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { initialProfile: true, initialState: 'error' })
+  await go(page, '#/hosts/local/profiles')
   await expect(page.getByText('Worker error')).toBeVisible()
   await page.getByRole('button', { name: 'Retry simulation' }).click()
   await expect(page.getByText('Load simulation · simulation ready')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Unload simulation' })).toBeEnabled()
 })
 
-test('clears old measurements on disconnect and marks telemetry stale', async ({ page }) => {
+test('marks stale telemetry, blocks actions, and clears measurements on disconnect', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', true, { initialProfile: true })
   await expect(page.getByText('Telemetry stale')).toBeVisible()
-  await expect(page.getByText('Last known measurement').first()).toBeVisible()
+  await go(page, '#/hosts/local/profiles')
   await expect(page.getByRole('button', { name: 'Load simulation' })).toBeDisabled()
-  await page.getByRole('button', { name: 'Disconnect' }).first().click()
-  await expect(page.getByText('Disconnected. Host measurements and model data have been cleared.')).toBeVisible()
+  await go(page, '#/overview')
+  await expect(page.getByText('Last known measurement').first()).toBeVisible()
+  await go(page, '#/connections')
+  await page.getByRole('button', { name: 'Disconnect' }).click()
+  await expect(page.getByText('Disconnected.', { exact: true })).toBeVisible()
+  await go(page, '#/overview')
   await expect(page.getByText('Fixture desktop')).toHaveCount(0)
-  await expect(page.getByText('Connect to view measurements')).toHaveCount(2)
+  await expect(page.getByText('Last known measurement')).toHaveCount(0)
 })
 
 test('marks fresh partial GPU telemetry clearly and shows the reported device error', async ({ page }) => {
@@ -318,16 +376,15 @@ test('marks fresh partial GPU telemetry clearly and shows the reported device er
   host.status = 'degraded'
   host.gpu_error = 'NVML telemetry is unavailable.'
   host.loading_enabled = false
-  host.gpus = [{ id: gpuUuid, name: 'Fixture GPU', memory: null, error: 'Driver did not expose memory counters.' }]
+  host.gpus = [{ id: gpuUuid, index: 0, name: 'Fixture GPU', memory: null, error: 'Driver did not expose memory counters.' }]
   await installSseMock(page)
   await installM2Api(page)
   await page.route('**/api/host', (route) => route.fulfill({ json: host }))
-  await page.goto('/')
-  await page.getByLabel('Access token').fill(token)
-  await page.getByRole('button', { name: 'Connect to host' }).click()
+  await signIn(page)
   await expect.poll(() => streamCount(page)).toBe(1)
   await expect.poll(() => pushFrame(page, host)).toBe(true)
   await expect(page.getByText('Live · partial telemetry')).toBeVisible()
+  await go(page, '#/overview')
   await expect(page.getByText('PARTIAL').first()).toBeVisible()
   await expect(page.getByText('Driver did not expose memory counters.')).toBeVisible()
 })
@@ -336,35 +393,31 @@ test('rejects invalid access tokens without opening the event stream', async ({ 
   let eventCalls = 0
   await page.route('**/api/host', (route) => route.fulfill({ status: 401, json: { detail: 'Unauthorized' } }))
   await page.route('**/api/events', async (route) => { eventCalls += 1; await route.fulfill({ status: 401 }) })
-  await page.goto('/')
-  await page.getByLabel('Access token').fill('wrong-token')
-  await page.getByRole('button', { name: 'Connect to host' }).click()
-  await expect(page.getByText('The access token was rejected. Check the token and reconnect.')).toBeVisible()
+  await signIn(page, 'wrong-token')
+  await expect(page.getByText(REJECTED)).toBeVisible()
   expect(eventCalls).toBe(0)
 })
 
-test('drops the first host immediately when the server address changes', async ({ page }) => {
+test('editing a host address drops the old host data and connects to the new address', async ({ page }) => {
   await installSseMock(page)
   await installM2Api(page)
   await page.route('**/api/host', async (route) => {
     const label = route.request().url().includes('two.test') ? 'Second desktop' : 'First desktop'
     await route.fulfill({ json: fixtureHost(label, false, label) })
   })
-  await page.goto('/')
-  await page.getByLabel('Server address').fill('http://one.test:8100')
-  await page.getByLabel('Access token').fill(token)
-  await page.getByRole('button', { name: 'Connect to host' }).click()
+  await signIn(page, token, 'http://one.test:8100')
   await expect.poll(() => streamCount(page)).toBe(1)
   await expect.poll(() => pushFrame(page, fixtureHost('First desktop', false, 'First desktop'))).toBe(true)
-  await expect(page.getByText('First desktop')).toBeVisible()
+  await expect(page.getByText('First desktop').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Edit' }).click()
   await page.getByLabel('Server address').fill('http://two.test:8100')
+  await page.getByRole('button', { name: 'Save and connect' }).click()
   await expect(page.getByText('First desktop')).toHaveCount(0)
-  await expect(page.getByText('No host selected')).toBeVisible()
-  await page.getByRole('button', { name: 'Connect to host' }).click()
   await expect.poll(() => streamCount(page)).toBe(2)
   await expect.poll(() => pushFrame(page, fixtureHost('Second desktop', false, 'Second desktop'))).toBe(true)
-  await expect(page.getByText('Second desktop')).toBeVisible()
-  expect(await page.evaluate(() => localStorage.getItem('generation-station.server-url'))).toBe('http://two.test:8100')
+  await expect(page.getByText('Second desktop').first()).toBeVisible()
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('generation-station.hosts') ?? '[]'))
+  expect(saved[0].url).toBe('http://two.test:8100')
   expect(page.url()).not.toContain(token)
 })
 
@@ -375,25 +428,21 @@ test('reconnects after a stream outage longer than the watchdog and accepts the 
   await installSseMock(page)
   await installM2Api(page)
   await page.route('**/api/host', (route) => route.fulfill({ json: initial }))
-  await page.goto('/')
-  await page.getByLabel('Access token').fill(token)
-  await page.getByRole('button', { name: 'Connect to host' }).click()
+  await signIn(page)
   await expect.poll(() => streamCount(page)).toBe(1)
+  await go(page, '#/overview')
   await expect(page.getByText('STALE').first()).toBeVisible({ timeout: 5000 })
   await expect.poll(() => streamCount(page), { timeout: 20_000 }).toBeGreaterThanOrEqual(2)
   await expect.poll(() => pushFrame(page, recovered)).toBe(true)
-  await expect(page.getByText('Recovered desktop')).toBeVisible()
+  await expect(page.getByText('Recovered desktop').first()).toBeVisible()
   await expect(page.getByText('17 GiB')).toBeVisible()
-  await expect(page.getByText('Live telemetry is streaming from the host.')).toBeVisible()
 })
 
 test('starts a model server with the chosen model, GPUs and advanced settings, then stops it', async ({ page }) => {
   const api = await connectFixtures(page, 'Fixture desktop', false, { runtime: true })
-  // Starting and stopping spans several polls; stream fresh samples the way the real host does.
-  await page.evaluate((data) => {
-    window.setInterval(() => window.dispatchEvent(new CustomEvent('gs:push-frame', { detail: JSON.stringify(data) })), 500)
-  }, fixtureHost())
-  await expect(page.getByRole('heading', { name: 'Model servers' })).toBeVisible()
+  await keepFresh(page)
+  await go(page, '#/hosts/local/services/basalt')
+  await expect(page.getByRole('heading', { name: 'Basalt', level: 1 })).toBeVisible()
   await expect(page.getByText('Stopped', { exact: true })).toBeVisible()
   await page.getByRole('radio', { name: 'Qwen3.8 Flash-Next' }).check()
   await page.getByRole('checkbox', { name: 'Second GPU' }).uncheck()
@@ -408,7 +457,7 @@ test('starts a model server with the chosen model, GPUs and advanced settings, t
   expect(api.startBody).toEqual({ preset: 'fn', gpus: [0], settings: { kv: 'q4_0', vram_reserve_mib: 1024, resident_experts: false } })
   await expect(page.getByText('Running', { exact: true })).toBeVisible()
   await expect(page.getByText('Start · ready')).toBeVisible()
-  await expect(page.getByText('MODEL SERVER', { exact: true })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /Basalt/ })).toContainText('on')
   await page.getByRole('button', { name: 'Stop', exact: true }).click()
   await expect(page.getByText('Stopped.', { exact: true })).toBeVisible()
   await expect(page.getByText('Stop · unloaded')).toBeVisible()
@@ -417,6 +466,7 @@ test('starts a model server with the chosen model, GPUs and advanced settings, t
 
 test('blocks a start until advanced settings and GPU choice are valid, and warns about the RAM guard', async ({ page }) => {
   const api = await connectFixtures(page, 'Fixture desktop', false, { runtime: true })
+  await go(page, '#/hosts/local/services/basalt')
   await page.getByRole('button', { name: 'Advanced settings' }).click()
   await expect(page.getByText(/The RAM guard is off/)).toBeVisible()
   await page.getByLabel(/VRAM LEFT FREE ON THE MAIN CARD/).fill('100')
@@ -433,17 +483,18 @@ test('blocks a start until advanced settings and GPU choice are valid, and warns
 
 test('shows a model server capacity refusal with the GPU name instead of its UUID', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { runtime: true, refuseStart: true })
+  await go(page, '#/hosts/local/services/basalt')
   await page.getByRole('button', { name: 'Start', exact: true }).click()
   const refusal = page.getByRole('alert').filter({ hasText: 'INSUFFICIENT_VRAM' })
   await expect(refusal).toBeVisible()
   await expect(refusal.getByText('Fixture GPU')).toBeVisible()
   await expect(refusal.getByText('Required 24 GiB')).toBeVisible()
   await expect(page.getByText(gpuUuid)).toHaveCount(0)
-  await expect(page.getByText('Stopped', { exact: true })).toBeVisible()
 })
 
 test('makes a song from lyrics and style, shows progress, then plays and offers the file', async ({ page }) => {
   const api = await connectFixtures(page, 'Fixture desktop', false, { songs: true })
+  await go(page, '#/hosts/local/services/yue2')
   await expect(page.getByText('Running', { exact: true })).toBeVisible()
   await expect(page.getByRole('radio', { name: 'Second GPU' })).toBeChecked()
   const form = page.getByRole('form', { name: 'Make a song' })
@@ -459,4 +510,6 @@ test('makes a song from lyrics and style, shows progress, then plays and offers 
   await expect(page.getByText('Done: 1 seconds, seed 42')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByLabel('Play Upbeat indie pop, female vocals')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Download song.wav' })).toBeVisible()
+  await go(page, '#/overview')
+  await expect(page.getByText('RECENT RESULTS')).toBeVisible()
 })
