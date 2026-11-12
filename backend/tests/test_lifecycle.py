@@ -19,6 +19,7 @@ def make_settings(**overrides):
         "api_token": TOKEN, "host_role": "desktop", "host_label": "test desktop",
         "ram_headroom_bytes": 0, "gpu_headroom_bytes": 0,
         "worker_ready_timeout_seconds": 1, "worker_stop_timeout_seconds": 1,
+        "runtimes_file": None,
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

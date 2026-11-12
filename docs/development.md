@@ -42,6 +42,24 @@ The fake worker is an in-memory lifecycle fixture, not an external process: it a
 
 If Docker reports that the database is unhealthy, inspect `docker compose logs db` and `docker compose ps`. Do not delete the named volume to troubleshoot; it contains persistent application data.
 
+## Real runtimes (Basalt)
+
+Real model servers are listed in a local, machine-specific catalog. Copy the example and adjust paths:
+
+```powershell
+Copy-Item runtimes.example.json runtimes.json
+```
+
+`runtimes.json` is ignored by Git. Set `GS_RUNTIMES_FILE` to use another path; without a file, only simulation profiles are available. A broken file stops the API from starting, so mistakes are not silently ignored. Each runtime defines its executable, port, extra `PATH` entries and environment, and one or more presets. Each preset names its model file, default GPUs (NVML/`nvidia-smi` index order; the service starts Basalt with `CUDA_DEVICE_ORDER=PCI_BUS_ID` so the indices match), Basalt keys that are always written (`fixed`), the user-adjustable `settings` with defaults, and a start `estimate`. The browser can only choose a preset, choose among `allowed_gpus`, and change the preset's listed settings within fixed bounds; it never supplies paths, commands, or other flags.
+
+Estimates are conservative start requirements: free VRAM per GPU index and RAM (plus `resident_budget_gib` when set). They are guesses until measured; edit them in `runtimes.json` as you measure real loads. Admission compares them with live telemetry minus headroom, exactly as for simulation profiles. Basalt itself fills each card except its reserve, so the estimates guard the start, not the steady state.
+
+- `GET /api/runtimes` lists runtimes, presets, setting definitions and the last start's choices (no paths or environment).
+- `POST /api/runtimes/{id}/start` with `{"preset": "ds41", "settings": {...}, "gpus": [0, 1]}` and an `Idempotency-Key` header starts a load. Invalid settings return 422 `SETTINGS_INVALID`; a server already listening on the runtime's port (for example Basalt started with `basalt-start`) returns 409 `PORT_IN_USE`; capacity refusals return 409 as above.
+- Stop with `POST /api/models/{id}/unload`.
+
+Each runtime's `kind` selects a model plugin; see [plugins.md](plugins.md) for the plugin contract and how to add one. For each start the service writes the plugin's files (for Basalt, `basalt-config.json`) to `runtime/launch/<operation>/` and the server output to `runtime/logs/<kind>-<operation>.log`. It runs `basalt.exe serve --config <file>` directly (no `.bat` or WSL), waits until `/v1/models` reports `loaded`, and records `ready`. If Basalt exits during the load, the operation fails with the last log lines. Once ready, the capacity reservation is released because telemetry now shows the real memory. Stopping ends only the process tree this service started, after checking the process start time so a reused PID is never touched. A ready Basalt keeps running when the API restarts and is re-adopted on the next start; a process left from an interrupted load is stopped. If a ready Basalt exits on its own, the model is marked failed with `WORKER_EXITED`.
+
 ## Run the API and frontend
 
 Use separate PowerShell terminals, from the repository root unless noted.
@@ -49,7 +67,7 @@ Use separate PowerShell terminals, from the repository root unless noted.
 API:
 
 ```powershell
-uv run --locked --project backend uvicorn generationstation.app:create_app --factory --host 127.0.0.1 --port 8000
+uv run --locked --project backend uvicorn generationstation.app:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
 Frontend:
@@ -67,6 +85,8 @@ $env:GS_API_TOKEN = (Get-Content .env | Where-Object { $_ -match '^GS_API_TOKEN=
 Invoke-RestMethod http://127.0.0.1:8000/api/host -Headers @{ Authorization = "Bearer $env:GS_API_TOKEN" }
 Remove-Item Env:GS_API_TOKEN
 ```
+
+The API writes one JSONL access record when response headers are sent, including for streaming endpoints such as `/api/events`. Records contain the method, route template, peer IP, status, timestamp, and time to response headers. Query strings, request headers, and bodies are not logged. Logs go to `runtime/logs/access.jsonl` and stderr; the file rotates at 10 MiB and retains five backups. The `runtime/` directory is ignored by Git.
 
 The root `.env` is ignored by Git. Avoid commands that echo it or include its contents in shell history. The current API token is a host setting. A client connecting to a different machine must supply that machine's bearer token through the app's connection settings; never embed it in the server URL. The browser's server URL is a client preference, not `GS_DATABASE_URL`.
 

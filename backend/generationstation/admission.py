@@ -48,7 +48,7 @@ def evaluate_capacity(host, profile, reservations, ram_headroom_bytes, gpu_headr
 
     requested_ram = profile.get("ram_peak_bytes")
     requested_gpu = profile.get("gpu_vram_bytes_by_id")
-    if (profile.get("mode") != "simulation" or not _positive_integer(requested_ram)
+    if (profile.get("mode") not in {"simulation", "estimate"} or not _positive_integer(requested_ram)
             or not isinstance(requested_gpu, dict)
             or any(not isinstance(device_id, str) or not device_id or not _positive_integer(amount)
                    for device_id, amount in requested_gpu.items())):

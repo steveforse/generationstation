@@ -23,7 +23,7 @@ uv run --locked --project backend alembic -c backend/alembic.ini upgrade head
 Then start the API in one terminal and the frontend in another:
 
 ```powershell
-uv run --locked --project backend uvicorn generationstation.app:create_app --factory --host 127.0.0.1 --port 8000
+uv run --locked --project backend uvicorn generationstation.app:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
 ```powershell

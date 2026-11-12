@@ -75,6 +75,7 @@ operations = Table(
     Column("reservation_operation_id", String(36)),
     Column("worker_id", String(80)),
     Column("refusal", JSONB),
+    Column("launch", JSONB),
     Column("error_code", String(80)),
     Column("error_message", String(500)),
     Column("created_at", DateTime(timezone=True), nullable=False),
@@ -318,6 +319,91 @@ class Store:
             ))
             return {"operation": operation, "existing": False}
 
+    def sync_runtime_models(self, entries):
+        """Make each configured runtime a catalog model. Never deletes history for removed ones."""
+        with self.engine.begin() as conn:
+            for entry in entries:
+                conn.execute(pg_insert(models).values(
+                    id=entry["id"], name=entry["name"], workload=entry["workload"],
+                ).on_conflict_do_update(index_elements=[models.c.id],
+                                        set_={"name": entry["name"], "workload": entry["workload"]}))
+                conn.execute(pg_insert(model_runtime).values(
+                    model_id=entry["id"], state="unloaded",
+                ).on_conflict_do_nothing(index_elements=[model_runtime.c.model_id]))
+
+    def latest_launches(self):
+        """The launch settings of each model's most recent real load, for UI defaults."""
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                select(operations.c.model_id, operations.c.launch, operations.c.status)
+                .where(operations.c.action == "load", operations.c.launch.is_not(None))
+                .distinct(operations.c.model_id)
+                .order_by(operations.c.model_id, operations.c.created_at.desc())
+            ).mappings()
+            return {row["model_id"]: {"launch": row["launch"], "status": row["status"]} for row in rows}
+
+    def runtime_states(self):
+        with self.engine.connect() as conn:
+            rows = conn.execute(select(model_runtime)).mappings()
+            return {row["model_id"]: dict(row) for row in rows}
+
+    def active_runtime_operations(self):
+        """Real-runtime operations that may still own a process."""
+        with self.engine.connect() as conn:
+            rows = conn.execute(select(operations).where(
+                operations.c.launch.is_not(None),
+                operations.c.status.in_(["loading", "ready", "unloading", "cleanup_failed"]),
+            )).mappings()
+            return [dict(row) for row in rows]
+
+    def create_runtime_load_operation(self, *, model_id, launch, requirement, idempotency_key, fingerprint,
+                                      host, ram_headroom_bytes, gpu_headroom_bytes):
+        now, operation_id = self._now(), str(uuid.uuid4())
+        with self.engine.begin() as conn:
+            conn.execute(select(func.pg_advisory_xact_lock(ADMISSION_LOCK_ID)))
+            existing = conn.execute(select(operations).where(
+                operations.c.idempotency_key == idempotency_key,
+            )).mappings().first()
+            if existing:
+                if existing["request_fingerprint"] != fingerprint:
+                    return {"idempotency_conflict": True, "operation": dict(existing)}
+                return {"existing": True, "operation": dict(existing)}
+            runtime = conn.execute(select(model_runtime).where(
+                model_runtime.c.model_id == model_id,
+            ).with_for_update()).mappings().first()
+            if not runtime:
+                return {"missing_model": True, "operation": None}
+            base = {"id": operation_id, "model_id": model_id, "profile_id": None, "profile_revision": None,
+                    "action": "load", "idempotency_key": idempotency_key, "request_fingerprint": fingerprint,
+                    "parent_operation_id": None, "worker_id": None, "launch": launch,
+                    "error_code": None, "error_message": None, "created_at": now, "updated_at": now}
+            if runtime["state"] not in {"unloaded", "error"}:
+                refusal = {"code": "MODEL_BUSY", "message": "This model already has an active worker operation.",
+                           "resources": []}
+                operation = {**base, "status": "refused", "reservation_operation_id": None, "refusal": refusal}
+                conn.execute(insert(operations).values(**operation))
+                return {"operation": operation, "existing": False}
+            pseudo_profile = {"mode": "estimate", "ram_peak_bytes": requirement["ram_bytes"],
+                              "gpu_vram_bytes_by_id": requirement["gpu_vram_bytes_by_id"]}
+            failure = evaluate_capacity(host, pseudo_profile, self.active_reservations(conn),
+                                        ram_headroom_bytes, gpu_headroom_bytes)
+            if failure:
+                operation = {**base, "status": "refused", "reservation_operation_id": None, "refusal": failure}
+                conn.execute(insert(operations).values(**operation))
+                return {"operation": operation, "existing": False}
+            operation = {**base, "status": "loading", "reservation_operation_id": operation_id, "refusal": None}
+            conn.execute(insert(operations).values(**operation))
+            conn.execute(insert(reservations).values(
+                operation_id=operation_id, model_id=model_id, ram_bytes=requirement["ram_bytes"],
+                gpu_vram_bytes_by_id=requirement["gpu_vram_bytes_by_id"], active=True,
+                created_at=now, released_at=None,
+            ))
+            conn.execute(update(model_runtime).where(model_runtime.c.model_id == model_id).values(
+                state="loading", active_operation_id=operation_id, reservation_operation_id=operation_id,
+                active_worker_id=None, last_error_code=None, last_error_message=None,
+            ))
+            return {"operation": operation, "existing": False}
+
     def _insert_refusal(self, conn, operation_id, model_id, profile_id, key, fingerprint,
                         refusal, now, profile_revision=None):
         operation = {
@@ -350,10 +436,11 @@ class Store:
             ).with_for_update()).mappings().first()
             if not runtime:
                 return {"missing_model": True}
-            if runtime["state"] not in {"simulation_ready", "cleanup_failed"}:
+            if runtime["state"] not in {"simulation_ready", "ready", "cleanup_failed"}:
                 return {"busy": True, "state": runtime["state"]}
             parent_id = runtime["active_operation_id"]
             parent = conn.execute(select(operations).where(operations.c.id == parent_id)).mappings().first()
+            launch = parent["launch"] if parent else None
             operation = {
                 "id": operation_id, "model_id": model_id,
                 "profile_id": parent["profile_id"] if parent else None,
@@ -361,7 +448,7 @@ class Store:
                 "action": "unload", "status": "unloading", "idempotency_key": idempotency_key,
                 "request_fingerprint": fingerprint, "parent_operation_id": parent_id,
                 "reservation_operation_id": runtime["reservation_operation_id"],
-                "worker_id": runtime["active_worker_id"], "refusal": None,
+                "worker_id": runtime["active_worker_id"], "refusal": None, "launch": launch,
                 "error_code": None, "error_message": None, "created_at": now, "updated_at": now,
             }
             conn.execute(insert(operations).values(**operation))
@@ -388,8 +475,17 @@ class Store:
             if refusal is not None:
                 values["refusal"] = refusal
             conn.execute(update(operations).where(operations.c.id == operation_id).values(**values))
-            state = {"simulation_ready": "simulation_ready", "unloading": "unloading",
+            state = {"simulation_ready": "simulation_ready", "ready": "ready", "unloading": "unloading",
                      "unloaded": "unloaded", "failed": "error", "cleanup_failed": "cleanup_failed"}.get(status)
+            if status == "loading" and worker_id is not None:
+                conn.execute(update(model_runtime).where(model_runtime.c.model_id == op["model_id"])
+                             .values(active_worker_id=worker_id))
+            if status == "ready":
+                # A real process's memory now shows in telemetry; keeping the reservation
+                # would count the same memory twice for the next admission.
+                conn.execute(update(reservations).where(
+                    reservations.c.operation_id == operation_id, reservations.c.active.is_(True),
+                ).values(active=False, released_at=now))
             if state:
                 runtime_values = {"state": state}
                 if status in {"unloaded", "failed"}:
@@ -397,7 +493,7 @@ class Store:
                                           active_worker_id=None)
                     runtime_values["last_error_code"] = error_code if status == "failed" else None
                     runtime_values["last_error_message"] = error_message[:500] if status == "failed" and error_message else None
-                elif status in {"simulation_ready", "cleanup_failed"}:
+                elif status in {"simulation_ready", "ready", "cleanup_failed"}:
                     runtime_values["active_operation_id"] = operation_id
                     if worker_id is not None:
                         runtime_values["active_worker_id"] = worker_id
@@ -413,23 +509,29 @@ class Store:
                     ).values(active=False, released_at=now))
         return self.get_operation(operation_id)
 
-    def reconcile_restart(self):
+    def reconcile_restart(self, keep_operation_ids=()):
+        """Fail operations whose worker did not survive a restart; keep re-adopted real processes."""
         now = self._now()
+        keep = set(keep_operation_ids)
         with self.engine.begin() as conn:
             active_ops = conn.execute(select(operations).where(
-                operations.c.status.in_(["loading", "simulation_ready", "unloading", "cleanup_failed"]),
+                operations.c.status.in_(["loading", "simulation_ready", "ready", "unloading", "cleanup_failed"]),
             )).mappings().all()
             for op in active_ops:
+                if op["id"] in keep:
+                    continue
+                real = op["launch"] is not None
+                message = ("The runtime process was not running after the service restarted." if real else
+                           "The fake worker is process-local and was discarded during service restart.")
                 conn.execute(update(operations).where(operations.c.id == op["id"]).values(
-                    status="failed", error_code="SERVICE_RESTART",
-                    error_message="The fake worker is process-local and was discarded during service restart.",
-                    updated_at=now,
+                    status="failed", error_code="SERVICE_RESTART", error_message=message, updated_at=now,
                 ))
                 conn.execute(update(model_runtime).where(model_runtime.c.model_id == op["model_id"]).values(
                     state="error", active_operation_id=None, reservation_operation_id=None,
                     active_worker_id=None,
                     last_error_code="SERVICE_RESTART",
-                    last_error_message="The fake worker was discarded during service restart.",
+                    last_error_message=("The runtime process was gone after the service restarted." if real else
+                                        "The fake worker was discarded during service restart."),
                 ))
                 conn.execute(update(reservations).where(
                     reservations.c.operation_id == (op["reservation_operation_id"]

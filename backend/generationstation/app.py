@@ -1,8 +1,14 @@
 import asyncio
 import json
+import logging
 import re
 import secrets
+import sys
+import time
+import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from typing import Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
@@ -15,8 +21,73 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .config import ROOT, Settings
 from .lifecycle import IdempotencyConflict, LifecycleError, LifecycleManager
+from .process_worker import ProcessSupervisor
+from .runtimes import load_catalog
 from .storage import Store
 from .telemetry import Monitor
+
+
+class RequestAccessLogMiddleware:
+    """Emit one redacted access record as soon as response headers are sent."""
+
+    def __init__(self, app, logger):
+        self.app = app
+        self.logger = logger
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        started = time.perf_counter()
+        logged = False
+
+        def emit(status_code):
+            nonlocal logged
+            # The router sets this before invoking the endpoint. Never log a
+            # raw path: unmatched paths and path parameters can contain secrets.
+            route = scope.get("route")
+            route_template = getattr(route, "path", "<unmatched>")
+            peer = scope.get("client")
+            client_ip = peer[0] if peer else None
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "method": scope.get("method"),
+                "route": route_template,
+                "client_ip": client_ip,
+                "status": status_code,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+            }
+            self.logger.info(json.dumps(record, separators=(",", ":")))
+            logged = True
+
+        async def logged_send(message):
+            if message["type"] == "http.response.start":
+                emit(message["status"])
+            await send(message)
+
+        try:
+            await self.app(scope, receive, logged_send)
+        except Exception:
+            # Starlette's outer server-error middleware generates the eventual
+            # 500 response, which bypasses this inner middleware's send wrapper.
+            if not logged:
+                emit(500)
+            raise
+
+
+def _access_logger():
+    logger = logging.getLogger(f"generationstation.access.{uuid.uuid4().hex}")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    formatter = logging.Formatter("%(message)s")
+    log_path = ROOT / "runtime" / "logs" / "access.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    for handler in (RotatingFileHandler(log_path, maxBytes=10 * 1024 * 1024, backupCount=5,
+                                        encoding="utf-8"), logging.StreamHandler(sys.stderr)):
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
 
 
 class ProfileCreate(BaseModel):
@@ -84,11 +155,31 @@ class LoadRequest(BaseModel):
     profile_id: StrictStr = Field(min_length=1, max_length=36)
 
 
-def create_app(settings=None, store=None, monitor=None, worker=None):
+class RuntimeStartRequest(BaseModel):
+    """Preset plus allow-listed settings; values are validated again against the preset."""
+    model_config = ConfigDict(extra="forbid")
+    preset: StrictStr | None = Field(default=None, min_length=1, max_length=64)
+    settings: dict[StrictStr, StrictStr | StrictInt | bool | None] = Field(default_factory=dict)
+    gpus: list[StrictInt] | None = Field(default=None, max_length=16)
+
+    @field_validator("settings")
+    @classmethod
+    def bounded(cls, value):
+        if len(value) > 32:
+            raise ValueError("Too many settings.")
+        return value
+
+
+def create_app(settings=None, store=None, monitor=None, worker=None, catalog=None, runtime_adapter=None):
     settings = settings or Settings()
     store = store if store is not None else Store(settings.database_url.get_secret_value())
     monitor = monitor if monitor is not None else Monitor(settings)
-    lifecycle = LifecycleManager(store, settings, worker=worker)
+    catalog = catalog if catalog is not None else load_catalog(settings.runtimes_file)
+    if runtime_adapter is None and catalog.runtimes:
+        runtime_adapter = ProcessSupervisor(settings.runtime_dir)
+    lifecycle = LifecycleManager(store, settings, worker=worker, catalog=catalog,
+                                 runtime_adapter=runtime_adapter)
+    access_logger = _access_logger()
     instance_id = None
 
     @asynccontextmanager
@@ -98,8 +189,10 @@ def create_app(settings=None, store=None, monitor=None, worker=None):
             instance_id = await asyncio.to_thread(store.initialize)
             if hasattr(store, "acquire_scheduler_lock"):
                 await asyncio.to_thread(store.acquire_scheduler_lock)
+            await asyncio.to_thread(lifecycle.sync_catalog)
+            keep = await asyncio.to_thread(lifecycle.recover_runtime_processes)
             if hasattr(store, "reconcile_restart"):
-                await asyncio.to_thread(store.reconcile_restart)
+                await asyncio.to_thread(store.reconcile_restart, keep)
             monitor.start()
             yield
         finally:
@@ -109,7 +202,12 @@ def create_app(settings=None, store=None, monitor=None, worker=None):
                 try:
                     monitor.stop()
                 finally:
-                    store.close()
+                    try:
+                        store.close()
+                    finally:
+                        for handler in access_logger.handlers[:]:
+                            handler.close()
+                            access_logger.removeHandler(handler)
 
     app = FastAPI(title="Generation Station", version="0.1.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
@@ -117,6 +215,8 @@ def create_app(settings=None, store=None, monitor=None, worker=None):
     app.add_middleware(CORSMiddleware, allow_origins=settings.allowed_origins,
                        allow_methods=["GET", "POST", "PUT", "DELETE"],
                        allow_headers=["Authorization", "Content-Type", "Idempotency-Key"])
+    # Add this after CORS so it wraps preflight responses as well as routed requests.
+    app.add_middleware(RequestAccessLogMiddleware, logger=access_logger)
     bearer = HTTPBearer(auto_error=False)
 
     def authenticate(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):  # noqa: B008
@@ -175,8 +275,19 @@ def create_app(settings=None, store=None, monitor=None, worker=None):
         return snapshot()
 
     @api.get("/models")
-    def catalog():
+    def models_catalog():
+        lifecycle.refresh_runtime_health()
         return {"models": store.list_models()}
+
+    @api.get("/runtimes")
+    def runtimes():
+        return {"runtimes": lifecycle.runtime_catalog(snapshot())}
+
+    @api.post("/runtimes/{model_id}/start", status_code=202)
+    def start_runtime(model_id: str, payload: RuntimeStartRequest,
+                      idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128)):
+        return lifecycle.create_runtime_load(model_id, payload.preset, payload.settings, payload.gpus,
+                                             idempotency_key, snapshot())
 
     @api.get("/profiles")
     def profiles():
@@ -228,6 +339,7 @@ def create_app(settings=None, store=None, monitor=None, worker=None):
     async def events(request: Request):
         async def stream():
             while not await request.is_disconnected():
+                await asyncio.to_thread(lifecycle.refresh_runtime_health)
                 yield "event: host\ndata: " + json.dumps(snapshot()) + "\n\n"
                 await asyncio.sleep(settings.sample_interval_seconds)
         return StreamingResponse(stream(), media_type="text/event-stream",

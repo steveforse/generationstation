@@ -44,7 +44,7 @@ class FakeMonitor:
 
 def settings(**overrides):
     values = {"database_url": "postgresql+psycopg://test:test@localhost/test",
-              "api_token": TOKEN}
+              "api_token": TOKEN, "runtimes_file": None}
     values.update(overrides)
     return Settings(_env_file=None, **values)
 
