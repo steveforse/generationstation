@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     gpu_headroom_bytes: int = Field(default=2 * 1024**3, ge=0, le=2**63 - 1)
     worker_ready_timeout_seconds: float = Field(default=30, gt=0, le=120)
     worker_stop_timeout_seconds: float = Field(default=15, gt=0, le=120)
+    # Local, machine-specific list of real runtimes (paths, presets). See runtimes.example.json.
+    runtimes_file: Path | None = ROOT / "runtimes.json"
+    runtime_dir: Path = ROOT / "runtime"
 
     @model_validator(mode="after")
     def stale_window_exceeds_sample_interval(self):

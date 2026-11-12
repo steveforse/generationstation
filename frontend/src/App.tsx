@@ -19,7 +19,12 @@ type Host = {
 type Snapshot = { data: Host; arrivedAt: number }
 type Model = { id: string; name: string; workload: string; state: string; loading_enabled: boolean; loading_reason?: string | null }
 type ModelProfile = { id: string; model_id: string; name: string; workload: string; ram_peak_bytes: number; gpu_vram_bytes_by_id: Record<string, number>; mode: 'simulation' }
-type Operation = { id: string; model_id: string; action: string; status: string; simulation: boolean; worker_type: string; created_at?: string; updated_at?: string; error_code?: string | null; error_message?: string | null; refusal?: Refusal | null }
+type Operation = { id: string; model_id: string; action: string; status: string; simulation: boolean; worker_type: string; created_at?: string; updated_at?: string; error_code?: string | null; error_message?: string | null; refusal?: Refusal | null; launch?: Launch | null }
+type SettingValue = string | number | boolean | null
+type Launch = { preset: string; settings: Record<string, SettingValue>; gpus: number[] }
+type RuntimeSetting = { key: string; label: string; kind: 'int' | 'bool' | 'choice' | 'optional_int'; minimum: number | null; maximum: number | null; unit: string | null; help: string; default: SettingValue; options: string[] | null }
+type RuntimePreset = { name: string; gpus: number[]; allowed_gpus: { index: number; name: string }[]; settings: RuntimeSetting[]; estimate: { ram_gib: number; gpu_min_free_gib: Record<string, number> } }
+type Runtime = { id: string; kind: string; name: string; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null }
 type RefusalResource = { resource: string; required_bytes: number; available_bytes: number; headroom_bytes?: number }
 type Refusal = { code: string; message: string; resources?: RefusalResource[] }
 type ApiErrorBody = { detail?: string | Refusal; [key: string]: unknown }
@@ -125,7 +130,18 @@ function isOperation(value: unknown): value is Operation {
   const operation = value as Record<string, unknown>
   return typeof operation.id === 'string' && typeof operation.model_id === 'string'
     && typeof operation.action === 'string' && typeof operation.status === 'string'
-    && operation.simulation === true && operation.worker_type === 'fake'
+    && ((operation.simulation === true && operation.worker_type === 'fake')
+      || (operation.simulation === false && operation.worker_type === 'runtime'))
+}
+
+function isRuntimes(value: unknown): value is { runtimes: Runtime[] } {
+  if (!value || typeof value !== 'object' || !Array.isArray((value as Record<string, unknown>).runtimes)) return false
+  return ((value as { runtimes: unknown[] }).runtimes).every((entry) => {
+    if (!entry || typeof entry !== 'object') return false
+    const runtime = entry as Record<string, unknown>
+    return typeof runtime.id === 'string' && typeof runtime.name === 'string' && typeof runtime.default_preset === 'string'
+      && !!runtime.presets && typeof runtime.presets === 'object'
+  })
 }
 
 function isOperations(value: unknown): value is { operations: Operation[] } {
@@ -147,7 +163,7 @@ function isRefusal(value: unknown): value is Refusal {
 }
 
 function isTerminalOperation(status: string) {
-  return ['simulation_ready', 'unloaded', 'refused', 'failed', 'cleanup_failed'].includes(status)
+  return ['simulation_ready', 'ready', 'unloaded', 'refused', 'failed', 'cleanup_failed'].includes(status)
 }
 
 function idempotencyKey() {
@@ -233,6 +249,8 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [models, setModels] = useState<Model[] | null>(null)
   const [profiles, setProfiles] = useState<ModelProfile[] | null>(null)
+  const [runtimes, setRuntimes] = useState<Runtime[] | null>(null)
+  const [runtimeMessages, setRuntimeMessages] = useState<Record<string, string>>({})
   const [catalogError, setCatalogError] = useState('')
   const [operations, setOperations] = useState<Operation[]>([])
   const [pendingModelId, setPendingModelId] = useState<string | null>(null)
@@ -257,6 +275,8 @@ export default function App() {
     instanceRef.current = null
     setModels(null)
     setProfiles(null)
+    setRuntimes(null)
+    setRuntimeMessages({})
     setCatalogError('')
     setOperations([])
     setRefusals({})
@@ -331,6 +351,10 @@ export default function App() {
         if (!isCatalog(modelsResult) || !isProfiles(profilesResult)) throw new Error('The host returned an invalid model profile catalog.')
         setModels(modelsResult.models)
         setProfiles(profilesResult.profiles.map((profile) => ({ ...profile, id: profile.id || profile.model_id, model_id: profile.model_id || profile.id })))
+        void fetchJson('/api/runtimes').then((result) => {
+          if (controller.signal.aborted || generationRef.current !== currentGeneration) return
+          setRuntimes(isRuntimes(result) ? result.runtimes : [])
+        }).catch(() => setRuntimes([]))
         void fetchJson('/api/operations?limit=100').then((result) => {
           if (controller.signal.aborted || generationRef.current !== currentGeneration) return
           if (isOperations(result)) setOperations(result.operations.slice(0, 8))
@@ -442,10 +466,84 @@ export default function App() {
     if (!isCatalog(modelsResult) || !isProfiles(profilesResult)) throw new Error('The host returned an invalid model profile catalog.')
     setModels(modelsResult.models)
     setProfiles(profilesResult.profiles.map((profile) => ({ ...profile, id: profile.id || profile.model_id, model_id: profile.model_id || profile.id })))
-    const operationsResult = await requestApi(base, token, '/api/operations?limit=100', {}, signal).catch(() => null)
+    const [operationsResult, runtimesResult] = await Promise.all([
+      requestApi(base, token, '/api/operations?limit=100', {}, signal).catch(() => null),
+      requestApi(base, token, '/api/runtimes', {}, signal).catch(() => null),
+    ])
     if (signal.aborted || generationRef.current !== generation) return
     if (isOperations(operationsResult)) setOperations(operationsResult.operations.slice(0, 8))
+    if (isRuntimes(runtimesResult)) setRuntimes(runtimesResult.runtimes)
     setCatalogError('')
+  }
+
+  // While a runtime is starting or stopping (it can take many minutes), keep its state current.
+  const runtimeBusy = !!models?.some((model) => runtimes?.some((runtime) => runtime.id === model.id)
+    && ['loading', 'unloading'].includes(model.state))
+  useEffect(() => {
+    if (!runtimeBusy || connection !== 'connected' || !sessionRef.current) return
+    const generation = generationRef.current
+    const signal = sessionRef.current.signal
+    let base: string
+    try { base = normalizeBase(serverUrl) } catch { return }
+    const token = accessToken.trim()
+    const id = window.setInterval(() => { void refreshCatalogNow(base, token, signal, generation).catch(() => undefined) }, 3_000)
+    return () => window.clearInterval(id)
+    // refreshCatalogNow is recreated each render; the interval only needs these inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtimeBusy, connection, serverUrl, accessToken])
+
+  const runRuntime = async (runtime: Runtime, action: 'start' | 'stop', launch?: Launch) => {
+    if (!host || connection !== 'connected' || stale || !sessionRef.current) return
+    const generation = generationRef.current
+    const signal = sessionRef.current.signal
+    const base = normalizeBase(serverUrl)
+    const token = accessToken.trim()
+    const say = (text: string) => setRuntimeMessages((previous) => ({ ...previous, [runtime.id]: text }))
+    setPendingModelId(runtime.id)
+    setActionError('')
+    setRefusals((previous) => { const next = { ...previous }; delete next[runtime.id]; return next })
+    say(action === 'start' ? 'Checking capacity…' : 'Stopping…')
+    try {
+      const path = action === 'start' ? `/api/runtimes/${encodeURIComponent(runtime.id)}/start` : `/api/models/${encodeURIComponent(runtime.id)}/unload`
+      const accepted = await requestApi(base, token, path, {
+        method: 'POST', headers: { 'Idempotency-Key': idempotencyKey() },
+        ...(action === 'start' && launch ? { body: JSON.stringify({ preset: launch.preset, settings: launch.settings, gpus: launch.gpus }) } : {}),
+      }, signal)
+      if (!isOperation(accepted)) throw new Error('The host returned an invalid operation.')
+      let latest: Operation = accepted
+      const saveOperation = (operation: Operation) => setOperations((items) => [operation, ...items.filter((item) => item.id !== operation.id)].slice(0, 8))
+      saveOperation(latest)
+      await refreshCatalogNow(base, token, signal, generation)
+      const started = performance.now()
+      while (!isTerminalOperation(latest.status)) {
+        const minutes = Math.floor((performance.now() - started) / 60_000)
+        say(action === 'start' ? `Loading ${runtime.presets[launch?.preset ?? runtime.default_preset]?.name ?? runtime.name}… ${minutes ? `${minutes} min so far. ` : ''}Large models can take 5–20 minutes.` : 'Stopping…')
+        await new Promise((resolve) => window.setTimeout(resolve, 2_000))
+        if (signal.aborted || generationRef.current !== generation) return
+        const result = await requestApi(base, token, `/api/operations/${encodeURIComponent(latest.id)}`, {}, signal)
+        if (!isOperation(result)) throw new Error('The host returned an invalid operation status.')
+        latest = result
+        saveOperation(latest)
+      }
+      say(latest.status === 'ready' ? 'Ready.' : latest.status === 'unloaded' ? 'Stopped.'
+        : `${latest.status.replaceAll('_', ' ')}${latest.error_message ? `: ${latest.error_message}` : ''}`)
+      await refreshCatalogNow(base, token, signal, generation)
+    } catch (error) {
+      if (signal.aborted || generationRef.current !== generation) return
+      if (error instanceof ApiError && error.status === 401) {
+        clearHost()
+        setConnection('error')
+        setMessage('The access token was rejected. Check the token and reconnect.')
+        return
+      }
+      const detail = error instanceof ApiError ? error.body.detail : undefined
+      if (error instanceof ApiError && error.status === 409 && isRefusal(detail) && detail.resources?.length) {
+        setRefusals((previous) => ({ ...previous, [runtime.id]: detail }))
+        say('')
+      } else say(error instanceof Error ? error.message : 'The host could not complete this operation.')
+    } finally {
+      if (generationRef.current === generation) setPendingModelId(null)
+    }
   }
 
   const registerProfile = async (profile: { id: string; name: string; workload: string; ram_peak_bytes: number; gpu_vram_bytes_by_id: Record<string, number>; mode: 'simulation' }) => {
@@ -570,6 +668,8 @@ export default function App() {
           <ResourceCard title="System memory" icon={<MemoryStick size={17} />} iconClass="icon-violet" memory={host?.ram} age={age} isCurrent={!!snapshot && connection !== 'idle'} error={host?.ram_error ?? undefined} kind="RAM" stale={stale} />
           <GpuCard host={host} age={age} stale={stale} isCurrent={!!snapshot && connection !== 'idle'} />
         </section>
+
+        <RuntimePanel runtimes={runtimes} models={models} host={host} fresh={connection === 'connected' && !stale} pendingModelId={pendingModelId} refusals={refusals} messages={runtimeMessages} onRun={runRuntime} />
 
         <ProfileManager key={`${serverUrl}|${host?.instance_id ?? 'disconnected'}`} profiles={profiles} models={models} host={host} fresh={connection === 'connected' && !stale} catalogError={catalogError} actionError={actionError} operations={operations} pendingModelId={pendingModelId} refusals={refusals} onRegister={registerProfile} onLifecycle={runLifecycle} />
 
@@ -717,6 +817,113 @@ function ProfileManager({ profiles, models, host, fresh, catalogError, actionErr
   </section>
 }
 
-function RefusalDetails({ refusal }: { refusal: Refusal }) {
-  return <div className="refusal-details" role="alert"><div><AlertCircle size={15} /><strong>{refusal.code}</strong><span>{refusal.message}</span></div>{refusal.resources?.map((resource, index) => <div className="refusal-resource" key={`${resource.resource}-${index}`}><strong>{resource.resource}</strong><span>Required {formatBytes(resource.required_bytes)}</span><span>Available {formatBytes(resource.available_bytes)}</span>{resource.headroom_bytes !== undefined && <span>Headroom {formatBytes(resource.headroom_bytes)}</span>}</div>)}</div>
+function defaultLaunch(runtime: Runtime, presetKey: string): Launch {
+  const preset = runtime.presets[presetKey]
+  const settings: Record<string, SettingValue> = {}
+  for (const setting of preset?.settings ?? []) settings[setting.key] = setting.default
+  // Reuse the last start's choices when it used the same preset.
+  if (runtime.last_launch?.preset === presetKey) {
+    for (const [key, value] of Object.entries(runtime.last_launch.settings)) if (key in settings) settings[key] = value
+    return { preset: presetKey, settings, gpus: [...runtime.last_launch.gpus] }
+  }
+  return { preset: presetKey, settings, gpus: [...(preset?.gpus ?? [])] }
+}
+
+function settingProblem(setting: RuntimeSetting, value: SettingValue) {
+  if (setting.kind === 'bool' || setting.kind === 'choice') return ''
+  if (value === null) return setting.kind === 'optional_int' ? '' : 'Required.'
+  if (typeof value !== 'number' || !Number.isInteger(value)) return 'Enter a whole number.'
+  if (setting.minimum !== null && value < setting.minimum) return `At least ${setting.minimum}.`
+  if (setting.maximum !== null && value > setting.maximum) return `At most ${setting.maximum}.`
+  return ''
+}
+
+function RuntimePanel({ runtimes, models, host, fresh, pendingModelId, refusals, messages, onRun }: {
+  runtimes: Runtime[] | null; models: Model[] | null; host?: Host; fresh: boolean; pendingModelId: string | null
+  refusals: Record<string, Refusal>; messages: Record<string, string>
+  onRun: (runtime: Runtime, action: 'start' | 'stop', launch?: Launch) => Promise<void>
+}) {
+  if (!runtimes || runtimes.length === 0) return null
+  return <section className="models-section runtime-section" aria-labelledby="runtime-heading">
+    <div className="section-heading model-heading"><div><h2 id="runtime-heading">Model servers</h2><p>Real models that run on this machine. Starting one checks free RAM and VRAM first.</p></div></div>
+    {runtimes.map((runtime) => <RuntimeCard key={runtime.id} runtime={runtime} model={models?.find((item) => item.id === runtime.id)} host={host} fresh={fresh} pending={pendingModelId === runtime.id} refusal={refusals[runtime.id]} message={messages[runtime.id]} onRun={onRun} />)}
+  </section>
+}
+
+function RuntimeCard({ runtime, model, host, fresh, pending, refusal, message, onRun }: {
+  runtime: Runtime; model?: Model; host?: Host; fresh: boolean; pending: boolean; refusal?: Refusal; message?: string
+  onRun: (runtime: Runtime, action: 'start' | 'stop', launch?: Launch) => Promise<void>
+}) {
+  const initialPreset = runtime.last_launch?.preset && runtime.presets[runtime.last_launch.preset] ? runtime.last_launch.preset : runtime.default_preset
+  const [launch, setLaunch] = useState<Launch>(() => defaultLaunch(runtime, initialPreset))
+  const [advanced, setAdvanced] = useState(false)
+  const preset = runtime.presets[launch.preset]
+  const state = model?.state ?? 'unknown'
+  const stopped = ['unloaded', 'error'].includes(state)
+  const running = ['ready', 'cleanup_failed'].includes(state)
+  const problems = Object.fromEntries((preset?.settings ?? []).map((setting) => [setting.key, settingProblem(setting, launch.settings[setting.key] ?? null)]))
+  const valid = !!preset && launch.gpus.length > 0 && Object.values(problems).every((problem) => !problem)
+  const canStart = fresh && host?.loading_enabled === true && stopped && valid && !pending
+  const gpuName = (index: number) => preset?.allowed_gpus.find((gpu) => gpu.index === index)?.name ?? `GPU ${index}`
+  const budget = launch.settings.resident_budget_gib
+  const ramNeed = (preset?.estimate.ram_gib ?? 0) + (typeof budget === 'number' ? budget : 0)
+  const stateText = ({ unloaded: 'Stopped', loading: 'Loading', ready: 'Running', unloading: 'Stopping', error: 'Stopped after an error', cleanup_failed: 'Stop did not finish' } as Record<string, string>)[state] ?? state
+  const setValue = (key: string, value: SettingValue) => setLaunch((current) => ({ ...current, settings: { ...current.settings, [key]: value } }))
+  const choosePreset = (key: string) => setLaunch(defaultLaunch(runtime, key))
+  const reset = () => setLaunch(defaultLaunch({ ...runtime, last_launch: null }, launch.preset))
+
+  return <article className="profile-card runtime-card">
+    <div className="profile-card-main"><div className="model-icon"><Server size={18} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload} · port {runtime.port}</span></div><span className={`model-state state-${state}`}>{pending ? 'Working…' : stateText}</span></div></div>
+
+    <fieldset className="runtime-choice" disabled={!stopped || pending}>
+      <legend>Model</legend>
+      {Object.entries(runtime.presets).map(([key, item]) => <label key={key} className={`runtime-option ${launch.preset === key ? 'runtime-option-on' : ''}`}><input type="radio" name={`${runtime.id}-preset`} checked={launch.preset === key} onChange={() => choosePreset(key)} /><span>{item.name}</span></label>)}
+    </fieldset>
+
+    {preset && <fieldset className="runtime-choice" disabled={!stopped || pending}>
+      <legend>GPUs</legend>
+      {preset.allowed_gpus.map((gpu) => <label key={gpu.index} className={`runtime-option ${launch.gpus.includes(gpu.index) ? 'runtime-option-on' : ''}`}><input type="checkbox" checked={launch.gpus.includes(gpu.index)} onChange={(event) => setLaunch((current) => ({ ...current, gpus: event.target.checked ? [...current.gpus, gpu.index].sort() : current.gpus.filter((item) => item !== gpu.index) }))} /><span>{gpu.name}</span></label>)}
+      {launch.gpus.length === 0 && <small className="field-problem">Choose at least one GPU.</small>}
+    </fieldset>}
+
+    {preset && <p className="runtime-estimate">Needs about {launch.gpus.map((index) => `${preset.estimate.gpu_min_free_gib[String(index)] ?? 0} GiB free on the ${gpuName(index)}`).join(', ')} and {ramNeed} GiB of RAM. These are estimates; Basalt uses whatever VRAM is free beyond its reserve.</p>}
+
+    {preset && <div className="runtime-advanced">
+      <button type="button" className="text-button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}><ChevronDown size={14} className={advanced ? 'chevron-open' : ''} /> Advanced settings</button>
+      {advanced && <div className="runtime-settings">
+        {preset.settings.map((setting) => {
+          const value = launch.settings[setting.key] ?? null
+          const id = `${runtime.id}-${setting.key}`
+          return <label className="field" key={setting.key} htmlFor={id}>
+            <span>{setting.label.toUpperCase()}{setting.unit ? ` (${setting.unit})` : ''}</span>
+            {setting.kind === 'bool' ? <input id={id} type="checkbox" disabled={!stopped || pending} checked={value === true} onChange={(event) => setValue(setting.key, event.target.checked)} />
+              : setting.kind === 'choice' ? <select id={id} className="text-input" disabled={!stopped || pending} value={String(value ?? '')} onChange={(event) => setValue(setting.key, event.target.value)}>{(setting.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}</select>
+              : <input id={id} className="text-input" type="number" step={1} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} disabled={!stopped || pending}
+                  placeholder={setting.kind === 'optional_int' ? 'Automatic' : undefined} value={value === null ? '' : String(value)}
+                  onChange={(event) => setValue(setting.key, event.target.value === '' ? null : Number(event.target.value))} />}
+            <small className={problems[setting.key] ? 'field-problem' : ''}>{problems[setting.key] || setting.help}</small>
+            {setting.key === 'ram_reserve_mib' && value === 0 && <small className="field-warning">The RAM guard is off. Fine when Basalt is the only thing running; risky when other models or games need RAM.</small>}
+          </label>
+        })}
+        <div className="runtime-settings-actions"><button type="button" className="button button-secondary" disabled={!stopped || pending} onClick={reset}>Reset to defaults</button></div>
+      </div>}
+    </div>}
+
+    {refusal && <RefusalDetails refusal={refusal} gpus={host?.gpus} />}
+    {message && <p className="runtime-message" aria-live="polite">{message}</p>}
+    <div className="profile-card-footer"><span className="worker-caption">{running && model ? 'Running. Stop it to free its RAM and VRAM.' : stopped ? 'Stopped. Nothing is using memory.' : 'Working. This can take several minutes.'}</span><div className="profile-actions">
+      {stopped && <button className="button button-primary" disabled={!canStart} title={!fresh ? 'A fresh telemetry sample is required.' : !host?.loading_enabled ? host?.loading_reason : !valid ? 'Fix the highlighted settings first.' : undefined} onClick={() => void onRun(runtime, 'start', launch)}><ArrowUpRight size={14} />{state === 'error' ? 'Start again' : 'Start'}</button>}
+      {running && <button className="button button-secondary" disabled={pending || !fresh} onClick={() => void onRun(runtime, 'stop')}><X size={14} />Stop</button>}
+      {!stopped && !running && <button className="button button-secondary" disabled>{stateText}…</button>}
+    </div></div>
+  </article>
+}
+
+function RefusalDetails({ refusal, gpus }: { refusal: Refusal; gpus?: Gpu[] }) {
+  const resourceName = (resource: string) => {
+    if (resource === 'ram') return 'System RAM'
+    const gpu = resource.startsWith('gpu:') ? gpus?.find((item) => item.id === resource.slice(4)) : undefined
+    return gpu ? gpu.name : resource
+  }
+  return <div className="refusal-details" role="alert"><div><AlertCircle size={15} /><strong>{refusal.code}</strong><span>{refusal.message}</span></div>{refusal.resources?.map((resource, index) => <div className="refusal-resource" key={`${resource.resource}-${index}`}><strong>{resourceName(resource.resource)}</strong><span>Required {formatBytes(resource.required_bytes)}</span><span>Available {formatBytes(resource.available_bytes)}</span>{resource.headroom_bytes !== undefined && <span>Headroom {formatBytes(resource.headroom_bytes)}</span>}</div>)}</div>
 }

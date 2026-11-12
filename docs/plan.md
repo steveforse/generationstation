@@ -115,6 +115,12 @@ Implement one compatible adapter and establish its memory profile on the desktop
 
 This is the first usable release: manual model management with trustworthy host telemetry and capacity refusal.
 
+Status 2026-11-11: in progress on `feature/basalt-runtime`. The first runtime is Basalt with DeepSeek V4.1 Flash and Qwen3.8 Flash-Next presets. Implemented: a local runtime catalog with allow-listed, bounded advanced settings (main-card and second-card VRAM reserve, RAM for overflow experts, RAM guard, conversation cache, context, KV precision where supported) and per-run GPU choice; generated Basalt configs; process supervision with readiness from `/v1/models`; estimate-based admission whose reservation is released at readiness; restart re-adoption; crash detection; `PORT_IN_USE` for a Basalt started elsewhere; and a dashboard panel. Verified: the full backend suite including PostgreSQL runtime tests with a stand-in process, and a live refusal on the desktop that started no process. A first real DeepSeek load on the RTX 5090 alone reached readiness in 51 s, answered a minimal chat request, and stopped in 6 s with VRAM and RAM released (measurements in `docs/context.md`). Remaining for acceptance: repeated load/unload cycles to look for retained allocations, a two-GPU load, a Flash-Next load, and the browser walkthrough.
+
+Model plugins (accepted 2026-11-11): every runtime kind is a plugin in this repository (`backend/generationstation/plugins/`), registered explicitly; Basalt is the first. The core keeps process supervision, admission and persistence; a plugin supplies its config schema, user settings, estimate, launch description and readiness probe. Contract and how-to: `docs/plugins.md`. After the refactor, a real DeepSeek start on the RTX 5090 reached readiness in 55 s, answered a chat request, and stopped with VRAM released. Next: the generation worker protocol with a stand-in plugin, then YuE2.
+
+Later Basalt work: one server holding both presets and switching with `POST /v1/load`; changing VRAM while running with `POST /v1/vram` to make room for a media model without a reload; showing VRAM as "Basalt may use up to N GiB" per card instead of the reserve to leave free.
+
 ### M4 — Second runtime and switching
 
 Add a different modality and environment. Done when model A can unload, model B can load and work, and A can return without manual process management. Preserve user data outside worker memory; persist conversations but acknowledge that unloaded inference caches may need rebuilding.

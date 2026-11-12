@@ -53,11 +53,11 @@ class MemoryStore:
     def release_scheduler_lock(self):
         pass
 
-    def reconcile_restart(self):
+    def reconcile_restart(self, keep_operation_ids=()):
         with self.lock:
-            active = {"loading", "simulation_ready", "unloading", "cleanup_failed"}
+            active = {"loading", "simulation_ready", "ready", "unloading", "cleanup_failed"}
             for operation in self.operations.values():
-                if operation["status"] in active:
+                if operation["status"] in active and operation["id"] not in set(keep_operation_ids):
                     operation["status"] = "failed"
                     operation["error_code"] = "SERVICE_RESTART"
                     operation["error_message"] = "The fake worker was discarded during service restart."

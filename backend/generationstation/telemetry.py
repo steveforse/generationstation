@@ -48,7 +48,8 @@ class Collector:
             if count == 0:
                 result["gpu_error"] = "No NVIDIA GPU was reported by NVML."
             for index in range(count):
-                gpu = {"id": f"unknown-{index}", "name": f"GPU {index}",
+                # index is NVML (PCI bus) order; runtimes are started with the same CUDA order.
+                gpu = {"id": f"unknown-{index}", "index": index, "name": f"GPU {index}",
                        "memory": None, "error": None}
                 try:
                     handle = pynvml.nvmlDeviceGetHandleByIndex(index)
