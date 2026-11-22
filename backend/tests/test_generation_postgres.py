@@ -17,7 +17,7 @@ def wait_job(generation, job_id, timeout=20):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         job = generation.get(job_id)
-        if job["status"] in {"done", "failed"}:
+        if job["status"] in {"done", "failed", "cancelled"}:
             return job
         time.sleep(0.1)
     raise AssertionError(f"job stayed {job['status']}")
@@ -49,6 +49,8 @@ def test_make_a_song_and_fetch_the_file(tmp_path):
             done = wait_job(generation, job["id"])
             assert done["status"] == "done", done
             assert done["outputs"][0]["name"] == "song.wav" and done["progress"] == "Done: seed 11"
+            assert done["details"]["seed"] == 11 and done["details"]["seconds"] > 0
+            assert done["launch"] == {"preset": "songs", "settings": done["launch"]["settings"], "gpus": [1]}
             path, mime = generation.output_path(job["id"], "song.wav")
             assert mime == "audio/wav" and path.read_bytes()[:4] == b"RIFF"
             for bad in ("../runtimes.json", "melody.abc"):
@@ -59,6 +61,29 @@ def test_make_a_song_and_fetch_the_file(tmp_path):
             failed = wait_job(generation, failing["id"])
             assert failed["status"] == "failed" and "could not be planned" in failed["error_message"]
             assert [j["id"] for j in generation.list("yue2")["jobs"]] == [failing["id"], job["id"]]
+
+            stopped_early = generation.create("yue2", {"style": "slow", "lyrics": "x"})
+            waiting = generation.create("yue2", {"style": "pop", "lyrics": "x"})
+            assert generation.cancel(waiting["id"])["status"] == "cancelled"
+            assert generation.cancel(stopped_early["id"])["status"] in {"running", "cancelled", "queued"}
+            assert wait_job(generation, stopped_early["id"])["status"] == "cancelled"
+            with pytest.raises(LifecycleError) as finished:
+                generation.cancel(stopped_early["id"])
+            assert finished.value.code == "JOB_FINISHED"
+            assert generation.delete(waiting["id"])["deleted"]
+
+            slow = generation.create("yue2", {"style": "slow", "lyrics": "x"})
+            with pytest.raises(LifecycleError) as running:
+                generation.delete(slow["id"])
+            assert running.value.code == "JOB_RUNNING"
+            assert wait_job(generation, slow["id"])["status"] == "done"
+            folder = tmp_path / "out" / slow["id"]
+            assert (folder / "job.json").is_file()
+            assert generation.delete(slow["id"]) == {"id": slow["id"], "deleted": True}
+            assert not folder.exists() and slow["id"] not in [j["id"] for j in generation.list("yue2")["jobs"]]
+            with pytest.raises(LifecycleError) as gone:
+                generation.delete(slow["id"])
+            assert gone.value.code == "JOB_NOT_FOUND"
 
             stop = lifecycle.create_unload("yue2", "key-yue2-stop")
             assert wait_for(lifecycle, stop["id"], {"unloaded", "cleanup_failed"})["status"] == "unloaded"

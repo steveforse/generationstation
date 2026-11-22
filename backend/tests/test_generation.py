@@ -21,7 +21,7 @@ def yue2_catalog(port, output_dir, *, options=None, script=STUB):
         "ready_timeout_seconds": 20, "stop_timeout_seconds": 10, "default_preset": "songs",
         "presets": {"songs": {
             "name": "YuE2 3B", "gpus": [1], "allowed_gpus": [0, 1],
-            "options": {"model_dir": "C:/ai/models/yue2/YuE2-3B", "vae_dir": "C:/ai/models/yue2/YuE2-Vae",
+            "options": {"model_dir": "D:/ai/models/yue2/YuE2-3B", "vae_dir": "D:/ai/models/yue2/YuE2-Vae",
                         **(options or {})},
             "settings": {"memory_budget_gib": 16, "quantization": "none"},
             "estimate": {"ram_gib": 24, "gpu_min_free_gib": {"0": 14, "1": 14}},
@@ -85,6 +85,27 @@ def test_worker_protocol_end_to_end(tmp_path):
         assert done["status"] == "done", done
         assert done["outputs"] == [{"name": "song.wav", "mime": "audio/wav", "bytes": (tmp_path / "out" / "job-00000001" / "song.wav").stat().st_size}]
         assert done["progress"] == "Done: seed 3"
+        assert done["details"]["seed"] == 3 and done["details"]["seconds"] >= 0.2
+        saved = json.loads((tmp_path / "out" / "job-00000001" / "job.json").read_text())
+        assert saved["inputs"]["style"] == "pop" and saved["details"] == done["details"]
+        assert "thumbnail" not in done["details"]
+        YUE2.submit(runtime, "job-00000003", {"style": "picture", "lyrics": "x"})
+        pictured = wait(lambda: (r := YUE2.job_status(runtime, "job-00000003")) and r["status"] in {"done", "failed"} and r)
+        assert pictured["details"]["thumbnail"] == "thumbnail.jpg"
+        assert {"name": "thumbnail.jpg", "mime": "image/jpeg", "bytes": (tmp_path / "out" / "job-00000003" / "thumbnail.jpg").stat().st_size} in pictured["outputs"]
+
+        # Cancel: a queued job at once, a running one at its next step (its partial files are removed).
+        YUE2.submit(runtime, "job-00000004", {"style": "slow", "lyrics": "x"})
+        YUE2.submit(runtime, "job-00000005", {"style": "pop", "lyrics": "x"})
+        wait(lambda: (r := YUE2.job_status(runtime, "job-00000004")) and r["status"] == "running")
+        assert YUE2.cancel(runtime, "job-00000005")["status"] == "cancelled"
+        assert YUE2.cancel(runtime, "job-00000004")["progress"] == "Cancelling"
+        cancelled = wait(lambda: (r := YUE2.job_status(runtime, "job-00000004")) and r["status"] != "running" and r)
+        assert cancelled["status"] == "cancelled" and cancelled["outputs"] == []
+        folder = tmp_path / "out" / "job-00000004"
+        assert not (folder / "partial.wav").exists() and (folder / "inputs" / "01-given.png").is_file()
+        assert YUE2.job_status(runtime, "job-00000005")["status"] == "cancelled"
+        assert YUE2.cancel(runtime, "job-missing2") == {"status": "missing"}
         YUE2.submit(runtime, "job-00000002", {"style": "fail", "lyrics": "x"})
         failed = wait(lambda: (r := YUE2.job_status(runtime, "job-00000002")) and r["status"] in {"done", "failed"} and r)
         assert failed["status"] == "failed" and "could not be planned" in failed["error"]

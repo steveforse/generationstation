@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from typing import Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -26,6 +26,7 @@ from .process_worker import ProcessSupervisor
 from .runtimes import load_catalog
 from .storage import Store
 from .telemetry import Monitor
+from .uploads import UploadError, UploadStore
 
 
 class RequestAccessLogMiddleware:
@@ -173,13 +174,15 @@ class RuntimeStartRequest(BaseModel):
 
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    inputs: dict[StrictStr, StrictStr | StrictInt | None] = Field(default_factory=dict)
+    inputs: dict[StrictStr, StrictStr | StrictInt | list[StrictStr] | None] = Field(default_factory=dict)
 
     @field_validator("inputs")
     @classmethod
     def bounded(cls, value):
         if len(value) > 32:
             raise ValueError("Too many inputs.")
+        if any(isinstance(item, list) and len(item) > 12 for item in value.values()):
+            raise ValueError("Too many files.")
         return value
 
 
@@ -192,7 +195,10 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         runtime_adapter = ProcessSupervisor(settings.runtime_dir)
     lifecycle = LifecycleManager(store, settings, worker=worker, catalog=catalog,
                                  runtime_adapter=runtime_adapter)
-    generation = GenerationManager(store, catalog)
+    if hasattr(monitor, "watch_processes"):
+        monitor.watch_processes(lifecycle.owned_processes)
+    uploads = UploadStore(settings.runtime_dir)
+    generation = GenerationManager(store, catalog, uploads)
     access_logger = _access_logger()
     instance_id = None
 
@@ -303,6 +309,10 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         return lifecycle.create_runtime_load(model_id, payload.preset, payload.settings, payload.gpus,
                                              idempotency_key, snapshot())
 
+    @api.post("/runtimes/{model_id}/estimate")
+    def estimate_runtime(model_id: str, payload: RuntimeStartRequest):
+        return lifecycle.estimate_runtime(model_id, payload.preset, payload.settings, payload.gpus, snapshot())
+
     @api.post("/models/{model_id}/jobs", status_code=202)
     def create_job(model_id: str, payload: JobRequest):
         return generation.create(model_id, payload.inputs)
@@ -316,6 +326,27 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     @api.get("/jobs/{job_id}")
     def job(job_id: str):
         return generation.get(job_id)
+
+    @api.post("/uploads", status_code=201)
+    async def upload(request: Request, name: str = Query(min_length=1, max_length=200)):
+        """A file for a generation request, sent as the raw request body; returns its ID for the job's inputs."""
+        try:
+            return await uploads.save_stream(name, request.stream())
+        except UploadError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @api.get("/jobs/{job_id}/inputs/{name}")
+    def job_input(job_id: str, name: str):
+        path, mime = generation.input_path(job_id, name)
+        return FileResponse(path, media_type=mime, filename=name)
+
+    @api.post("/jobs/{job_id}/cancel")
+    def cancel_job(job_id: str):
+        return generation.cancel(job_id)
+
+    @api.delete("/jobs/{job_id}")
+    def delete_job(job_id: str):
+        return generation.delete(job_id)
 
     @api.get("/jobs/{job_id}/files/{name}")
     def job_file(job_id: str, name: str):

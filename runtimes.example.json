@@ -18,13 +18,13 @@
         "ds41": {
           "name": "DeepSeek V4.1 Flash",
           "alias": "DeepSeek-V4.1-Flash-1017 GSQ-RCO-IQ2_XXS",
-          "model_path": "C:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS.basalt",
+          "model_path": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS.basalt",
           "gpus": [
             0,
             1
           ],
           "env": {
-            "BASALT_ENGRAM_FILE": "C:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
+            "BASALT_ENGRAM_FILE": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
             "BASALT_ENGRAM_OFFSET": "416"
           },
           "settings": {
@@ -46,7 +46,7 @@
         "fn": {
           "name": "Qwen3.8 Flash-Next",
           "alias": "Qwen3.8-Flash-Next GSQ-RCO-IQ3_S",
-          "model_path": "C:\\ai\\models\\basalt-fn-win\\Qwen3.8-FN-GSQ-RCO-IQ3_S.v2.basalt",
+          "model_path": "D:\\ai\\models\\basalt-fn-win\\Qwen3.8-FN-GSQ-RCO-IQ3_S.v2.basalt",
           "gpus": [
             0,
             1
@@ -83,7 +83,7 @@
       "name": "YuE2 songs",
       "workload": "music",
       "python": "C:\\ai\\envs\\yue2-worker\\Scripts\\python.exe",
-      "output_dir": "C:\\ai\\outputs\\yue2",
+      "output_dir": "D:\\ai\\outputs\\yue2",
       "port": 8170,
       "ready_timeout_seconds": 900,
       "stop_timeout_seconds": 30,
@@ -99,8 +99,8 @@
             1
           ],
           "options": {
-            "model_dir": "C:\\ai\\models\\yue2\\YuE2-3B",
-            "vae_dir": "C:\\ai\\models\\yue2\\YuE2-Vae"
+            "model_dir": "D:\\ai\\models\\yue2\\YuE2-3B",
+            "vae_dir": "D:\\ai\\models\\yue2\\YuE2-Vae"
           },
           "settings": {
             "memory_budget_gib": 24,
@@ -111,6 +111,116 @@
             "gpu_min_free_gib": {
               "0": 14,
               "1": 14
+            }
+          }
+        }
+      }
+    },
+    "qwen_image": {
+      "kind": "qwen_image",
+      "name": "Qwen Image pictures",
+      "workload": "image",
+      "python": "C:\\ai\\envs\\qwen-image-worker\\Scripts\\python.exe",
+      "output_dir": "D:\\ai\\outputs\\qwen-image",
+      "port": 8180,
+      "ready_timeout_seconds": 900,
+      "stop_timeout_seconds": 30,
+      "default_preset": "uncensored",
+      "presets": {
+        "uncensored": {
+          "name": "Qwen Image 2.1 Uncensored",
+          "description": "ChatR Labs' uncensored Qwen Image 2.1 in 4-bit NVFP4. Quick uses the 4-step Lightning adapter; best runs 35 steps.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "options": {
+            "pipeline_dir": "D:\\ai\\models\\qwen-image-2.1\\turbo",
+            "base_scheduler_dir": "D:\\ai\\models\\qwen-image-2.1\\base",
+            "transformer": "D:\\ai\\models\\qwen-image-2.1\\uncensored\\qwen-image-2.1-step90000-NVFP4-comfy.safetensors",
+            "transformer_format": "comfy_nvfp4",
+            "lightning": "D:\\ai\\models\\qwen-image-2.1\\lightning\\pytorch_lora_weights.safetensors"
+          },
+          "settings": {
+            "compile": true,
+            "text_encoder_device": "cpu"
+          },
+          "estimate": {
+            "ram_gib": 28,
+            "gpu_min_free_gib": {
+              "0": 15,
+              "1": 14
+            }
+          }
+        },
+        "turbo": {
+          "name": "Qwen Image 2.1 Turbo",
+          "description": "The official 8-step Qwen Image 2.1 Turbo in 4-bit NVFP4: fast, with strong lettering. Not uncensored.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "options": {
+            "pipeline_dir": "D:\\ai\\models\\qwen-image-2.1\\turbo",
+            "transformer": "D:\\ai\\models\\qwen-image-2.1\\turbo-quant\\qwen-image-2.1-turbo-NVFP4.safetensors",
+            "transformer_format": "comfy_nvfp4",
+            "turbo": true
+          },
+          "settings": {
+            "compile": true,
+            "text_encoder_device": "cpu"
+          },
+          "estimate": {
+            "ram_gib": 28,
+            "gpu_min_free_gib": {
+              "0": 15,
+              "1": 14
+            }
+          }
+        }
+      }
+    },
+    "minimax_h3": {
+      "kind": "minimax_h3",
+      "name": "MiniMax H3 videos",
+      "workload": "video",
+      "python": "C:\\ai\\envs\\minimax-h3-worker\\Scripts\\python.exe",
+      "output_dir": "D:\\ai\\outputs\\minimax-h3",
+      "port": 8190,
+      "ready_timeout_seconds": 1800,
+      "stop_timeout_seconds": 60,
+      "default_preset": "uncensored",
+      "presets": {
+        "uncensored": {
+          "name": "MiniMax H3 Uncensored",
+          "description": "MiniMax H3 in 4-bit NVFP4 with an uncensored prompt reader. Quick uses the 4-step Turbo v4 add-on; best runs 20 steps.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "pipeline_dir": "D:\\ai\\models\\minimax-h3\\diffusers",
+            "transformer": "D:\\ai\\models\\minimax-h3\\nvfp4\\minimax_h3_fl2va_pruned_nvfp4.safetensors",
+            "text_encoder_dir": "D:\\ai\\models\\minimax-h3\\uncensored\\heretic-bf16",
+            "turbo_lora": "D:\\ai\\models\\minimax-h3\\turbo-v4\\minimax_h3_turbo_v4_step600_ema.safetensors",
+            "turbo_grid": "D:\\ai\\models\\minimax-h3\\turbo-v4\\h3_silu_temb_grid.safetensors",
+            "reference_transformer": "D:\\ai\\models\\minimax-h3\\nvfp4\\minimax_h3_ref2va_pruned_nvfp4.safetensors"
+          },
+          "settings": {
+            "compile": true
+          },
+          "estimate": {
+            "ram_gib": 60,
+            "gpu_min_free_gib": {
+              "0": 29
             }
           }
         }

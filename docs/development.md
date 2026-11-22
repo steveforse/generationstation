@@ -71,11 +71,25 @@ C:\ai\envs\yue2-worker\Scripts\hf.exe download m-a-p/YuE2-3B yue2_infer-0.1.5-py
 uv pip install --python C:\ai\envs\yue2-worker\Scripts\python.exe C:\ai\downloads\yue2\yue2_infer-0.1.5-py3-none-any.whl
 # yue2_infer pins torch==2.10.0, which PyPI serves CPU-only on Windows. Replace it with the CUDA build:
 uv pip install --python C:\ai\envs\yue2-worker\Scripts\python.exe "torch==2.10.0" --index-url https://download.pytorch.org/whl/cu128 --reinstall-package torch
-C:\ai\envs\yue2-worker\Scripts\hf.exe download m-a-p/YuE2-3B --local-dir C:\ai\models\yue2\YuE2-3B --exclude "*.whl"
-C:\ai\envs\yue2-worker\Scripts\hf.exe download m-a-p/YuE2-Vae --local-dir C:\ai\models\yue2\YuE2-Vae
+C:\ai\envs\yue2-worker\Scripts\hf.exe download m-a-p/YuE2-3B --local-dir D:\ai\models\yue2\YuE2-3B --exclude "*.whl"
+C:\ai\envs\yue2-worker\Scripts\hf.exe download m-a-p/YuE2-Vae --local-dir D:\ai\models\yue2\YuE2-Vae
 ```
 
-Check with `C:\ai\envs\yue2-worker\Scripts\python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available())"`; it must print a `+cu128` version and `True`. The `yue2` entry in `runtimes.example.json` points at these folders and writes songs to `C:\ai\outputs\yue2`.
+Check with `C:\ai\envs\yue2-worker\Scripts\python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available())"`; it must print a `+cu128` version and `True`. The `yue2` entry in `runtimes.example.json` points at these folders and writes songs to `D:\ai\outputs\yue2`.
+
+## MiniMax H3 (videos)
+
+MiniMax H3 runs in `C:\ai\envs\minimax-h3-worker`: the Qwen Image worker environment's exact package versions (torch 2.14.1+cu130, diffusers 0.43.0, torchao 0.18.0, transformers 5.22.2, peft, triton-windows) plus `av` and `psutil`. It needs an RTX 50-series card. Files, as set up on the desktop on 2026-11-15/16 (use repeated `--include` flags; a single `--exclude` followed by several patterns downloads the whole 500 GB repository):
+
+```powershell
+$hf = "C:\ai\envs\qwen-image-worker\Scripts\hf.exe"; $m = "D:\ai\models\minimax-h3"
+& $hf download MiniMaxAI/MiniMax-H3 --local-dir $m\diffusers --include "*.json" --include "processor/*" --include "tokenizer/*" --include "text_encoder/*.json" --include "vae/*" --include "audio_vae/*" --include "LICENSE"
+& $hf download lilcheaty/MiniMax-H3-NVFP4 minimax_h3_fl2va_pruned_nvfp4.safetensors --local-dir $m\nvfp4
+& $hf download larryvrh/MiniMax-H3-Turbo-Lora minimax_h3_turbo_v4_step600_ema.safetensors --local-dir $m\turbo-v4
+& $hf download llmfan46/Qwen3-VL-32B-Instruct-ultra-uncensored-heretic --local-dir $m\uncensored\heretic-bf16
+```
+
+`h3_silu_temb_grid.safetensors` (needed by the Turbo v4 add-on) comes from the GitHub repository `Larryvrh/ComfyUI-MiniMax-H3-Turbo`; put it in `$m\turbo-v4`. The `minimax_h3` entry in `runtimes.example.json` points at these files and writes clips to `D:\ai\outputs\minimax-h3`.
 
 ## Run the API and frontend
 

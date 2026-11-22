@@ -1,6 +1,6 @@
 # Project context
 
-Updated: 2026-11-12.
+Updated: 2026-11-21.
 
 ## Confirmed requirements
 
@@ -20,7 +20,7 @@ Updated: 2026-11-12.
 - SQLAlchemy 2 and Alembic are selected for PostgreSQL access and schema migrations. PostgreSQL 17 is pinned to the maintained 17.11 Bookworm image; update the patch tag after checking official release/image metadata.
 - Model weights and generated outputs remain files outside the database and source control.
 - Model plugins (accepted 2026-11-11): each runtime kind is a plugin in this repository (`backend/generationstation/plugins/`). Media models run in workers (`workers/`) under their own Python environments, speaking one HTTP protocol. See `docs/plugins.md`.
-- Earlier decision, 2026-10-10, not yet revisited: SGLang-Diffusion in a server-managed Docker Desktop Linux container as the image runtime for Qwen Image 2.1. Its implementation was not preserved (see "Earlier attempt" below). Decide again when building the Qwen Image plugin: SGLang in Docker, or a native Windows worker like YuE2's.
+- Qwen Image 2.1 runs in a native Windows worker (`workers/qwen_image_worker.py`, Diffusers + torchao), like YuE2's; this replaced the 2026-10-10 SGLang-Diffusion-in-Docker plan when the plugin was built (2026-11-14/15). The user chose NVFP4 weights on both cards (2026-11-15), with the text encoder on the processor so nothing moves between the card and system RAM per picture (the user's objection to the 4080 setup was the swapping).
 - Tailscale provides current remote access. Desktop IP: `100.109.129.35`; it may change. The dashboard keeps a list of hosts; since 2026-11-12 it saves each host's address and access token in that browser's storage (the user chose "remember on this device"), with Forget per host, and sends bearer authentication. On 2026-10-09, the laptop reached the desktop API on port 8000; an unauthenticated API request returned HTTP 401, and the Vite-origin CORS preflight succeeded. The full laptop-browser connection and reconnect path remains to be checked. SSH works through the local `generationstation-desktop` alias; update its `HostName` if the Tailscale address changes. The API currently listens on 127.0.0.1 during development.
 
 ## Engineering recommendations and pending decisions
@@ -35,9 +35,9 @@ Updated: 2026-11-12.
 
 Hardware was reported on 2026-10-08 and changed since. Windows checks on 2026-11-11 measured:
 
-- CPU: AMD Ryzen 7 5800X3D.
+- CPU: AMD Ryzen 9 9950X3D, 16 cores / 32 threads (Windows check 2026-11-15; the 2026-11-11 notes said Ryzen 7 5800X3D).
 - System RAM: about 125.5 GiB (Windows `TotalPhysicalMemory`); it was 32 GB at the October check.
-- Storage: 2 TB NVMe SSD; C: had about 571 GB free on 2026-11-11 after compacting the WSL disk.
+- Storage: 2 TB NVMe SSD; C: had about 571 GB free on 2026-11-11 after compacting the WSL disk. D: (about 2 TB) is the AI drive since 2026-11-21: all model weights live under `D:\ai\models`; environments (`C:\ai\envs`) and Basalt (`C:\ai\basalt-win`) stay on C:. Generated files moved to `D:\ai\outputs` on 2026-11-21. The move's verification flagged the DeepSeek V4.1 Flash `.basalt` file on D: as not matching its source (the C: original is gone); the owner chose to keep using that copy.
 - GPUs, in NVML/PCI order: index 0 NVIDIA RTX 5090 (32 GB), index 1 NVIDIA RTX 4080 (16 GB). The 4080 drives the display, so its free VRAM moves with desktop and game use.
 - OS: Windows 11.
 
@@ -54,10 +54,34 @@ A set of 15 small config/tokenizer files, 16 MB total, from `Qwen/Qwen-Image-2.1
 
 The pinned image `lmsysorg/sglang@sha256:2dbe4c7f53230b09aaa8fa41891c13c51d9d2e253f486a70822aaf08783fff75` (SGLang 0.5.21, 52.6 GB unpacked, nvcc 13.0.88) is pulled into Docker Desktop and was still present on 2026-11-12; it lacks `comfy-kitchen`. A one-shot GPU passthrough container ran `nvidia-smi` and saw the RTX 5090. The official Qwen 2.1 cookbook recommends a nightly image containing the integration and says no published Docker image is verified, so this pinned image's compatibility is unverified. No model container, real load, or image inference has run.
 
+### Qwen Image 2.1 worker
+
+Measured 2026-11-14/15 on the desktop, 1024x1024, outside the API (benchmark scripts, then the worker started exactly as the plugin launches it and driven over the worker protocol). The API-managed run is recorded below.
+
+- Files under `D:\ai\models\qwen-image-2.1\`: `uncensored\` (ChatR Labs Uncensored Omni: Qwen-Image-2.1 with their rank-128 adapter merged; NVFP4 ComfyUI file and other builds), `turbo-quant\` (official Qwen-Image-2.1-Turbo, NVFP4 and FP8), `turbo\` (Turbo's Diffusers folder: text encoder Qwen3-VL 8B, VAE, processor, scheduler), `base\` (Qwen-Image-2.1 scheduler and configs), `lightning\` (4-step Lightning adapter, used for "quick").
+- Worker environment `C:\ai\envs\qwen-image-worker`: torch 2.14.1+cu130, diffusers 0.43.0, transformers 5.22.2, torchao 0.18.0, peft 0.21.2, torchvision 0.29.1, triton-windows 3.9.0.post30 (needed for compiling; without it the worker runs uncompiled and NVFP4 is slower than FP8). The environment has no pip; install with `uv pip install --python <env python>`.
+- NVFP4 on the RTX 5090 runs real 4-bit maths (torchao, Blackwell only). The RTX 4080 has no 4-bit maths: the worker keeps the weights in 4 bits on the card and expands each layer to FP8 just before its matmul (checked against torchao's decoder: 0.1% difference, BF16 rounding).
+- Each transformer block is compiled (Diffusers regional compilation). The first picture at each quality and shape after a start is slower; compiled kernels are cached on disk, so later starts warm up faster (5090: 21 s first time, 9 s later). Diffusers' prompt KV cache is off: with compiling it recompiled for every prompt length and saved nothing measurable.
+- The text encoder stays in system RAM in BF16 and runs on the processor: 0.4-0.6 s per prompt. Swapping parts between RAM and the card was slower, and keeping the encoder on the 4080 next to the transformer overflowed it: Windows then backs PyTorch's cached memory with system RAM and each step took 40-120 s instead of about 1 s.
+- Times per picture after warm-up, through the worker: RTX 5090 uncensored quick 1.7 s, best (35 steps, CFG 5) 15.2 s; RTX 4080 uncensored quick 3.6 s, best 42.3 s, Turbo (8 steps) 5.5 s. Earlier benchmark, 5090 Turbo NVFP4 1.9 s. For comparison, the 4080 with FP8 weights swapped per picture took 7.8 s / 45.8 s / 10.7 s.
+- Card memory: peak 12.9 GiB reserved on the 5090 and 12.5-12.6 GiB on the 4080 (plus the CUDA context); between pictures the worker returns its cache, leaving about 5-5.6 GiB in use. Estimates: 15 GiB free on the 5090, 14 GiB on the 4080, 28 GiB RAM (measured 25.6 GiB committed, 18.6 GiB peak working set, with the prompt reader on the CPU).
+- First run through the API, 2026-11-15, RTX 5090, Uncensored preset: start, three pictures (quick square 2.2 s, quick portrait 2.1 s, best square 19.6 s including its first-time preparation) fetched as PNGs, then stop. Stop freed the card to 0 MiB.
+- NVFP4 small lettering at best quality is weaker than FP8's. Community INT4 (SVDQuant/Nunchaku) builds exist only for the stock model, need a Nunchaku fork with Linux wheels, and official Nunchaku does not support 2.1 yet (checked 2026-11-15).
+
+### MiniMax H3 worker
+
+Measured 2026-11-15 to 2026-11-21 on the RTX 5090, 960x544, 124 frames (5.2 s at 24 fps) with sound.
+
+- Files under `D:\ai\models\minimax-h3\`: `diffusers\` (MiniMaxAI/MiniMax-H3 configs, tokenizer, schedulers, video and audio decoders), `nvfp4\minimax_h3_fl2va_pruned_nvfp4.safetensors` (11.7 GiB, ComfyUI NVFP4 "pruned" transformer), `uncensored\heretic-bf16\` (llmfan46's abliterated Qwen3-VL-32B-Instruct, BF16), `turbo-v4\` (larryvrh Turbo v4 step-600 EMA add-on and the `h3_silu_temb_grid` it needs), `comfy\loras\` (Comfy-Org Turbo v1.0, unused). Environment `C:\ai\envs\minimax-h3-worker`: the Qwen Image environment's pins plus PyAV 19.0.2 and psutil.
+- The pruned checkpoint replaces H3's timestep embedder with a 1025x8 table and has ComfyUI tensor names; Diffusers 0.43's converter refuses it, so the worker maps names, splits fused q/k/v, swaps the feed-forward halves, and projects the table row without SiLU. MiniMax's own text encoder is byte-identical to stock Qwen3-VL-32B; H3 reads the un-normed hidden state after decoder layer 50, so only 50 layers are loaded (BF16, on the processor, about 2 s per prompt). An uncensored NVFP4 encoder from another uploader decoded to garbage and was deleted.
+- Build comparison (2026-11-16, page "MiniMax H3 Build Test"): NVFP4 and ComfyUI FP8 looked equivalent; FP8 did not fit on the card with a Turbo add-on unless the video decoder streamed from RAM, and was 12% slower per step. Turbo v4 looked crisper than Comfy-Org's v1.0. NVFP4 + Turbo v4 was chosen; the FP8 file was deleted.
+- H3 is trained on a structured prompt (`integrated_multimodal_description: [Shot 1] ...`, `overall_soundscape:`, `non_diegetic_music:`; spoken lines as `(S1) says: <d>[English] ...</d>`). The worker builds it from the form's description, sounds, music and look, turns `says: "..."` into a spoken line (one speaker), and passes a prompt that already starts with the structure through unchanged.
+- First API-managed run, 2026-11-21: ready in 43 s (worker 22 s); quick (Turbo v4, 4 steps) 5 s clips 38-39 s after a 92 s first clip that compiles; best (20 steps) 164 s including its first compile (about 143 s warm in the comparison). Peak 24.4-24.6 GiB reserved; between clips about 20.5 GiB stays in use (transformer and decoders). The worker's peak working set was 51-54 GiB and its committed memory 87-89 GiB (Windows also counts the card's allocations there). Stop freed the 5090 to 10 MiB.
+- A 10 s clip (243 frames) worked but took 135 s at quick and peaked at 29.7 GiB, above the 29.4 GiB admission allows on the 5090 after headroom, so the plugin offers 5 s only. Estimates: 28 GiB free on the 5090 (the 4080 is not allowed), 60 GiB RAM.
+
 ## Open inputs
 
 - The laptop browser's authenticated connection and reconnect experience against the desktop still needs an end-to-end check.
-- Qwen Image 2.1: choose the runtime (SGLang-Diffusion in Docker, as decided on 2026-10-10, or a native worker), then verify it with the checksummed files above and measure RAM and VRAM before enabling loads.
 - Priority when coding and media compete for memory.
 - Acceptable cold load time and generation latency.
 
@@ -79,4 +103,21 @@ On the desktop, a live DeepSeek start was correctly refused while a game held mo
 
 First song, 2026-11-12: YuE2 3B (`m-a-p/YuE2-3B` + `YuE2-Vae`, `yue2_infer` 0.1.5, torch 2.10.0+cu128) on the RTX 5090 through the API, while a game used the RTX 4080. The worker was ready in 15 s using 7.4 GB VRAM and about 1 GiB RAM. A two-section English song (verse and chorus, seed 42) took 41 s to produce 49 s of 48 kHz audio; VRAM peaked at 9.8 GB. The FLAC (9.1 MB) and the melody score were fetched through the API. Stop freed the card to 0 MiB and left no worker process. The YuE2 RAM estimate was lowered from 24 to 8 GiB; the VRAM estimate stays at 14 GiB, the model card's peak at maximum context. Windows PyTorch has the FlashAttention op but not its kernels, and YuE2 chose it by checking only for the op; the worker now tests FlashAttention at load and uses YuE2's cuDNN attention path when it is missing.
 
-Next: Qwen Image and MiniMax H3 plugins, a simple page for the primary user separate from the admin dashboard, and the Proxmox split. Do not treat fake-worker or stand-in results, or model file sizes, as model support or a memory profile.
+Qwen Image plugin, 2026-11-15: `qwen_image` with "Qwen Image 2.1 Uncensored" (default; quick with Lightning, best at 35 steps) and "Qwen Image 2.1 Turbo" presets, NVFP4 on either card; measurements above. Its first API-managed run (start, pictures, stop on the RTX 5090) passed on 2026-11-15; the RTX 4080 has run only outside the API.
+
+MiniMax H3 plugin, 2026-11-21: `minimax_h3` with one preset, "MiniMax H3 Uncensored" (NVFP4 transformer, uncensored prompt reader on the processor; quick with Turbo v4 at 4 steps, best at 20 steps), RTX 5090 only, 5 s clips in landscape, portrait or square; measurements above. Its first API-managed run (start, five clips, stop) passed on 2026-11-21.
+
+Results, 2026-11-21: each job now keeps the model settings it ran with and what the worker actually used (seed, steps, size, full prompt, seconds taken; also saved as `job.json` beside the files). The generation page lists results in a sidebar with a detail view (prompt, settings, time, model, reuse, download, delete), and the form shows the measured time for the chosen settings. Restart fix: a stopped model's old start stays "ready" in history, and a restart used to mark the model failed because of it even when a newer start had just been re-adopted; restart clean-up now ignores operations superseded by a later start or stop (confirmed: an API restart re-attached a running H3 worker). Later the same day: sidebar thumbnails (workers save `thumbnail.jpg`; earlier H3 clips and Qwen pictures were backfilled), results open in a modal, and jobs can be cancelled while queued or mid-render (at the next step). Workers started before these changes need one stop and start to gain thumbnails, details and cancel. Modes and uploads, 2026-11-21: H3 has tabs "From a description" and "From pictures" (first frame, last frame or both, on the same NVFP4 transformer through Diffusers' `fl2va` workflow with MiniMax's alignment lines). The prompt reader now loads 51 layers plus Qwen3-VL's vision tower and runs Diffusers' own encoding steps on the processor, so pictures are read the way MiniMax intends. API run on the RTX 5090: first-frame 58 s (736x736, "match picture" from a square picture), first-and-last 64 s, last-frame 50 s, text 59 s (first clip after start), peaks 24.9-25.5 GiB; a "best" job cancelled at step 3 stopped within the step. Diffusers documents the reference mode's limits as 9 pictures, 3 videos, 3 audio clips, 12 in all, audio never alone; its NVFP4 transformer (`minimax_h3_ref2va_pruned_nvfp4.safetensors`, lilcheaty, 12.5 GB) is downloaded to `D:\ai\models\minimax-h3\nvfp4`.
+
+H3 phase 2, 2026-11-21:
+- A "From references" tab (Diffusers' `ref2va`) takes up to 9 pictures, 3 videos and 3 audio clips. The worker swaps the reference transformer onto the card when this tab is used (6-9 s) and back for the others. It builds MiniMax's six-section reference prompt from the description, optional notes ("Picture 1: ..."), and how videos and audio are used. Reference videos' own sound is dropped, so "audio N" is always the Nth audio clip. Turbo is not offered with references.
+- At MiniMax's reference size (2048-pixel short edge) one picture took 726 s, with reading by the CPU prompt reader alone taking minutes. A reference video at the full canvas overflowed the card. "Reference detail" now sets the size: fast 768 / standard 1024 / high 2048 for pictures, and 256 / 352 / 544 for videos.
+- Standard detail on the RTX 5090: one picture 202-246 s (reading 42-46 s); two pictures and a voice 324 s; a video used for camera and motion 434 s (reading 72 s, peak 27.6 GiB). Nine pictures at fast detail took 679 s (reading 258 s), peak 25.2 GiB.
+- Quality levels: turbo 4 steps (Turbo v4), standard 20, high 30, extreme 50 (MiniMax's default).
+- Shapes: 16:9, 9:16, 1:1, 4:5 and 4:3, plus "match picture". Resolutions: 240p, 360p, 480p, 540p and 720p (short edges 256, 352, 480, 544 and 704), or a custom size up to 1280 x 720 worth of pixels.
+- Turbo timings for 5 s text clips: 240p 6 s (20.6 GiB), 360p 12 s, 480p 29 s, 540p ~40 s, 720p 89 s (28.1 GiB; portrait 28.3 GiB). Standard at 720p took 372 s. Native 1080p does not fit. The card estimate was raised to 29 GiB for 720p.
+- With pictures, a shape that differs from the picture's now crops instead of stretching (Diffusers stretches keyframes). The framing is chosen on a preview: drag the box, use the arrow keys or the zoom slider. A portrait framing of a square picture through the app matched its first frame exactly.
+- Tests ran first directly against the worker (outside the app), then through the app.
+
+
+Next: a simple page for the primary user separate from the admin dashboard, and the Proxmox split. Do not treat fake-worker or stand-in results, or model file sizes, as model support or a memory profile.

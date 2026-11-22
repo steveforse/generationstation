@@ -36,6 +36,17 @@ def test_plugin_contract(kind):
         assert getattr(type(plugin), method) is not getattr(RuntimePlugin, method), f"{kind} must implement {method}"
     if plugin.generates:
         assert plugin.output_kind in {"audio", "image", "video"}
+    for timing in plugin.timings:  # timings may only name modes and form choices that exist
+        specs = plugin.mode_inputs(timing.when.get("mode"))
+        assert specs is not None, (kind, timing.when)
+        for key, value in timing.when.items():
+            if key != "mode":
+                assert specs[key].kind == "choice" and value in specs[key].options, (kind, key, value)
+    for mode in plugin.modes.values():
+        assert mode.label and mode.help and mode.inputs
+    for spec in [*plugin.inputs.values(), *(s for m in plugin.modes.values() for s in m.inputs.values())]:
+        if spec.kind == "files":
+            assert spec.accept and spec.max_count
         for method in ("submit", "job_status", "output_dir"):
             assert getattr(type(plugin), method) is not getattr(RuntimePlugin, method), f"{kind} must implement {method}"
         for name, spec in plugin.inputs.items():
@@ -208,3 +219,20 @@ def test_supervisor_never_adopts_garbage_ids(tmp_path):
     supervisor = ProcessSupervisor(tmp_path)
     assert supervisor.adopt("not-a-pid", 8160) is None
     assert supervisor.adopt("pid:1:0.000", 8160) is None
+
+
+def test_description_comes_from_the_plugin_unless_the_catalog_overrides_it():
+    data = catalog_data(8160)
+    plain = describe_runtime("basalt", parse_catalog(data).runtimes["basalt"], host()["gpus"])
+    assert plain["description"] == BASALT.description
+    assert plain["presets"]["ds41"]["description"] is None
+    data["runtimes"]["basalt"]["description"] = "Our main chat model."
+    data["runtimes"]["basalt"]["presets"]["ds41"]["description"] = "Best for long coding sessions."
+    custom = describe_runtime("basalt", parse_catalog(data).runtimes["basalt"], host()["gpus"])
+    assert custom["description"] == "Our main chat model."
+    assert custom["presets"]["ds41"]["description"] == "Best for long coding sessions."
+
+
+@pytest.mark.parametrize("kind", plugin_kinds())
+def test_every_plugin_describes_itself(kind):
+    assert get_plugin(kind).description.strip()

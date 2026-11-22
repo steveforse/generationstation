@@ -80,6 +80,7 @@ def generate(pipe, inputs, job):
     sf.write(job.output("song.flac", "audio/flac"), audio, 48000, subtype="PCM_24")
     if plan.abc:
         job.output("melody.abc", "text/plain").write_text(plan.abc, encoding="utf-8")
+    job.detail(seed=request.seed, mode=request.cot, audio_seconds=round(len(audio) / 48000, 1))
     job.report(f"Done: {len(audio) / 48000:.0f} seconds, seed {request.seed}")
 
 
