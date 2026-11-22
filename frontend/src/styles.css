@@ -150,3 +150,5 @@ a.button{text-decoration:none;display:inline-flex;align-items:center;gap:7px}
 .crop-box::after{content:"";position:absolute;inset:33.3% 0;border-top:1px solid #ffffff55;border-bottom:1px solid #ffffff55}
 .crop-zoom{display:flex;align-items:center;gap:8px;font-size:9.5px;color:var(--muted)}.crop-zoom input{flex:1}
 .ratio-lock{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;padding:0}.ratio-lock[aria-pressed=false]{color:var(--muted)}
+.field-guide{font-size:10px;color:var(--ink)}.field-guide summary{cursor:pointer;font-weight:600;color:#77718f;width:max-content}.field-guide summary:focus-visible{outline:2px solid var(--purple);outline-offset:1px}
+.field-guide ul{margin:8px 0 0;padding:10px 12px 10px 26px;display:flex;flex-direction:column;gap:6px;background:#f7f6fb;border-radius:8px;line-height:1.5}

@@ -65,7 +65,7 @@ function videoRuntimeFixture() {
         field('height', 'Custom height', 'int', { minimum: 256, maximum: 1344, default: 544, show_when: { resolution: 'custom' }, ratio_partner: 'width', ratio_role: 'height', shape_field: 'shape' }), ...common] },
       { key: 'frames', label: 'From pictures', help: 'Start from a picture, end on one, or both.', inputs: [
         field('first', 'First frame', 'files', { accept: ['image'], max_count: 1 }), field('last', 'Last frame', 'files', { accept: ['image'], max_count: 1 }),
-        field('prompt', 'What happens', 'textarea', { required: true, max_length: 3000 }),
+        field('prompt', 'What happens', 'textarea', { required: true, max_length: 3000, guide: ['Pauses: commas give short pauses.', 'Sounds: [laughter] a laugh.'] }),
         field('shape', 'Shape', 'choice', { options: ['match picture', 'landscape 16:9', 'portrait 9:16'], default: 'match picture' }),
         field('first_crop', 'First frame framing', 'crop', { target: 'first', shape_field: 'shape' }), ...common] },
     ] },
@@ -703,6 +703,10 @@ test('makes a video from pictures in its own tab, with one picture per end', asy
   await expect(panel.getByText('Not a picture this accepts.')).toBeVisible()
   await expect(panel.getByRole('button', { name: 'Make a video' })).toBeDisabled()
   await panel.getByRole('button', { name: 'Remove end.gif' }).click()
+  await expect(panel.getByText('commas give short pauses.')).toBeHidden()
+  await panel.getByText('Writing guide').click()
+  await expect(panel.getByText('commas give short pauses.')).toBeVisible()
+  await expect(panel.locator('.field-guide strong').first()).toHaveText('Pauses:')
   await panel.getByLabel(/^WHAT HAPPENS/).fill('She turns toward the window and smiles.')
   await page.screenshot({ path: 'test-results/screenshots/video-from-pictures.png', fullPage: true })
   await panel.getByRole('button', { name: 'Make a video' }).click()

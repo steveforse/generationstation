@@ -2,6 +2,8 @@
 from .basalt import BasaltPlugin
 from .base import RuntimePlugin
 from .minimax_h3 import MiniMaxH3Plugin
+from .omnivoice import OmniVoicePlugin
+from .qwen3_tts import Qwen3TTSPlugin
 from .qwen_image import QwenImagePlugin
 from .yue2 import YuE2Plugin
 
@@ -10,6 +12,8 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     YuE2Plugin(),
     QwenImagePlugin(),
     MiniMaxH3Plugin(),
+    OmniVoicePlugin(),
+    Qwen3TTSPlugin(),
 )}
 
 

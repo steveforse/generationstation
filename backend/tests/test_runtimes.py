@@ -37,7 +37,10 @@ def test_plugin_contract(kind):
     if plugin.generates:
         assert plugin.output_kind in {"audio", "image", "video"}
     for timing in plugin.timings:  # timings may only name modes and form choices that exist
-        specs = plugin.mode_inputs(timing.when.get("mode"))
+        if plugin.modes and "mode" not in timing.when:  # applies to every tab: check against all of them
+            specs = {key: spec for mode in plugin.modes.values() for key, spec in mode.inputs.items()}
+        else:
+            specs = plugin.mode_inputs(timing.when.get("mode"))
         assert specs is not None, (kind, timing.when)
         for key, value in timing.when.items():
             if key != "mode":

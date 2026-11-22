@@ -66,6 +66,10 @@ export type GenerateHandlers = {
 export const makeLabel: Record<string, string> = { audio: 'Make a song', image: 'Make a picture', video: 'Make a video' }
 const resultWord: Record<string, string> = { audio: 'song', image: 'picture', video: 'video' }
 const runningWord: Record<string, string> = { audio: 'Composing', image: 'Painting', video: 'Rendering' }
+/** The button, the word for one result, and the word for making one: the plugin's own, else its output kind's. */
+const labelOf = (generation: Generation) => generation.make_label ?? makeLabel[generation.output_kind] ?? 'Make something'
+const nounOf = (generation: Generation) => generation.result_noun ?? resultWord[generation.output_kind] ?? 'result'
+const makingOf = (generation: Generation) => generation.result_noun ? 'Working' : runningWord[generation.output_kind] ?? 'Working'
 
 /** "39 s", "2 min 25 s". */
 export function formatSeconds(seconds: number) {
@@ -105,7 +109,7 @@ export function GenerateForm({ runtime, generation, onGenerate, error, initial, 
 }) {
   const modes = generation.modes ?? []
   const [mode, setMode] = useState(() => modes.find((item) => item.key === initial?.mode)?.key ?? modes[0]?.key ?? '')
-  const label = makeLabel[generation.output_kind] ?? 'Make something'
+  const label = labelOf(generation)
   if (!modes.length) return <ModeForm runtime={runtime} generation={generation} fields={generation.inputs} onGenerate={onGenerate} error={error} initial={initial} ahead={ahead} upload={upload} label={label} />
   const current = modes.find((item) => item.key === mode) ?? modes[0]
   return <div className="generate-modes">
@@ -225,6 +229,9 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
         : field.kind === 'textarea' ? <textarea id={id} className="text-input generate-textarea" rows={10} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? undefined} value={value} onChange={(event) => set(event.target.value)} />
         : field.kind === 'choice' ? <select id={id} className="text-input" value={value} onChange={(event) => set(event.target.value)}>{field.options.map((option) => <option key={option} value={option}>{optionLabel(option, field.option_labels)}</option>)}</select>
           : <input id={id} className="text-input" type={field.kind === 'text' ? 'text' : 'number'} step={field.kind === 'text' ? undefined : 1} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? (field.kind === 'seed' ? 'Random' : undefined)} value={value} onChange={(event) => set(event.target.value)} />}
+      {field.guide && field.guide.length > 0 && <details className="field-guide"><summary>Writing guide</summary><ul>
+        {field.guide.map((tip) => { const [head, ...rest] = tip.split(': '); return <li key={tip}>{rest.length ? <><strong>{head}:</strong> {rest.join(': ')}</> : tip}</li> })}
+      </ul></details>}
       {field.ratio_role === 'width' && field.ratio_partner && <button type="button" className="text-button ratio-lock" aria-pressed={locked}
         onClick={() => setLocked(!locked)}>{locked ? <Lock size={12} /> : <Unlock size={12} />}{locked ? 'Locked to the shape’s proportions' : 'Proportions unlocked'}</button>}
       {shown && <small className="field-problem">{shown}</small>}
@@ -300,7 +307,7 @@ export function ResultsRail({ jobs, generation, selectedId, onSelect, fileUrl, o
   jobs: Job[]; generation: Generation; selectedId?: string; onSelect: (job: Job) => void; fileUrl: GenerateHandlers['fileUrl']
   onCancel: (job: Job) => Promise<string>
 }) {
-  const word = resultWord[generation.output_kind] ?? 'result'
+  const word = nounOf(generation)
   const modeLabel = (job: Job) => (generation.modes ?? []).length > 1 ? generation.modes?.find((item) => item.key === job.inputs.mode)?.label : undefined
   const choices = (job: Job) => fieldsFor(generation, job.inputs.mode).filter((field) => field.kind === 'choice' && !field.advanced)
   const places = queuePositions(jobs)
@@ -315,7 +322,7 @@ export function ResultsRail({ jobs, generation, selectedId, onSelect, fileUrl, o
     setProblems((current) => ({ ...current, [job.id]: problem }))
   }
   return <aside className="results-rail" aria-label={`Your ${word}s`}>
-    <div className="results-rail-head"><strong>Your {word}s</strong><span>{[working ? `${working} ${(runningWord[generation.output_kind] ?? 'in progress').toLowerCase()}` : '', waiting ? `${waiting} queued` : ''].filter(Boolean).join(' · ') || jobs.length}</span></div>
+    <div className="results-rail-head"><strong>Your {word}s</strong><span>{[working ? `${working} ${makingOf(generation).toLowerCase()}` : '', waiting ? `${waiting} queued` : ''].filter(Boolean).join(' · ') || jobs.length}</span></div>
     {jobs.length === 0 ? <p className="results-empty">Nothing yet. What you make appears here.</p>
       : <ul className="results-list">{jobs.map((job) => {
         const seconds = jobSeconds(job)
@@ -323,7 +330,7 @@ export function ResultsRail({ jobs, generation, selectedId, onSelect, fileUrl, o
           job.status === 'done' && seconds != null ? formatSeconds(seconds) : '', when(job.created_at)].filter(Boolean).join(' · ')
         const status = job.status === 'done' ? meta
           : job.status === 'queued' ? `Queued · ${ordinal(places[job.id] ?? 1)}`
-            : job.status === 'running' ? `${runningWord[generation.output_kind] ?? 'Working'} · ${job.progress ?? 'starting'}`
+            : job.status === 'running' ? `${makingOf(generation)} · ${job.progress ?? 'starting'}`
               : `${statusLabel(job)} · ${when(job.created_at)}`
         return <li key={job.id} className={`result-row ${job.id === selectedId ? 'result-item-on' : ''} row-${job.status}`}>
           <button type="button" className="result-item" aria-current={job.id === selectedId} onClick={() => onSelect(job)}>
@@ -410,7 +417,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     setDeleting(false)
     if (problem) { setError(problem); setConfirming(false) }
   }
-  return <article className="job-detail" aria-label={`${resultWord[generation.output_kind] ?? 'Result'}: ${title}`}>
+  return <article className="job-detail" aria-label={`${nounOf(generation)}: ${title}`}>
     <div className="job-head"><span className={`model-state state-${job.status === 'done' ? 'ready' : job.status === 'failed' ? 'error' : job.status === 'cancelled' ? 'unloaded' : 'loading'}`}>{statusLabel(job)}</span>
       <small>{when(job.created_at)}{job.status === 'done' && seconds != null ? ` · took ${formatSeconds(seconds)}` : ''}</small></div>
     {job.status === 'failed' && job.error_message && <small className="operation-error">{job.error_message}</small>}
@@ -426,7 +433,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
       {active(job) && <button type="button" className="button button-secondary job-delete" disabled={deleting || job.progress === 'Cancelling'}
         onClick={async () => { setDeleting(true); setError(await onCancel(job)); setDeleting(false) }}><X size={14} />{job.progress === 'Cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
       {!active(job)
-        ? confirming ? <span className="job-confirm"><span>Delete this {resultWord[generation.output_kind] ?? 'result'} and its files?</span>
+        ? confirming ? <span className="job-confirm"><span>Delete this {nounOf(generation)} and its files?</span>
             <button type="button" className="button button-danger" disabled={deleting} onClick={() => void remove()}><Trash2 size={14} />{deleting ? 'Deleting…' : 'Delete'}</button>
             <button type="button" className="button button-secondary" disabled={deleting} onClick={() => setConfirming(false)}>Keep</button></span>
           : <button type="button" className="button button-secondary job-delete" onClick={() => setConfirming(true)}><Trash2 size={14} />Delete</button>

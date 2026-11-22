@@ -67,6 +67,8 @@ class InputSpec(BaseModel):
     show_when: dict[str, str] = Field(default_factory=dict)
     # A width field locked to a height field (and the other way round) in the proportions of `shape_field`,
     # or of the picture in the mode's files fields for "match picture". Display only, like show_when.
+    # A longer how-to shown as a fold-out under the field: one tip per entry ("Heading: text").
+    guide: tuple[str, ...] = ()
     ratio_partner: str | None = None
     ratio_role: Literal["width", "height"] | None = None
 
@@ -171,6 +173,9 @@ class RuntimePlugin:
     inputs: ClassVar[dict[str, InputSpec]] = {}
     modes: ClassVar[dict[str, ModeSpec]] = {}
     output_kind: ClassVar[str | None] = None  # "audio", "image" or "video"
+    # The button and the word for one result, when the output kind's own ("Make a song", "song") do not fit.
+    make_label: ClassVar[str | None] = None
+    result_noun: ClassVar[str | None] = None
     timings: ClassVar[tuple[TimingSpec, ...]] = ()  # measured times per setting, for the form
 
     @property

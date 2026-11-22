@@ -26,10 +26,11 @@ def worker():
 def test_form_defaults_and_refusals():
     values = validate_inputs(H3, {"prompt": "  a fox in the snow  "})
     assert values == {"mode": "text", "prompt": "a fox in the snow", "shape": "landscape 16:9", "resolution": "540p",
-                      "quality": "turbo", "style": "none"}
+                      "length": "5", "quality": "turbo", "style": "none"}
     for inputs, message in [
         ({"sounds": "wind"}, "Description is required"),
-        ({"prompt": "x", "length": "10"}, "not an input"),
+        ({"prompt": "x", "length": "20"}, "must be one of"),
+        ({"prompt": "x", "length": "10", "resolution": "720p"}, "limited to smaller sizes"),
         ({"prompt": "x", "shape": "1920x1080"}, "must be one of"),
         ({"prompt": "x" * 3001}, "too long"),
         ({"prompt": "x", "text_encoder_dir": "C:/evil"}, "not an input"),
@@ -257,12 +258,14 @@ def test_custom_size_shows_only_for_custom_and_choices_run_high_to_low():
     fields = H3.modes["text"].inputs
     assert fields["width"].show_when == {"resolution": "custom"} and not fields["width"].advanced
     assert list(fields)[list(fields).index("resolution") + 1:][:2] == ["width", "height"]
-    assert fields["resolution"].options[:6] == ("1080p (upscaled)", "720p", "540p", "480p", "360p", "240p")
+    assert fields["resolution"].options[:7] == ("1080p (AI upscale)", "1080p (fast resize)", "720p", "540p", "480p",
+                                               "360p", "240p")
     assert fields["quality"].options == ("extreme", "high", "standard", "turbo") and fields["quality"].default == "turbo"
 
 
 def test_1080p_renders_at_720p_then_resizes_to_exact_proportions(worker):
-    inputs = {"resolution": "1080p (upscaled)", "shape": "landscape 16:9"}
+    inputs = {"resolution": "1080p (fast resize)", "shape": "landscape 16:9"}
+    assert worker.canvas_size({**inputs, "resolution": "1080p (upscaled)"}) == (1248, 704)  # older jobs' name
     assert worker.canvas_size(inputs) == (1248, 704)
     assert worker.output_size(inputs) == (1920, 1080)
     assert worker.output_size({**inputs, "shape": "portrait 9:16"}) == (1080, 1920)
@@ -287,3 +290,26 @@ def test_custom_size_is_kept_only_with_resolution_custom():
     custom = validate_inputs(H3, {"prompt": "x", "resolution": "custom", "width": 640, "height": 360})
     assert (custom["width"], custom["height"]) == (640, 360)
     assert validate_inputs(H3, {"prompt": "x", "resolution": "custom"})["width"] == 960  # the starting size
+
+
+def test_ai_upscale_renders_540p_and_asks_flashvsr_for_128_multiples_in_proportion(worker):
+    inputs = {"resolution": "1080p (AI upscale)", "shape": "landscape 16:9"}
+    assert worker.canvas_size(inputs) == (960, 544) and worker.output_size(inputs) == (1920, 1080)
+    assert worker.flashvsr_size(1920, 1080) == (2048, 1152)
+    assert worker.flashvsr_size(1080, 1920) == (1152, 2048)
+    assert worker.flashvsr_size(1080, 1080) == (1152, 1152)
+    for w, h in ((1080, 1350), (1440, 1080)):
+        bw, bh = worker.flashvsr_size(w, h)
+        assert bw % 128 == 0 and bh % 128 == 0 and bw >= w and bh >= h and abs(bw / bh - w / h) < 0.03 * w / h
+
+
+def test_longer_clips_fit_only_at_smaller_sizes():
+    ok = [{"length": "10", "resolution": "540p"}, {"length": "10", "resolution": "1080p (AI upscale)"},
+          {"length": "15", "resolution": "480p"}, {"length": "5", "resolution": "720p"}]
+    bad = [{"length": "10", "resolution": "720p"}, {"length": "15", "resolution": "540p"},
+           {"length": "10", "resolution": "1080p (fast resize)"}]
+    for extra in ok:
+        assert validate_inputs(H3, {"prompt": "x", **extra})["length"] == extra["length"]
+    for extra in bad:
+        with pytest.raises(SettingsError, match="limited to smaller sizes"):
+            validate_inputs(H3, {"prompt": "x", **extra})

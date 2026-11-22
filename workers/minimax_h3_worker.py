@@ -14,7 +14,7 @@ Inputs: mode ("text" | "frames"), prompt, sounds, music, style ("none" | "cinema
     first / last (frames mode: [{"path", ...}] uploaded pictures the clip starts from / ends on),
     shape ("landscape 16:9" | "portrait 9:16" | "square 1:1" | "portrait 4:5" | "classic 4:3", and
     "match picture" with pictures), resolution ("240p" ... "720p", "1080p" = 720p resized | "custom" with width, height),
-    first_crop / last_crop ("x,y,w,h" framing), length (seconds, "5"), quality ("turbo" | "standard" | "high" | "extreme"), seed.
+    first_crop / last_crop ("x,y,w,h" framing), length (seconds, "5" | "10" | "15"), quality ("turbo" | "standard" | "high" | "extreme"), seed.
 
 Needs an RTX 50-series card: the transformer runs as real 4-bit maths (torchao NVFP4).
 The text encoder stays in system RAM and runs on the processor (about 2 s per prompt).
@@ -37,14 +37,20 @@ STEPS = {"turbo": 4, "standard": 20, "high": 30, "extreme": 50}
 QUALITY_ALIASES = {"quick": "turbo", "best": "standard"}  # jobs saved before the four levels
 TEXT_LAYERS = 50  # H3 conditions on the hidden state after decoder layer 50, before the final norm
 # Short edge per resolution, a multiple of 32 as H3 needs (so "720p" is 704 and "360p" 352).
-SHORT_EDGE = {"240p": 256, "360p": 352, "480p": 480, "540p": 544, "720p": 704, "1080p (upscaled)": 704}
-# Resolutions rendered smaller and resized afterwards (1080p does not fit on the card): their final short edge.
-UPSCALED = {"1080p (upscaled)": 1080}
+SHORT_EDGE = {"240p": 256, "360p": 352, "480p": 480, "540p": 544, "720p": 704,
+              "1080p (fast resize)": 704, "1080p (AI upscale)": 544}
+# Resolutions rendered smaller and enlarged afterwards (1080p does not fit on the card): their final short edge.
+# "fast resize" renders at 720p and resizes (Lanczos); "AI upscale" renders at 540p and runs FlashVSR+.
+UPSCALED = {"1080p (fast resize)": 1080, "1080p (AI upscale)": 1080}
+RESOLUTION_ALIASES = {"1080p (upscaled)": "1080p (fast resize)"}  # jobs saved before the AI upscale existed
 MAX_PIXELS = 1280 * 720  # measured to fit on the RTX 5090 for 5 s; H3's own canvas limit is 768 x 1344
 SHAPE_ALIASES = {"landscape": "landscape 16:9", "portrait": "portrait 9:16", "square": "square 1:1"}  # older jobs
 # H3 takes 17n + 5 frames: 5.2 s and 10.1 s at 24 fps. The plugin offers only 5 s: on the RTX 5090 a
 # 10 s clip peaked at 29.7 GiB, more than admission allows the card (2026-11-21).
-LENGTHS = {"5": 124, "10": 243}
+LENGTHS = {"5": 124, "10": 243, "15": 345}  # 17n+5 frames at 24 fps; H3 takes at most 360
+# Above this many video pixels per clip (frames x width x height) the decoder and transformer take turns on the
+# card (see _take_turns): a 5 s 720p clip is about 109 million, a 10 s 540p clip about 127 million.
+TAKE_TURNS_ABOVE = 100_000_000
 STYLES = {"none": "", "cinematic": "Live-action, cinematic, ", "handheld": "Live-action, handheld, ",
           "animated": "3D animation, stylized, "}
 STYLE_ALIASES = {"as written": "none"}  # jobs saved before the rename
@@ -624,9 +630,14 @@ def _ratio(inputs, anchor=None):
     return w / h
 
 
+def _resolution(inputs):
+    value = inputs.get("resolution") or "540p"
+    return RESOLUTION_ALIASES.get(value, value)
+
+
 def output_size(inputs, anchor=None):
     """The final frame size for upscaled resolutions (even numbers, the shape's exact proportions), or None."""
-    short = UPSCALED.get(inputs.get("resolution"))
+    short = UPSCALED.get(_resolution(inputs))
     if short is None:
         return None
     ratio = _ratio(inputs, anchor)
@@ -640,7 +651,7 @@ def canvas_size(inputs, anchor=None):
     The resolution is the short edge; 'match picture' takes the proportions of `anchor`. The pixel count
     is kept within what fits on the card, shrinking both edges together when needed.
     """
-    resolution = inputs.get("resolution") or "540p"
+    resolution = _resolution(inputs)
     if resolution == "custom":
         width, height = _round32(inputs["width"]), _round32(inputs["height"])
     else:
@@ -678,6 +689,48 @@ def _cover(image, width, height):
     keep = round(image.width / target)
     top = (image.height - keep) // 2
     return image.crop((0, top, image.width, top + keep))
+
+
+def _take_turns(model):
+    """For large clips: the video decoder (about 10 GB) waits in system RAM while the transformer denoises, and
+    the transformer waits there while the decoder decodes, so their working memory never adds up. Each move
+    takes one to two seconds. Returns a function that restores both to the card."""
+    torch, transformer = model["torch"], model["transformer"]
+    vae = model["shared"]["vae"]
+    vae.to("cuda")  # pictures and references are encoded before the first step
+    for pipe in model["pipes"].values():
+        # The pipeline takes its working device from the first component with weights (the transformer); with
+        # the transformer in system RAM the audio decode would build its tensors there. Only these pipelines
+        # are pinned to the card: the prompt readers share their class and must stay on the processor.
+        if not getattr(pipe, "_pinned_to_card", False):
+            pipe.__class__ = type("CardPinned" + type(pipe).__name__, (type(pipe),),
+                                  {"_execution_device": property(lambda self: torch.device("cuda", 0)),
+                                   "_pinned_to_card": True})
+
+    def park_decoder(module, args):
+        vae.to("cpu")
+        torch.cuda.empty_cache()
+        handle.remove()
+
+    handle = transformer.register_forward_pre_hook(park_decoder)
+    original = vae.decode
+
+    def decode(*args, **kwargs):
+        transformer.to("cpu")
+        torch.cuda.empty_cache()
+        vae.to("cuda")
+        return original(*args, **kwargs)
+
+    vae.decode = decode
+
+    def restore():
+        handle.remove()
+        vae.decode = original
+        vae.to("cuda")
+        transformer.to("cuda")
+        torch.cuda.empty_cache()
+
+    return restore
 
 
 def render(model, inputs, on_step=None):
@@ -745,6 +798,7 @@ def render(model, inputs, on_step=None):
     print(f"[worker] prompt read on the processor in {time.perf_counter() - reading:.1f} s "
           f"({embeds.shape[1]} tokens)", flush=True)
     hook = None
+    turns = _take_turns(model) if frames * width * height > TAKE_TURNS_ABOVE else None
     if on_step:
         done = [0]
 
@@ -761,10 +815,13 @@ def render(model, inputs, on_step=None):
     finally:
         if hook:
             hook.remove()
+        if turns:
+            turns()
     details = {"seed": seed, "steps": steps, "quality": quality, "width": width, "height": height,
                "frames": frames, "mode": mode, "prompt": prompt}
     if final:
-        details.update(rendered_width=width, rendered_height=height, width=final[0], height=final[1], upscaled="lanczos")
+        how = "flashvsr" if _resolution(inputs) == "1080p (AI upscale)" else "lanczos"
+        details.update(rendered_width=width, rendered_height=height, width=final[0], height=final[1], upscaled=how)
     if workflow == "ref2va":
         details.update(reference_detail=detail, reference_picture_edge=edge, reference_video_edge=video_edge)
     return result["videos"][0], result["audio"][0], result["sampling_rate"], details
@@ -810,6 +867,61 @@ def generate(model, inputs, job):
         torch.cuda.empty_cache()  # hand cached working memory back between clips, also after a cancel
 
 
+def _flashvsr(model, video, audio, rate, details, job, encode_video):
+    """Enlarge the clip with FlashVSR+ (its own environment, run as a separate process on this card).
+
+    H3's transformer waits in system RAM meanwhile (about 2 s each way), leaving the card to FlashVSR+.
+    FlashVSR+ needs sides divisible by 128, so it makes the next size up in the clip's proportions and the
+    result is scaled down (Lanczos) to the exact final size. Returns the final frames.
+    """
+    import subprocess
+    import tempfile
+
+    import av
+
+    options, torch = model["options"], model["torch"]
+    width, height = details["width"], details["height"]
+    big_w, big_h = flashvsr_size(width, height)
+    with tempfile.TemporaryDirectory(prefix="h3-flashvsr-") as scratch:
+        source, enlarged = os.path.join(scratch, "in.mp4"), os.path.join(scratch, "out.mp4")
+        encode_video(video, fps=FPS, output_path=source, audio=audio, audio_sample_rate=rate)
+        model["transformer"].to("cpu")
+        torch.cuda.empty_cache()
+        try:
+            env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
+            command = [options["flashvsr_python"], "-m", "inference.run_stream", "--input", source, "--output", enlarged,
+                       "--height", str(big_h), "--width", str(big_w), "--mode", options.get("flashvsr_mode", "base"),
+                       "--attn-kernel", "triton_block_sparse"]
+            process = subprocess.Popen(command, cwd=options["flashvsr_dir"], env=env, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+            begun = time.perf_counter()
+            while process.poll() is None:
+                try:
+                    job.report(f"Upscaling to 1080p with FlashVSR+ ({time.perf_counter() - begun:.0f} s)")
+                except BaseException:
+                    process.kill()  # a cancel: stop the upscale too
+                    raise
+                time.sleep(1)
+            if process.returncode != 0:
+                tail = (process.stderr.read() or "")[-800:]
+                raise RuntimeError(f"FlashVSR+ failed (exit {process.returncode}): {tail}")
+        finally:
+            model["transformer"].to("cuda")
+        job.report("Finishing the 1080p picture")
+        with av.open(enlarged) as container:
+            frames = [frame.to_image() for frame in container.decode(video=0)]
+    return _resize_frames([_cover(frame, width, height) for frame in frames], width, height)
+
+
+def flashvsr_size(width, height):
+    """The size FlashVSR+ makes for a final width x height: sides divisible by 128, short side rounded up, the long
+    side as close to the final proportions as 128-pixel steps allow (2048 x 1152 for 1920 x 1080)."""
+    short, long = min(width, height), max(width, height)
+    big_short = -(-short // 128) * 128
+    big_long = max(big_short, round(big_short * long / short / 128) * 128)
+    return (big_long, big_short) if width >= height else (big_short, big_long)
+
+
 def _make_clip(model, inputs, job, started, encode_video):
     torch = model["torch"]
     def step(done, total):
@@ -817,8 +929,10 @@ def _make_clip(model, inputs, job, started, encode_video):
     video, audio, rate, details = render(model, inputs, step)
     job.report("Developing the picture and sound")
     path = job.output(f"video-{details['seed']}.mp4", "video/mp4")
-    if details.get("upscaled"):
-        job.report("Upscaling to 1080p")
+    if details.get("upscaled") == "flashvsr":
+        video = _flashvsr(model, video, audio, rate, details, job, encode_video)
+    elif details.get("upscaled"):
+        job.report("Resizing to 1080p")
         video = _resize_frames(video, details["width"], details["height"])
     encode_video(video, fps=FPS, output_path=str(path), audio=audio, audio_sample_rate=rate)
     job.detail(**details, fps=FPS, clip_seconds=round(details["frames"] / FPS, 1))
