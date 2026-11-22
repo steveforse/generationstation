@@ -6,6 +6,7 @@ import { estimateFit, GpuCard, modelColor, modelUsage, type Preview, ramSegments
 import { fieldsFor, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
 import type { FileItem } from '../components/FilePicker'
 import type { SavedHost } from '../hosts'
+import { handOff, soundtrackToWav, spokenLine, takeHandOff, voiceTargets } from '../voiceSample'
 import { href } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
 import type { JobFile, Operation, Runtime, RuntimeEstimate } from '../types'
@@ -71,7 +72,8 @@ export function ServicePage({ store, host, modelId }: { store: HostStore; host?:
   // The result open in the modal, picked in the sidebar.
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // "Use these settings" refills the form by remounting it with that result's inputs.
-  const [reuse, setReuse] = useState<{ n: number; start?: FormStart }>({ n: 0 })
+  // A voice sample sent from another model's result arrives as this page's first form start.
+  const [reuse, setReuse] = useState<{ n: number; start?: FormStart }>(() => ({ n: 0, start: host ? takeHandOff(host.id, modelId) : undefined }))
   if (!host || !session) return <Missing title="Host not found" text="This host is no longer saved on this device." />
   const runtime = state.runtimes?.find((item) => item.id === modelId)
   const model = state.models?.find((item) => item.id === modelId)
@@ -118,7 +120,20 @@ export function ServicePage({ store, host, modelId }: { store: HostStore; host?:
           setSelectedId(null); window.scrollTo({ top: 0, behavior: 'smooth' })
         }}
         onDelete={async (job) => { const problem = await session.deleteJob(job); if (!problem) setSelectedId(null); return problem }}
-        onCancel={(job) => session.cancelJob(job)} />}
+        onCancel={(job) => session.cancelJob(job)}
+        voiceTargets={voiceTargets(state.runtimes, state.models).filter((target) => target.runtime.id !== modelId)}
+        onUseVoice={async (job, url, target) => {
+          try {
+            const wav = await soundtrackToWav(await (await fetch(url)).blob())
+            const name = `voice-${job.id.slice(0, 8)}.wav`
+            const record = await session.uploadFile(new File([wav], name, { type: 'audio/wav' }))
+            const sample: FileItem = { key: `voice-${job.id}`, name, kind: 'audio', url: URL.createObjectURL(wav), status: 'ready', id: record.id }
+            const line = spokenLine(job.inputs.prompt)
+            handOff(host.id, target.runtime.id, { mode: target.mode, inputs: { mode: target.mode, ...(target.textKey && line ? { [target.textKey]: line } : {}) }, files: { [target.sampleKey]: [sample] } })
+            window.location.hash = href({ page: 'service', hostId: host.id, modelId: target.runtime.id })
+            return ''
+          } catch (reason) { return reason instanceof Error ? reason.message : 'The sound could not be taken from this clip.' }
+        }} />}
     </JobModal>
     </div>}
     {state.runtimes && !runtime && <Missing title="Service not found" text="This host does not list this service any more." />}

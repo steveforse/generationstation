@@ -72,6 +72,33 @@ function videoRuntimeFixture() {
   }
 }
 
+function speechRuntimeFixture() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const text = field('prompt', 'What to say', 'textarea', { required: true, max_length: 5000 })
+  return {
+    id: 'omnivoice', kind: 'omnivoice', plugin: 'OmniVoice', name: 'OmniVoice speech', description: 'Speaks text.', workload: 'speech', port: 8200, default_preset: 'omnivoice', last_launch: { preset: 'omnivoice', settings: {}, gpus: [1] }, max_gpus: 1,
+    presets: { omnivoice: { name: 'OmniVoice', gpus: [1], allowed_gpus: [{ index: 1, name: 'Second GPU' }], estimate: { ram_gib: 6, gpu_min_free_gib: { 1: 5 } }, settings: [] } },
+    generation: { output_kind: 'audio', inputs: [], make_label: 'Make speech', result_noun: 'recording', timings: [], modes: [
+      { key: 'design', label: 'Describe a voice', help: 'Choose traits.', inputs: [field('gender', 'Gender', 'choice', { options: ['any', 'female', 'male'], default: 'any' }), text] },
+      { key: 'clone', label: 'From a voice sample', help: 'Give a sample.', inputs: [field('sample', 'Voice sample', 'files', { accept: ['audio'], max_count: 1 }),
+        field('sample_text', 'What the sample says', 'text', { max_length: 1000 }), text] },
+    ] },
+  }
+}
+
+/** Half a second of a 220 Hz tone as a WAV: a stand-in for a clip's soundtrack (the browser decodes by content). */
+function toneWav() {
+  const rate = 24000, count = rate / 2
+  const buffer = Buffer.alloc(44 + count * 2)
+  buffer.write('RIFF', 0); buffer.writeUInt32LE(36 + count * 2, 4); buffer.write('WAVE', 8); buffer.write('fmt ', 12)
+  buffer.writeUInt32LE(16, 16); buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22); buffer.writeUInt32LE(rate, 24)
+  buffer.writeUInt32LE(rate * 2, 28); buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34); buffer.write('data', 36); buffer.writeUInt32LE(count * 2, 40)
+  for (let index = 0; index < count; index++) buffer.writeInt16LE(Math.round(Math.sin(2 * Math.PI * 220 * index / rate) * 12000), 44 + index * 2)
+  return buffer
+}
+
 function songRuntimeFixture() {
   const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
     key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
@@ -88,7 +115,7 @@ function songRuntimeFixture() {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean } = {}) {
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -98,7 +125,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [runtimeFixture()] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : [])] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [runtimeFixture()] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : [])] } }))
   await page.route('**/api/runtimes/*/estimate', (route) => {
     const body = route.request().postDataJSON() as { preset: string; settings: Record<string, unknown>; gpus: number[] }
     const runtime = route.request().url().includes('/runtimes/basalt/') ? runtimeFixture() : songRuntimeFixture()
@@ -112,15 +139,21 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
     } })
   })
   if (options.videos) models.push({ id: 'minimax_h3', name: 'MiniMax H3 videos', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
-  const uploads: Array<{ name: string; type: string }> = []
+  if (options.speech) models.push({ id: 'omnivoice', name: 'OmniVoice speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  const uploads: Array<{ name: string; type: string; head?: string }> = []
   await page.route('**/api/uploads?name=*', async (route) => {
     const name = new URL(route.request().url()).searchParams.get('name') ?? ''
     if (name.endsWith('.gif')) { await route.fulfill({ status: 422, json: { detail: 'That type of file is not accepted.' } }); return }
-    uploads.push({ name, type: route.request().headers()['content-type'] })
+    uploads.push({ name, type: route.request().headers()['content-type'], head: route.request().postDataBuffer()?.subarray(0, 12).toString('latin1') })
     await route.fulfill({ status: 201, json: { id: `${uploads.length}`.padStart(32, 'a'), name, kind: 'image', mime: 'image/png', bytes: 8 } })
   })
   if (options.songs) models.push({ id: 'yue2', name: 'YuE2 songs', workload: 'music', state: options.songState ?? 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   const jobs: Array<Record<string, unknown>> = []
+  if (options.voiceClip) jobs.push({ id: 'job-00000099', model_id: 'minimax_h3', status: 'done', progress: 'Done in 39 s, seed 5', error_message: null,
+    inputs: { mode: 'text', prompt: 'A woman with a soft Welsh accent sits in a kitchen. She says: "Come in and get warm."', quality: 'quick' },
+    outputs: [{ name: 'video-1.mp4', mime: 'video/mp4', bytes: 24044 }], created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:00:39Z',
+    details: { seed: 5, seconds: 39 }, launch: { preset: 'uncensored', settings: {}, gpus: [0] } })
+  await page.route('**/api/jobs/*/files/video-1.mp4', (route) => route.fulfill({ status: 200, contentType: 'video/mp4', body: toneWav() }))
   let jobBody: Record<string, unknown> | null = null
   let nextJob = 1
   // One job at a time, like a worker: each poll moves the queue along (queued -> running -> done after 3 polls).
@@ -284,7 +317,7 @@ async function signIn(page: Page, value = token, address?: string) {
   await page.getByRole('button', { name: 'Save and connect' }).click()
 }
 
-async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean } = {}) {
+async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean } = {}) {
   await installSseMock(page)
   const api = await installM2Api(page, options)
   const host = fixtureHost(label, stale)
@@ -712,9 +745,24 @@ test('makes a video from pictures in its own tab, with one picture per end', asy
   await panel.getByRole('button', { name: 'Make a video' }).click()
   await expect.poll(() => api.jobBody).not.toBeNull()
   expect(api.jobBody).toEqual({ inputs: { mode: 'frames', first: ['a'.repeat(31) + '1'], prompt: 'She turns toward the window and smiles.', shape: 'match picture', quality: 'quick' } })
-  expect(api.uploads).toEqual([{ name: 'start.png', type: 'image/png' }])
+  expect(api.uploads.map(({ name, type }) => ({ name, type }))).toEqual([{ name: 'start.png', type: 'image/png' }])
   await tabs.getByRole('tab', { name: 'From a description' }).click()
   await expect(page.getByRole('tabpanel', { name: 'From a description' }).getByLabel(/^DESCRIPTION/)).toHaveValue('kept while I switch tabs')
+})
+
+test('sends a clip\'s voice to a speech model as its sample, with the spoken line as the transcript', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { videos: true, speech: true, voiceClip: true })
+  await go(page, '#/hosts/local/services/minimax_h3')
+  await page.getByRole('complementary').getByRole('button', { name: /^A woman with a soft Welsh accent/ }).click()
+  const detail = page.getByRole('dialog').getByRole('article')
+  await detail.getByRole('button', { name: 'Use voice in OmniVoice speech' }).click()
+  await expect(page).toHaveURL(/#\/hosts\/local\/services\/omnivoice$/)
+  await expect(page.getByRole('tab', { name: 'From a voice sample' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('button', { name: 'Remove voice-job-0000.wav' })).toBeVisible()
+  await expect(page.getByLabel(/^WHAT THE SAMPLE SAYS/)).toHaveValue('Come in and get warm.')
+  expect(api.uploads.at(-1)).toMatchObject({ name: 'voice-job-0000.wav', type: 'audio/wav' })
+  expect(api.uploads.at(-1)?.head).toMatch(/^RIFF.{4}WAVE$/s)
+  await page.screenshot({ path: 'test-results/screenshots/voice-sample-handoff.png', fullPage: true })
 })
 
 test('frames a wide picture for a portrait clip on a preview: drag, keys and zoom', async ({ page }) => {
