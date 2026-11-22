@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, ArrowUpRight, Ban, Check, ChevronDown, Clock, Download, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, Music, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
+import { AlertCircle, ArrowUpRight, Ban, Check, ChevronDown, Clock, Download, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
 import { formatBytes } from '../api'
 import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeSetting, SettingValue, UploadRecord } from '../types'
 import { FilePicker, type FileItem } from './FilePicker'
@@ -7,6 +7,7 @@ import { CropEditor, shapeAspect } from './CropEditor'
 import { estimateFit } from './Resources'
 import { WorkloadIcon } from './WorkloadIcon'
 import { RefusalDetails } from './Refusal'
+import type { VoiceTarget } from '../voiceSample'
 
 /**
  * How a dropdown option reads: the plugin's own name for it, else the value with a capital first letter.
@@ -367,10 +368,13 @@ function InputThumb({ job, file, inputUrl }: { job: Job; file: JobFile; inputUrl
   </a>
 }
 
-export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel }: {
+export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, voiceTargets = [], onUseVoice }: {
   job: Job; runtime: Runtime; generation: Generation; fileUrl: GenerateHandlers['fileUrl']; inputUrl: GenerateHandlers['inputUrl']
   onReuse: (job: Job) => void | Promise<void>; onDelete: (job: Job) => Promise<string>; onCancel: (job: Job) => Promise<string>
+  /** Speech models that can clone a voice; a finished clip's soundtrack can be sent to one as its voice sample. */
+  voiceTargets?: VoiceTarget[]; onUseVoice?: (job: Job, url: string, target: VoiceTarget) => Promise<string>
 }) {
+  const [voiceBusy, setVoiceBusy] = useState('')
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [confirming, setConfirming] = useState(false)
@@ -429,6 +433,11 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     </div>)}
     <div className="job-actions">
       <button type="button" className="button button-secondary" onClick={() => void onReuse(job)}><RotateCcw size={14} />Use these settings</button>
+      {job.status === 'done' && onUseVoice && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).flatMap((output) => voiceTargets.map((target) =>
+        <button key={target.runtime.id} type="button" className="button button-secondary" disabled={!urls[output.name] || !!voiceBusy}
+          title={`Send this clip's sound to ${target.runtime.name} as the voice to speak in${target.ready ? '' : ` (${target.runtime.name} is not running: start it on the Models page)`}`}
+          onClick={async () => { setVoiceBusy(target.runtime.id); setError(''); const problem = await onUseVoice(job, urls[output.name], target); setVoiceBusy(''); if (problem) setError(problem) }}>
+          {voiceBusy === target.runtime.id ? <Loader2 size={14} className="spin" /> : <MessageCircleMore size={14} />}Use voice in {target.runtime.name}</button>))}
       {[...media, ...others].map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={14} />{output.name}</a>)}
       {active(job) && <button type="button" className="button button-secondary job-delete" disabled={deleting || job.progress === 'Cancelling'}
         onClick={async () => { setDeleting(true); setError(await onCancel(job)); setDeleting(false) }}><X size={14} />{job.progress === 'Cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
