@@ -35,7 +35,7 @@ GPU indices are NVML/`nvidia-smi` order. Plugins that start CUDA programs should
 
 ## Generation plugins (workers)
 
-Media models (YuE2 music, Qwen Image pictures, MiniMax H3 video) have no server of their own. Each gets a small worker in `workers/`, run with the python of the model's **own environment** (`python` in `runtimes.json`), so model dependencies never mix with Generation Station's or with each other's.
+Media models (YuE2 music, Qwen Image pictures, MiniMax H3 video, OmniVoice and Qwen3-TTS speech) have no server of their own. Each gets a small worker in `workers/`, run with the python of the model's **own environment** (`python` in `runtimes.json`), so model dependencies never mix with Generation Station's or with each other's.
 
 `workers/gs_worker.py` is the shared, standard-library-only worker server. A worker module only supplies `load(config)` and `generate(model, inputs, job)`; see `workers/yue2_worker.py`. The protocol, on 127.0.0.1 only:
 
@@ -54,7 +54,7 @@ A generation plugin subclasses `WorkerPlugin` (`plugins/worker.py`) and sets:
 - `inputs`: the generation form, as `InputSpec`s (text, textarea, int, choice, seed; required, bounds, max length, placeholder, help, and `advanced` to tuck a field under "More options"). The core validates every request against it and refuses unknown fields; the browser builds the form from it, so a new model needs no frontend code.
 - `modes` (instead of `inputs`, when a model has several ways of making something): `ModeSpec`s with a label, a one-line help and their own `inputs`. The browser shows one tab per mode; the request carries `"mode"` and only that mode's fields are accepted. `check_inputs(mode, values, files)` adds rules across fields (MiniMax H3's pictures mode needs a first frame, a last frame or both).
 - File fields: an `InputSpec` of kind `files` with `accept` (`image`, `video`, `audio`) and `max_count`. The browser shows a picker with previews and drag-and-drop and uploads each file at once (`POST /api/uploads?name=...`, the raw file as the body; the type is checked by content, at most 25 MB for a picture, 300 MB for a video, 60 MB for audio; unused uploads go after a day). The request lists upload IDs; when the job is created the files are copied into `<output_dir>/<job_id>/inputs/`, the stored inputs name those copies (`GET /api/jobs/{id}/inputs/{name}` serves them), and the worker receives `[{"name", "kind", "mime", "original", "path"}]`.
-- `output_kind`: `audio`, `image` or `video`, which chooses the button ("Make a song") and the player.
+- `output_kind`: `audio`, `image` or `video`, which chooses the button ("Make a song") and the player. `make_label` and `result_noun` override the button and the word for one result when the kind's own do not fit (OmniVoice: "Make speech", "recording").
 - `max_gpus`: 1 for single-card models; the UI then offers a single choice.
 - `timings`: measured times as `TimingSpec`s (`seconds`, optional `first_seconds` for the first result after a start, and the `when` form choices, `preset` and `gpu` they apply to). The form shows the first one that matches the current choices and the card the model runs on. Record only measured times.
 

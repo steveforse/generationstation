@@ -44,12 +44,14 @@ FRAMES_SHAPE = InputSpec(
     help="'match picture' keeps the picture's own proportions (the first frame's when there are two). Another "
          "shape crops the picture: choose the framing on the preview.")
 RESOLUTION = InputSpec(
-    label="Resolution", kind="choice", options=("1080p (upscaled)", "720p", "540p", "480p", "360p", "240p", "custom"),
+    label="Resolution", kind="choice",
+    options=("1080p (AI upscale)", "1080p (fast resize)", "720p", "540p", "480p", "360p", "240p", "custom"),
     default="540p",
-    help="The height of a landscape clip (the width of a portrait one). Lower is much faster: at turbo quality "
-         "a 5 s clip takes about 90 s at 720p, 40 s at 540p, 30 s at 480p, 12 s at 360p and 6 s at 240p. "
-         "1080p does not fit on the card: it is made at 720p and resized to 1080p (sharp, but no more detail "
-         "than 720p). 'custom' lets you type a width and height.")
+    help="The height of a landscape clip (the width of a portrait one). At Low (Fast) quality a 5 s clip takes "
+         "about 6 s at 240p, 12 s at 360p, 30 s at 480p, 40 s at 540p and 90 s at 720p. 1080p does not fit on the "
+         "card, so it is made smaller and enlarged: 'AI upscale' makes 540p and adds real detail with FlashVSR+ "
+         "(about 45 s more; finest texture, may shimmer slightly on fast camera moves); 'fast resize' makes 720p "
+         "and resizes it (about 4 s more; sharp but no added detail). 'Custom' lets you type a width and height.")
 WIDTH = InputSpec(
     label="Custom width", kind="int", minimum=256, maximum=1344, default=960, show_when={"resolution": "custom"},
     ratio_partner="height", ratio_role="width", shape_field="shape",
@@ -61,6 +63,29 @@ HEIGHT = InputSpec(
     help="Pixels. Locked to the shape's proportions like the width (unlock with the padlock). Rounded to a "
          "multiple of 32.")
 MAX_PIXELS = 1280 * 720
+LENGTH = InputSpec(
+    label="Length", kind="choice", options=("5", "10", "15"), default="5",
+    option_labels={"5": "5 seconds", "10": "10 seconds", "15": "14.4 seconds (longest)"},
+    help="Longer clips take more than proportionally longer and need more of the card, so they are limited to "
+         "smaller sizes: 10 seconds up to 540p, 15 seconds up to 480p. A 10 s clip takes about 2.5 times as long "
+         "as a 5 s one.")
+FRAMES = {"5": 124, "10": 243, "15": 345}
+# Largest frames x pixels allowed for longer clips (15 s at 480p; 10 s at 540p is smaller), with the decoder and
+# transformer taking turns on the RTX 5090.
+MAX_FRAME_PIXELS = 345 * 864 * 480
+SHORT_EDGES = {"240p": 256, "360p": 352, "480p": 480, "540p": 544, "720p": 704, "1080p (fast resize)": 704,
+               "1080p (AI upscale)": 544}
+
+
+def _render_pixels(values):
+    """Approximately the pixels H3 renders per frame (the worker's canvas_size; pictures taken as 16:9)."""
+    if values.get("resolution") == "custom":
+        return (values.get("width") or 960) * (values.get("height") or 544)
+    short = SHORT_EDGES.get(values.get("resolution") or "540p", 544)
+    shape = values.get("shape") or "landscape 16:9"
+    w, h = (16, 9) if shape == "match picture" else tuple(int(x) for x in shape.split()[-1].split(":"))
+    ratio = max(w, h) / min(w, h)
+    return short * round(short * ratio / 32) * 32
 COMMON = {
     "sounds": InputSpec(
         label="Sounds", kind="text", max_length=500, placeholder="Crunching snow, wind in the pines, distant birds",
@@ -91,6 +116,7 @@ def _fields(prompt, shape, style=COMMON["style"], quality=COMMON["quality"], sha
     fields. With pictures, shape and resolution come first, next to the pictures they frame."""
     size = {"shape": shape, "resolution": RESOLUTION, "width": WIDTH, "height": HEIGHT}
     rest = {"prompt": prompt, "sounds": COMMON["sounds"], "music": COMMON["music"]}
+    size = {**size, "length": LENGTH}
     return {**(size if shape_first else {}), **rest, **({} if shape_first else size), "quality": quality,
             "style": style, "seed": COMMON["seed"]}
 
@@ -117,18 +143,26 @@ class MiniMaxH3Plugin(WorkerPlugin):
     worker_script = "minimax_h3_worker.py"
     max_gpus = 1
     output_kind = "video"
-    # RTX 5090, 5 s clips, Speed-up on: the 2026-11-16 comparison, the 2026-11-21 API runs and direct worker
+    # RTX 5090, Speed-up on: 5 s clips from the 2026-11-16 comparison, the 2026-11-21 API runs and direct worker
     # runs (resolutions, references).
     timings: ClassVar[tuple[TimingSpec, ...]] = (
-        TimingSpec(when={"mode": "text", "quality": "turbo", "resolution": "240p"}, gpu=0, seconds=6),
-        TimingSpec(when={"mode": "text", "quality": "turbo", "resolution": "360p"}, gpu=0, seconds=12),
-        TimingSpec(when={"mode": "text", "quality": "turbo", "resolution": "480p"}, gpu=0, seconds=29),
-        TimingSpec(when={"mode": "text", "quality": "turbo", "resolution": "540p"}, gpu=0, seconds=39, first_seconds=92),
-        TimingSpec(when={"mode": "text", "quality": "turbo", "resolution": "720p"}, gpu=0, seconds=89),
-        TimingSpec(when={"mode": "text", "quality": "standard", "resolution": "540p"}, gpu=0, seconds=145, first_seconds=165),
-        TimingSpec(when={"mode": "text", "quality": "standard", "resolution": "720p"}, gpu=0, seconds=372),
-        TimingSpec(when={"mode": "frames", "quality": "turbo", "resolution": "540p"}, gpu=0, seconds=60),
-        TimingSpec(when={"mode": "reference", "quality": "standard", "resolution": "540p"}, gpu=0, seconds=250,
+        # Longer clips, 2026-11-22 through the app (decoder and transformer taking turns on the card); each was the
+        # first clip of its length after a start.
+        TimingSpec(when={"length": "10", "mode": "text", "quality": "turbo", "resolution": "480p"}, gpu=0, seconds=96),
+        TimingSpec(when={"length": "10", "mode": "text", "quality": "turbo", "resolution": "540p"}, gpu=0, seconds=130),
+        TimingSpec(when={"length": "15", "mode": "text", "quality": "turbo", "resolution": "480p"}, gpu=0, seconds=162),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "turbo", "resolution": "240p"}, gpu=0, seconds=6),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "turbo", "resolution": "360p"}, gpu=0, seconds=12),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "turbo", "resolution": "480p"}, gpu=0, seconds=29),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "turbo", "resolution": "540p"}, gpu=0, seconds=39, first_seconds=92),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "turbo", "resolution": "720p"}, gpu=0, seconds=89),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "turbo", "resolution": "1080p (fast resize)"}, gpu=0, seconds=100),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "turbo", "resolution": "1080p (AI upscale)"}, gpu=0, seconds=85,
+                   note="about 45 s of it upscaling"),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "standard", "resolution": "540p"}, gpu=0, seconds=145, first_seconds=165),
+        TimingSpec(when={"length": "5", "mode": "text", "quality": "standard", "resolution": "720p"}, gpu=0, seconds=372),
+        TimingSpec(when={"length": "5", "mode": "frames", "quality": "turbo", "resolution": "540p"}, gpu=0, seconds=60),
+        TimingSpec(when={"length": "5", "mode": "reference", "quality": "standard", "resolution": "540p"}, gpu=0, seconds=250,
                    note="with one picture at standard detail; each more picture adds about 45 s"),
     )
     settings: ClassVar[dict[str, SettingSpec]] = {
@@ -202,6 +236,10 @@ class MiniMaxH3Plugin(WorkerPlugin):
     def check_inputs(self, mode, values, files):
         if mode == "frames" and not (files.get("first") or files.get("last")):
             return ["Add a first frame, a last frame, or both."]
+        frames = FRAMES.get(values.get("length") or "5", 124)
+        if frames > 124 and frames * _render_pixels(values) > MAX_FRAME_PIXELS:
+            return [(f"{values['length']}-second clips are limited to smaller sizes: choose a lower resolution "
+                     "(10 seconds up to 540p, 15 seconds up to 480p) or 5 seconds.")]
         if values.get("resolution") == "custom":
             width, height = values.get("width"), values.get("height")
             if not width or not height:

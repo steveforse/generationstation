@@ -212,15 +212,91 @@
             "text_encoder_dir": "D:\\ai\\models\\minimax-h3\\uncensored\\heretic-bf16",
             "turbo_lora": "D:\\ai\\models\\minimax-h3\\turbo-v4\\minimax_h3_turbo_v4_step600_ema.safetensors",
             "turbo_grid": "D:\\ai\\models\\minimax-h3\\turbo-v4\\h3_silu_temb_grid.safetensors",
-            "reference_transformer": "D:\\ai\\models\\minimax-h3\\nvfp4\\minimax_h3_ref2va_pruned_nvfp4.safetensors"
+            "reference_transformer": "D:\\ai\\models\\minimax-h3\\nvfp4\\minimax_h3_ref2va_pruned_nvfp4.safetensors",
+            "flashvsr_python": "C:\\ai\\envs\\flashvsr-worker\\Scripts\\python.exe",
+            "flashvsr_dir": "C:\\ai\\tools\\FlashVSR_Plus",
+            "flashvsr_mode": "base"
           },
           "settings": {
             "compile": true
           },
           "estimate": {
-            "ram_gib": 60,
+            "ram_gib": 72,
             "gpu_min_free_gib": {
               "0": 29
+            }
+          }
+        }
+      }
+    },
+    "omnivoice": {
+      "kind": "omnivoice",
+      "name": "OmniVoice speech",
+      "workload": "speech",
+      "python": "C:\\ai\\envs\\omnivoice-worker\\Scripts\\python.exe",
+      "output_dir": "D:\\ai\\outputs\\omnivoice",
+      "port": 8200,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "omnivoice",
+      "presets": {
+        "omnivoice": {
+          "name": "OmniVoice",
+          "description": "k2-fsa's OmniVoice (0.6B, FP16): voice cloning and voice design in 600+ languages. Non-commercial licence.",
+          "gpus": [
+            1
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "options": {
+            "model_dir": "D:\\ai\\models\\omnivoice",
+            "asr_dir": "D:\\ai\\models\\whisper-large-v3-turbo"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {
+              "0": 5,
+              "1": 5
+            }
+          }
+        }
+      }
+    },
+    "qwen3_tts": {
+      "kind": "qwen3_tts",
+      "name": "Qwen3-TTS speech",
+      "workload": "speech",
+      "python": "C:\\ai\\envs\\qwen3-tts-worker\\Scripts\\python.exe",
+      "output_dir": "D:\\ai\\outputs\\qwen3-tts",
+      "port": 8210,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "qwen3_tts",
+      "presets": {
+        "qwen3_tts": {
+          "name": "Qwen3-TTS 1.7B",
+          "description": "Qwen's Qwen3-TTS 12Hz 1.7B (BF16): CustomVoice, VoiceDesign and Base models, one on the card at a time. Apache 2.0.",
+          "gpus": [
+            1
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "options": {
+            "custom_voice_dir": "D:\\ai\\models\\qwen3-tts\\1.7b-customvoice",
+            "voice_design_dir": "D:\\ai\\models\\qwen3-tts\\1.7b-voicedesign",
+            "base_dir": "D:\\ai\\models\\qwen3-tts\\1.7b-base"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 16,
+            "gpu_min_free_gib": {
+              "0": 8,
+              "1": 8
             }
           }
         }
