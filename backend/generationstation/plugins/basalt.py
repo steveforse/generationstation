@@ -32,6 +32,7 @@ class BasaltRuntime(BaseRuntime):
 class BasaltPlugin(RuntimePlugin):
     kind = "basalt"
     title = "Basalt"
+    description = "Runs a large language model for chat and coding, answering through an OpenAI-style API."
     runtime_model = BasaltRuntime
     settings: ClassVar[dict[str, SettingSpec]] = {
         "max_context": SettingSpec(

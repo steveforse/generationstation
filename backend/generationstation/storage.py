@@ -105,6 +105,8 @@ generation_jobs = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("finished_at", DateTime(timezone=True)),
+    Column("details", JSONB),
+    Column("launch", JSONB),
 )
 
 SCHEDULER_LOCK_ID = 746238190
@@ -532,9 +534,22 @@ class Store:
             active_ops = conn.execute(select(operations).where(
                 operations.c.status.in_(["loading", "simulation_ready", "ready", "unloading", "cleanup_failed"]),
             )).mappings().all()
+            # A start stays "ready" after its model is stopped (the stop is its own operation), so only
+            # each model's most recent operation, ignoring refusals, can describe what is running now.
+            latest = dict(conn.execute(
+                select(operations.c.model_id, func.max(operations.c.created_at))
+                .where(operations.c.status != "refused").group_by(operations.c.model_id)
+            ).all())
             for op in active_ops:
                 if op["id"] in keep:
+                    # Re-adopted: make the model's record point at it again.
+                    conn.execute(update(model_runtime).where(model_runtime.c.model_id == op["model_id"]).values(
+                        state=op["status"], active_operation_id=op["id"], active_worker_id=op["worker_id"],
+                        last_error_code=None, last_error_message=None,
+                    ))
                     continue
+                if op["created_at"] < latest.get(op["model_id"], op["created_at"]):
+                    continue  # superseded by a later stop or start; it says nothing about the model now
                 real = op["launch"] is not None
                 message = ("The runtime process was not running after the service restarted." if real else
                            "The fake worker is process-local and was discarded during service restart.")
@@ -555,23 +570,25 @@ class Store:
 
     # ----- generation jobs ---------------------------------------------------------------
 
-    def create_job(self, *, job_id, model_id, load_operation_id, inputs):
+    def create_job(self, *, job_id, model_id, load_operation_id, inputs, launch=None):
         now = self._now()
         row = {"id": job_id, "model_id": model_id, "load_operation_id": load_operation_id, "inputs": inputs,
                "status": "queued", "progress": None, "outputs": [], "error_message": None,
-               "created_at": now, "updated_at": now, "finished_at": None}
+               "created_at": now, "updated_at": now, "finished_at": None, "details": None, "launch": launch}
         with self.engine.begin() as conn:
             conn.execute(insert(generation_jobs).values(**row))
         return row
 
-    def update_job(self, job_id, *, status, progress=None, outputs=None, error_message=None):
+    def update_job(self, job_id, *, status, progress=None, outputs=None, error_message=None, details=None):
         now = self._now()
         values = {"status": status, "progress": progress, "updated_at": now}
         if outputs is not None:
             values["outputs"] = outputs
+        if details is not None:
+            values["details"] = details
         if error_message is not None:
             values["error_message"] = error_message[:2000]
-        if status in {"done", "failed"}:
+        if status in {"done", "failed", "cancelled"}:
             values["finished_at"] = now
         with self.engine.begin() as conn:
             conn.execute(update(generation_jobs).where(generation_jobs.c.id == job_id).values(**values))
@@ -581,6 +598,10 @@ class Store:
         with self.engine.connect() as conn:
             row = conn.execute(select(generation_jobs).where(generation_jobs.c.id == job_id)).mappings().first()
             return dict(row) if row else None
+
+    def delete_job(self, job_id):
+        with self.engine.begin() as conn:
+            return conn.execute(delete(generation_jobs).where(generation_jobs.c.id == job_id)).rowcount > 0
 
     def list_jobs(self, model_id=None, limit=50):
         query = select(generation_jobs).order_by(generation_jobs.c.created_at.desc()).limit(limit)

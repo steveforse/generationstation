@@ -30,23 +30,69 @@ class SettingSpec(BaseModel):
     maximum: int | None = None
     unit: str | None = None
     options: tuple[str, ...] = ()
+    # How options read in the browser, where the stored value is a code ("cpu" -> "CPU (system RAM)").
+    # Without one, an option is shown with a capital first letter (codes such as "q8_0" in capitals).
+    option_labels: dict[str, str] = Field(default_factory=dict)
     help: str
 
 
 class InputSpec(BaseModel):
-    """One field of a generation form (what the person types to make a song, image, ...)."""
+    """One field of a generation form (what the person types to make a song, image, ...).
+
+    A "files" field takes uploads: `accept` names the kinds ("image", "video", "audio") and
+    `max_count` how many. Its value is a list of upload IDs; the worker receives the files' paths.
+    A "crop" field is the framing of the picture in the files field `target`, chosen on a preview when the
+    shape (`shape_field`, whose options carry their proportions such as "16:9") differs from the picture's:
+    "x,y,w,h" as fractions of the picture.
+    """
     model_config = ConfigDict(frozen=True)
     label: str
-    kind: Literal["text", "textarea", "int", "choice", "seed"]
+    kind: Literal["text", "textarea", "int", "choice", "seed", "files", "crop"]
     required: bool = False
     default: str | int | None = None
     minimum: int | None = None
     maximum: int | None = None
     max_length: int | None = None
     options: tuple[str, ...] = ()
+    option_labels: dict[str, str] = Field(default_factory=dict)
     placeholder: str | None = None
     help: str
     advanced: bool = False
+    accept: tuple[Literal["image", "video", "audio"], ...] = ()
+    max_count: int | None = Field(default=None, ge=1, le=12)
+    target: str | None = None
+    shape_field: str | None = None
+    # The field applies only while other fields have these values (for example the custom size only for
+    # resolution "custom"): the browser shows it only then, and the server ignores it otherwise.
+    show_when: dict[str, str] = Field(default_factory=dict)
+    # A width field locked to a height field (and the other way round) in the proportions of `shape_field`,
+    # or of the picture in the mode's files fields for "match picture". Display only, like show_when.
+    ratio_partner: str | None = None
+    ratio_role: Literal["width", "height"] | None = None
+
+
+class ModeSpec(BaseModel):
+    """One way of making something, shown as a tab with its own form (for example "From a picture")."""
+    model_config = ConfigDict(frozen=True)
+    label: str
+    help: str
+    inputs: dict[str, InputSpec]
+
+
+class TimingSpec(BaseModel):
+    """A measured time for one result, shown on the form before it is made.
+
+    The first timing whose conditions all match is used: `when` names form inputs and values,
+    `preset` and `gpu` the model and card it ran on. `first_seconds` is the first result after a
+    start, which includes one-off preparation. Record only measured times, with what was measured.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    seconds: float = Field(gt=0)
+    first_seconds: float | None = Field(default=None, gt=0)
+    when: dict[str, str] = Field(default_factory=dict)
+    preset: str | None = None
+    gpu: int | None = None
+    note: str | None = Field(default=None, max_length=120)
 
 
 class Estimate(BaseModel):
@@ -60,6 +106,7 @@ class BasePreset(BaseModel):
     """Fields every preset has. Plugins subclass this to add their own (model path, flags)."""
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500, description="What this model is good at, for the UI.")
     gpus: list[int] = Field(min_length=1, description="Default GPU indices, in NVML/PCI order.")
     allowed_gpus: list[int] | None = None
     settings: dict[str, SettingValue] = Field(default_factory=dict)
@@ -81,6 +128,7 @@ class BaseRuntime(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: str
     name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=500, description="Overrides the plugin's description.")
     workload: str = Field(min_length=1, max_length=40)
     port: int = Field(ge=1024, le=65535)
     ready_timeout_seconds: float = Field(default=1500, gt=0, le=7200)
@@ -112,16 +160,33 @@ class RuntimePlugin:
 
     kind: ClassVar[str]
     title: ClassVar[str]
+    # One or two plain sentences on what the server does; runtimes.json may override it per entry.
+    description: ClassVar[str] = ""
     runtime_model: ClassVar[type[BaseRuntime]]
     settings: ClassVar[dict[str, SettingSpec]] = {}
     max_gpus: ClassVar[int | None] = None
     # A plugin that makes things (songs, images) lists its form fields and implements submit/job_status.
+    # With several ways of making something, it lists `modes` instead, each with its own fields; the
+    # chosen mode arrives as the input "mode".
     inputs: ClassVar[dict[str, InputSpec]] = {}
+    modes: ClassVar[dict[str, ModeSpec]] = {}
     output_kind: ClassVar[str | None] = None  # "audio", "image" or "video"
+    timings: ClassVar[tuple[TimingSpec, ...]] = ()  # measured times per setting, for the form
 
     @property
     def generates(self) -> bool:
-        return bool(self.inputs)
+        return bool(self.inputs or self.modes)
+
+    def mode_inputs(self, mode: str | None) -> dict[str, InputSpec] | None:
+        """The fields of a mode (or of the only form, for plugins without modes); None for an unknown mode."""
+        if not self.modes:
+            return self.inputs
+        return self.modes[mode].inputs if mode in self.modes else None
+
+    def check_inputs(self, mode: str | None, values: dict, files: dict) -> list[str]:
+        """Rules across fields, after each field is valid. `files` maps a files field to its uploads' kinds.
+        Return problems in plain words; an empty list means the request is fine."""
+        return []
 
     # ----- catalog -----------------------------------------------------------------------
 
@@ -164,6 +229,11 @@ class RuntimePlugin:
 
     def submit(self, runtime: BaseRuntime, job_id: str, inputs: dict) -> dict:
         """Queue a job on the running server. Return the worker's job record."""
+        raise NotImplementedError
+
+    def cancel(self, runtime: BaseRuntime, job_id: str) -> dict | None:
+        """Ask the running server to cancel a job. Return its record, {"status": "missing"} if it does
+        not know the job, or None if it is not answering."""
         raise NotImplementedError
 
     def job_status(self, runtime: BaseRuntime, job_id: str) -> dict | None:

@@ -3,7 +3,7 @@ from typing import ClassVar, Literal
 
 from pydantic import Field
 
-from .base import InputSpec, SettingSpec
+from .base import InputSpec, SettingSpec, TimingSpec
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -23,16 +23,22 @@ LYRICS_HELP = ("Put each part on its own lines under a tag: [Verse], [Pre-Chorus
 class YuE2Plugin(WorkerPlugin):
     kind = "yue2"
     title = "YuE2"
+    description = "Makes complete songs, with vocals and accompaniment, from lyrics and a description of the style."
     runtime_model = YuE2Runtime
     worker_script = "yue2_worker.py"
     max_gpus = 1
     output_kind = "audio"
+    # One measurement: 49 s of audio, verse and chorus, RTX 5090 (2026-11-12).
+    timings: ClassVar[tuple[TimingSpec, ...]] = (
+        TimingSpec(gpu=0, seconds=41, note="for a verse and chorus; longer lyrics take longer"),
+    )
     settings: ClassVar[dict[str, SettingSpec]] = {
         "memory_budget_gib": SettingSpec(
             label="VRAM limit", target="memory_budget_gib", kind="int", minimum=12, maximum=32, unit="GiB",
             help="Most YuE2 may use on its card, including a 2 GiB cushion. Songs peak at about 11-14 GiB."),
         "quantization": SettingSpec(
             label="Precision", target="quantization", kind="choice", options=("none", "fp8"),
+            option_labels={"none": "Full (BF16)", "fp8": "FP8"},
             help="fp8 uses less VRAM at some cost in quality. 'none' is full precision."),
     }
     inputs: ClassVar[dict[str, InputSpec]] = {

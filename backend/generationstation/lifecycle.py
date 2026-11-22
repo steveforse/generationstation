@@ -140,6 +140,12 @@ class LifecycleManager:
                 self.runtime_adapter.wait_exited(handle, runtime.stop_timeout_seconds)
         return keep
 
+    def owned_processes(self):
+        """{model_id: (pid, create_time)} for the runtime processes this service started or re-adopted."""
+        with self.lock:
+            return {model_id: (handle.pid, getattr(handle, "create_time", 0.0))
+                    for model_id, handle in self.runtime_handles.items() if isinstance(getattr(handle, "pid", None), int)}
+
     def refresh_runtime_health(self):
         """Mark a ready runtime failed if its process has exited (crash or external stop)."""
         if self.runtime_adapter is None:
@@ -162,7 +168,8 @@ class LifecycleManager:
                 self.store.update_operation(operation_id, status="failed", error_code="WORKER_EXITED",
                                             error_message="The runtime process exited while it was ready.")
 
-    def create_runtime_load(self, model_id, preset_key, overrides, gpus, idempotency_key, host):
+    def _runtime_requirement(self, model_id, preset_key, overrides, gpus, host):
+        """Resolve a start request to (runtime, preset key, preset, values, gpus, ram bytes, {gpu id: bytes})."""
         runtime = self.catalog.runtimes.get(model_id)
         if runtime is None or self.runtime_adapter is None:
             raise LifecycleError("MODEL_NOT_FOUND", "No configured runtime has that ID.", 404)
@@ -178,6 +185,29 @@ class LifecycleManager:
         except SettingsError as exc:
             raise LifecycleError("SETTINGS_INVALID", " ".join(exc.errors), 422,
                                  resources=[{"error": e} for e in exc.errors]) from exc
+        return runtime, preset_key, preset, values, chosen_gpus, requirement_ram, requirement_gpu
+
+    def estimate_runtime(self, model_id, preset_key, overrides, gpus, host):
+        """What a start with these choices would ask admission for. Changes nothing; display only.
+
+        The browser compares this with live telemetry; the start request is still checked independently.
+        """
+        _, _, _, _, _, requirement_ram, requirement_gpu = self._runtime_requirement(model_id, preset_key, overrides,
+                                                                                   gpus, host)
+        reserved_ram, reserved_gpu = 0, {}
+        reservations = self.store.active_reservations() if hasattr(self.store, "active_reservations") else []
+        for reservation in reservations:
+            reserved_ram += reservation.get("ram_bytes") or 0
+            for device_id, amount in (reservation.get("gpu_vram_bytes_by_id") or {}).items():
+                reserved_gpu[device_id] = reserved_gpu.get(device_id, 0) + amount
+        return {"ram_bytes": requirement_ram, "gpu_vram_bytes_by_id": requirement_gpu,
+                "ram_headroom_bytes": self.settings.ram_headroom_bytes,
+                "gpu_headroom_bytes": self.settings.gpu_headroom_bytes,
+                "reserved_ram_bytes": reserved_ram, "reserved_gpu_vram_bytes_by_id": reserved_gpu}
+
+    def create_runtime_load(self, model_id, preset_key, overrides, gpus, idempotency_key, host):
+        runtime, preset_key, preset, values, chosen_gpus, requirement_ram, requirement_gpu = \
+            self._runtime_requirement(model_id, preset_key, overrides, gpus, host)
         launch = {"preset": preset_key, "settings": values, "gpus": chosen_gpus}
         fingerprint = request_fingerprint("load", model_id, launch)
         with self.lock:

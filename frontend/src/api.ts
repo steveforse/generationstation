@@ -12,7 +12,8 @@ export function formatBytes(value?: number | null) {
 
 export function humanAge(seconds: number | null) {
   if (seconds == null || !Number.isFinite(seconds)) return 'No sample yet'
-  if (seconds < 1) return 'Updated just now'
+  // Samples arrive every second or two; only mention the age once it is noticeably old, to avoid flicker.
+  if (seconds < 5) return ''
   return `Updated ${Math.floor(seconds)}s ago`
 }
 

@@ -1,7 +1,8 @@
 import { ArrowUpRight, MemoryStick, Monitor, Plus } from 'lucide-react'
 import { humanAge } from '../api'
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
-import { GpuCard, ResourceCard } from '../components/Resources'
+import { GpuCard, modelColor, ramSegments, ResourceCard } from '../components/Resources'
+import { WorkloadIcon } from '../components/WorkloadIcon'
 import type { SavedHost } from '../hosts'
 import { href } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
@@ -30,12 +31,12 @@ function HostOverview({ store, host }: { store: HostStore; host: SavedHost }) {
     </section>
     {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} />{state.connection !== 'connecting' && state.connection !== 'reconnecting' && <a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={14} /></a>}</div>}
     {current && <section className="resource-grid" aria-label={`${name} resource usage`}>
-      <ResourceCard title="System memory" icon={<MemoryStick size={17} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent={current} error={view.host?.ram_error ?? undefined} kind="RAM" stale={view.stale} />
-      <GpuCard host={view.host} age={view.age} stale={view.stale} isCurrent={current} />
+      <ResourceCard title="System memory" icon={<MemoryStick size={17} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent={current} error={view.host?.ram_error ?? undefined} kind="RAM" stale={view.stale} segments={ramSegments(view.host, state.runtimes)} />
+      <GpuCard host={view.host} age={view.age} stale={view.stale} isCurrent={current} runtimes={state.runtimes} />
     </section>}
     {services.length > 0 && <div className="overview-services" aria-label={`${name} services`}>
-      {services.map(({ runtime, model }) => <a key={runtime.id} className="service-tile" href={href({ page: 'service', hostId: host.id, modelId: runtime.id })}>
-        <span><strong>{runtime.name}</strong><small>{runtime.workload}</small></span>
+      {services.map(({ runtime, model }) => <a key={runtime.id} className="service-tile" href={href(runtime.generation ? { page: 'service', hostId: host.id, modelId: runtime.id } : { page: 'models', hostId: host.id })}>
+        <span className="service-tile-name"><span className="service-tile-icon" style={{ color: modelColor(state.runtimes, runtime.id), background: `${modelColor(state.runtimes, runtime.id)}1f` }}><WorkloadIcon workload={runtime.workload} /></span><span><strong>{runtime.name}</strong><small>{runtime.workload}</small></span></span>
         <span className={`model-state state-${model?.state ?? 'unknown'}`}>{stateText[model?.state ?? ''] ?? model?.state ?? 'Unknown'}</span>
       </a>)}
     </div>}

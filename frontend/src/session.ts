@@ -5,8 +5,11 @@ import {
 import type { SavedHost } from './hosts'
 import {
   ApiError, type Connection, type Job, type JobOutput, type Launch, type Model, type ModelProfile, type NewProfile,
-  type Operation, type Refusal, type Runtime, type Snapshot,
+  type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord,
 } from './types'
+
+/** How many recent results to keep in view (the results sidebar lists them). */
+const JOB_LIMIT = 100
 
 export type SessionState = {
   connection: Connection
@@ -40,6 +43,7 @@ export class HostSession {
   private generation = 0
   private instanceId: string | null = null
   private busyTimer: number | null = null
+  private jobTimer: number | null = null
 
   constructor(public host: SavedHost) {}
 
@@ -75,6 +79,7 @@ export class HostSession {
     this.generation += 1
     this.instanceId = null
     if (this.busyTimer !== null) { window.clearTimeout(this.busyTimer); this.busyTimer = null }
+    if (this.jobTimer !== null) { window.clearTimeout(this.jobTimer); this.jobTimer = null }
     this.state = initialState(message)
     this.listeners.forEach((listener) => listener())
   }
@@ -208,7 +213,7 @@ export class HostSession {
       const [operations, runtimes, jobs] = await Promise.all([
         requestApi(base, token, '/api/operations?limit=100', {}, signal).catch(() => null),
         requestApi(base, token, '/api/runtimes', {}, signal).catch(() => null),
-        requestApi(base, token, '/api/jobs?limit=20', {}, signal).catch(() => null),
+        requestApi(base, token, `/api/jobs?limit=${JOB_LIMIT}`, {}, signal).catch(() => null),
       ])
       if (!this.stillCurrent(generation, signal)) return
       this.set((state) => ({
@@ -217,6 +222,7 @@ export class HostSession {
         jobs: isJobs(jobs) ? jobs.jobs : state.jobs,
       }))
       this.scheduleBusyPoll()
+      this.scheduleJobPoll()
     } catch (error) {
       if (!this.stillCurrent(generation, signal)) return
       if (error instanceof ApiError && error.status === 401) { this.disconnect(REJECTED); this.set({ connection: 'error' }); return }
@@ -230,6 +236,37 @@ export class HostSession {
     const { models, runtimes } = this.state
     const busy = !!models?.some((model) => runtimes?.some((runtime) => runtime.id === model.id) && ['loading', 'unloading'].includes(model.state))
     if (busy) this.busyTimer = window.setTimeout(() => { this.busyTimer = null; void this.refreshCatalog() }, 3_000)
+  }
+
+  /** While anything is queued or being made, refresh the results every few seconds (the queue, progress, cancels). */
+  private scheduleJobPoll() {
+    if (this.jobTimer !== null) return
+    if (!this.state.jobs.some((job) => job.status === 'queued' || job.status === 'running')) return
+    this.jobTimer = window.setTimeout(async () => {
+      this.jobTimer = null
+      const ctx = this.context()
+      // Keep going while the telemetry stream reconnects: results come over plain requests, and a failed one is retried.
+      if (!ctx) return  // disconnected; connecting again refreshes the results and restarts this
+      const jobs = await requestApi(ctx.base, ctx.token, `/api/jobs?limit=${JOB_LIMIT}`, {}, ctx.signal).catch(() => null)
+      if (!this.stillCurrent(ctx.generation, ctx.signal)) return
+      if (isJobs(jobs)) this.set({ jobs: jobs.jobs })
+      this.scheduleJobPoll()
+    }, 3_000)
+  }
+
+  /** Cancel a queued or running job. Returns an error message, or '' when the host accepted it. */
+  async cancelJob(job: Job) {
+    const ctx = this.context()
+    if (!ctx) return 'Not connected to the host.'
+    try {
+      const next = await requestApi(ctx.base, ctx.token, `/api/jobs/${encodeURIComponent(job.id)}/cancel`, { method: 'POST' }, ctx.signal)
+      if (isJob(next)) this.set((state) => ({ jobs: state.jobs.map((other) => other.id === next.id ? next : other) }))
+      this.scheduleJobPoll()
+      return ''
+    } catch (error) {
+      if (this.handleAuthError(error)) return 'Not connected to the host.'
+      return error instanceof Error ? error.message : 'It could not be cancelled.'
+    }
   }
 
   private handleAuthError(error: unknown) {
@@ -285,7 +322,7 @@ export class HostSession {
     }
   }
 
-  async runJob(runtime: Runtime, inputs: Record<string, string | number | null>) {
+  async runJob(runtime: Runtime, inputs: Record<string, string | number | string[] | null>) {
     const ctx = this.context()
     if (!ctx || this.state.connection !== 'connected') return false
     const { generation, signal, base, token } = ctx
@@ -293,23 +330,81 @@ export class HostSession {
     try {
       const accepted = await requestApi(base, token, `/api/models/${encodeURIComponent(runtime.id)}/jobs`, { method: 'POST', body: JSON.stringify({ inputs }) }, signal)
       if (!isJob(accepted)) throw new Error('The host returned an invalid job.')
-      let job: Job = accepted
-      const save = (item: Job) => this.set((state) => ({ jobs: [item, ...state.jobs.filter((other) => other.id !== item.id)].slice(0, 20) }))
-      save(job)
-      void (async () => {
-        while (job.status === 'queued' || job.status === 'running') {
-          await new Promise((resolve) => window.setTimeout(resolve, 3_000))
-          if (!this.stillCurrent(generation, signal)) return
-          const next = await requestApi(base, token, `/api/jobs/${encodeURIComponent(job.id)}`, {}, signal).catch(() => null)
-          if (isJob(next)) { job = next; save(job) }
-        }
-      })()
+      const job: Job = accepted
+      this.set((state) => ({ jobs: [job, ...state.jobs.filter((other) => other.id !== job.id)].slice(0, JOB_LIMIT) }))
+      this.scheduleJobPoll()
       return true
     } catch (error) {
       if (!this.stillCurrent(generation, signal) || this.handleAuthError(error)) return false
       this.set((state) => ({ jobErrors: { ...state.jobErrors, [runtime.id]: error instanceof Error ? error.message : 'The job could not be started.' } }))
       return false
     }
+  }
+
+  /** Delete a finished result and its files on the host. Returns an error message, or '' when deleted. */
+  async deleteJob(job: Job) {
+    const ctx = this.context()
+    if (!ctx) return 'Not connected to the host.'
+    try {
+      await requestApi(ctx.base, ctx.token, `/api/jobs/${encodeURIComponent(job.id)}`, { method: 'DELETE' }, ctx.signal)
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 404)) {
+        if (this.handleAuthError(error)) return 'Not connected to the host.'
+        return error instanceof Error ? error.message : 'It could not be deleted.'
+      }
+    }
+    this.set((state) => ({ jobs: state.jobs.filter((other) => other.id !== job.id) }))
+    return ''
+  }
+
+  /** Ask the host what a start with these choices would need. Display only; Start is checked again. */
+  async estimateRuntime(runtime: Runtime, launch: Launch, signal?: AbortSignal): Promise<RuntimeEstimate> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected.')
+    let body: unknown
+    try {
+      body = await requestApi(ctx.base, ctx.token, `/api/runtimes/${encodeURIComponent(runtime.id)}/estimate`, {
+        method: 'POST', body: JSON.stringify({ preset: launch.preset, settings: launch.settings, gpus: launch.gpus }),
+      }, signal ?? ctx.signal)
+    } catch (error) {
+      // A service started before this feature existed has no estimate route.
+      if (error instanceof ApiError && error.status === 404 && error.body.detail === 'API route not found') {
+        throw new Error('This host’s service is older than this page, so it can’t preview a start. Restart the Generation Station service to update it.')
+      }
+      throw error
+    }
+    if (!isEstimate(body)) throw new Error('The host returned an invalid estimate.')
+    return body
+  }
+
+  /** Upload a file for a request (a reference picture, video or audio); the job refers to it by ID. */
+  async uploadFile(file: File): Promise<UploadRecord> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    const response = await fetch(apiUrl(ctx.base, `/api/uploads?name=${encodeURIComponent(file.name)}`), {
+      method: 'POST', body: file, signal: ctx.signal,
+      headers: { Authorization: `Bearer ${ctx.token}`, 'Content-Type': file.type || 'application/octet-stream' },
+    })
+    const body = await response.json().catch(() => null) as { detail?: unknown } & Partial<UploadRecord> | null
+    if (!response.ok || !body || typeof body.id !== 'string') {
+      throw new Error(typeof body?.detail === 'string' ? body.detail : `The file could not be uploaded (${response.status}).`)
+    }
+    return body as UploadRecord
+  }
+
+  /** A job's reference file (picture, video, audio), as a local object URL. */
+  async inputUrl(job: Job, name: string) {
+    return URL.createObjectURL(await this.inputBlob(job, name))
+  }
+
+  async inputBlob(job: Job, name: string) {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected.')
+    const response = await fetch(apiUrl(ctx.base, `/api/jobs/${encodeURIComponent(job.id)}/inputs/${encodeURIComponent(name)}`), {
+      headers: { Authorization: `Bearer ${ctx.token}` }, signal: ctx.signal, cache: 'no-store',
+    })
+    if (!response.ok) throw new Error(`The file could not be loaded (${response.status}).`)
+    return response.blob()
   }
 
   /** Files need the access token, so fetch them and hand the browser a local object URL. */
@@ -383,4 +478,16 @@ export class HostSession {
       if (this.generation === generation) this.set({ pendingModelId: null })
     }
   }
+}
+
+function isByteMap(value: unknown): value is Record<string, number> {
+  return !!value && typeof value === 'object' && Object.values(value).every((bytes) => typeof bytes === 'number' && Number.isFinite(bytes) && bytes >= 0)
+}
+
+function isEstimate(value: unknown): value is RuntimeEstimate {
+  if (!value || typeof value !== 'object') return false
+  const estimate = value as Record<string, unknown>
+  const bytes = (key: string) => typeof estimate[key] === 'number' && Number.isFinite(estimate[key]) && (estimate[key] as number) >= 0
+  return ['ram_bytes', 'ram_headroom_bytes', 'gpu_headroom_bytes', 'reserved_ram_bytes'].every(bytes)
+    && isByteMap(estimate.gpu_vram_bytes_by_id) && isByteMap(estimate.reserved_gpu_vram_bytes_by_id)
 }

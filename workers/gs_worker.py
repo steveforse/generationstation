@@ -10,10 +10,16 @@ Protocol (127.0.0.1 only):
 
     GET  /health          {"status": "loading" | "loaded" | "failed", "error": str | null}
     POST /generate        {"job_id": str, "inputs": {...}}  -> 202 {"job_id", "status": "queued"}
-    GET  /jobs/{job_id}   {"job_id", "status": "queued" | "running" | "done" | "failed",
-                           "progress": str | null, "outputs": [{"name", "mime", "bytes"}], "error"}
+    POST /jobs/{job_id}/cancel  -> 200 the job; a queued job is cancelled at once, a running one
+                          stops at its next progress report (job.report), then shows "cancelled"; its partial
+                          results are removed, the files it was given are kept
+    GET  /jobs/{job_id}   {"job_id", "status": "queued" | "running" | "done" | "failed" | "cancelled",
+                           "progress": str | null, "outputs": [{"name", "mime", "bytes"}], "error",
+                           "details": {...}}
 
-Jobs run one at a time in arrival order. Outputs go to <output_dir>/<job_id>/.
+Jobs run one at a time in arrival order. Outputs go to <output_dir>/<job_id>/. `details` holds what
+the worker actually used (seed, steps, size, the full prompt sent to the model) plus `seconds`, the
+time the job took; a finished job's inputs and details are also saved as <job_id>/job.json.
 """
 import argparse
 import json
@@ -27,7 +33,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 JOB_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+THUMBNAIL = "thumbnail.jpg"  # a small preview the results list shows; not offered as a download
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
+
+
+def _discard_outputs(job):
+    """A cancelled job's partial results go; the files it was given (its inputs folder) stay with it."""
+    for output in job.outputs:
+        output["path"].unlink(missing_ok=True)
+    job.outputs = []
+    if job.dir.is_dir() and not any(job.dir.iterdir()):
+        job.dir.rmdir()
+
+
+class JobCancelled(Exception):
+    """Raised inside generate() at the next progress report after a cancel request."""
 
 
 class Job:
@@ -39,11 +59,28 @@ class Job:
         self.progress = None
         self.error = None
         self.outputs = []
+        self.details = {}
+        self.cancel_requested = False
         self.created = time.time()
 
     def report(self, text):
-        """Short human-readable progress, for example 'Writing the melody'."""
+        """Short human-readable progress, for example 'Writing the melody'.
+
+        Also the point where a cancelled job stops: call it often (each step) so cancel is prompt."""
+        if self.cancel_requested:
+            raise JobCancelled()
         self.progress = str(text)[:200]
+
+    def detail(self, **values):
+        """Record what was actually used (seed, steps, size, full prompt), shown with the result."""
+        self.details.update(values)
+
+    def thumbnail(self, image, size=480):
+        """Save a small JPEG preview of a PIL image (a picture, or a frame of a video)."""
+        preview = image.convert("RGB")
+        preview.thumbnail((size, size))
+        preview.save(self.output(THUMBNAIL, "image/jpeg"), quality=82)
+        self.details["thumbnail"] = THUMBNAIL
 
     def output(self, name, mime):
         """Return the path to write an output file to, and record it."""
@@ -58,10 +95,13 @@ class Job:
         outputs = [{"name": o["name"], "mime": o["mime"],
                     "bytes": o["path"].stat().st_size if o["path"].exists() else 0} for o in self.outputs]
         return {"job_id": self.job_id, "status": self.status, "progress": self.progress,
-                "outputs": outputs if self.status == "done" else [], "error": self.error}
+                "outputs": outputs if self.status == "done" else [], "error": self.error,
+                "details": self.details}
 
 
-def serve(load, generate, argv=None):
+def serve(load, generate, argv=None, cleanup=None):
+    """Run the worker. `cleanup(model)`, if given, runs after every job, finished, failed or cancelled,
+    once the job's own references are gone (for example to hand cached GPU memory back)."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     args = parser.parse_args(argv)
@@ -89,18 +129,41 @@ def serve(load, generate, argv=None):
     def run_jobs():
         while True:
             job = pending.get()
+            if job.status == "cancelled":
+                continue
             job.status = "running"
             log(f"job {job.job_id} started")
+            started = time.perf_counter()
             try:
                 generate(state["model"], job.inputs, job)
                 missing = [o["name"] for o in job.outputs if not o["path"].exists()]
                 if missing:
                     raise RuntimeError(f"Worker did not write {', '.join(missing)}")
+                job.details["seconds"] = round(time.perf_counter() - started, 1)
+                if job.dir.is_dir():
+                    record = {"job_id": job.job_id, "inputs": job.inputs, "details": job.details,
+                              "outputs": [{"name": o["name"], "mime": o["mime"]} for o in job.outputs]}
+                    (job.dir / "job.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
                 job.status = "done"
                 log(f"job {job.job_id} done")
+            except JobCancelled:
+                job.status, job.progress = "cancelled", "Cancelled"
+                _discard_outputs(job)
+                log(f"job {job.job_id} cancelled while running")
             except Exception as exc:  # noqa: BLE001 - any model error fails only this job
+                if job.cancel_requested:  # stopped by the cancel, wherever it surfaced
+                    job.status, job.progress = "cancelled", "Cancelled"
+                    _discard_outputs(job)
+                    log(f"job {job.job_id} cancelled while running")
+                    continue
                 job.status, job.error = "failed", f"{type(exc).__name__}: {exc}"[:2000]
                 log(f"job {job.job_id} failed:\n" + traceback.format_exc())
+            finally:
+                if cleanup is not None and state["model"] is not None:
+                    try:
+                        cleanup(state["model"])
+                    except Exception:  # noqa: BLE001 - clean-up must never stop the queue
+                        log("clean-up after the job failed:\n" + traceback.format_exc())
 
     class Handler(BaseHTTPRequestHandler):
         def send_json(self, status, payload):
@@ -123,6 +186,21 @@ def serve(load, generate, argv=None):
             self.send_json(200, job.as_dict())
 
         def do_POST(self):
+            cancel = re.fullmatch(r"/jobs/([A-Za-z0-9-]{8,64})/cancel", self.path)
+            if cancel:
+                with lock:
+                    job = jobs.get(cancel.group(1))
+                    if job is None:
+                        self.send_json(404, {"error": "job not found"})
+                        return
+                    if job.status == "queued":
+                        job.status, job.progress = "cancelled", "Cancelled"
+                    elif job.status == "running":
+                        job.cancel_requested = True
+                        job.progress = "Cancelling"
+                log(f"job {job.job_id} cancel requested ({job.status})")
+                self.send_json(200, job.as_dict())
+                return
             if self.path != "/generate":
                 self.send_json(404, {"error": "not found"})
                 return

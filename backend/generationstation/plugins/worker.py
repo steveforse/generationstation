@@ -86,6 +86,12 @@ class WorkerPlugin(RuntimePlugin):
             raise RuntimeError(message or f"The worker did not accept the job (HTTP {status}).")
         return body
 
+    def cancel(self, runtime, job_id):
+        status, body = _request("POST", f"http://127.0.0.1:{runtime.port}/jobs/{job_id}/cancel", {}, timeout=5)
+        if status == 404 and isinstance(body, dict) and body.get("error") == "job not found":
+            return {"status": "missing"}  # a worker that predates cancel answers "not found" instead: None
+        return body if status == 200 and isinstance(body, dict) else None
+
     def job_status(self, runtime, job_id):
         status, body = _request("GET", f"http://127.0.0.1:{runtime.port}/jobs/{job_id}", timeout=5)
         return body if status == 200 and isinstance(body, dict) else None

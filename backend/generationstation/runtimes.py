@@ -151,34 +151,81 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
             settings.append({"key": name, **spec.model_dump(exclude={"target", "options"}), "default": default,
                              "options": plugin.choice_options(preset, name) if spec.kind == "choice" else None})
         presets[key] = {
-            "name": preset.name, "gpus": preset.gpus,
+            "name": preset.name, "description": preset.description, "gpus": preset.gpus,
             "allowed_gpus": [{"index": i, "name": names.get(i, f"GPU {i}")} for i in preset.allowed_gpus],
             "settings": settings, "estimate": preset.estimate.model_dump(),
         }
     generation = None
     if plugin.generates:
-        generation = {"output_kind": plugin.output_kind,
-                      "inputs": [{"key": key, **spec.model_dump()} for key, spec in plugin.inputs.items()]}
+        fields = lambda specs: [{"key": key, **spec.model_dump()} for key, spec in specs.items()]
+        generation = {"output_kind": plugin.output_kind, "inputs": fields(plugin.inputs),
+                      "modes": [{"key": key, "label": mode.label, "help": mode.help, "inputs": fields(mode.inputs)}
+                                for key, mode in plugin.modes.items()],
+                      "timings": [timing.model_dump() for timing in plugin.timings]}
     return {"id": model_id, "kind": runtime.kind, "plugin": plugin.title, "name": runtime.name,
+            "description": runtime.description or plugin.description or None,
             "workload": runtime.workload, "port": runtime.port, "default_preset": runtime.default_preset,
             "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation}
 
 
-def validate_inputs(plugin: RuntimePlugin, inputs: dict) -> dict:
-    """Check generation-form values against the plugin's input specs. Unknown fields are refused."""
+def _valid_crop(value: str) -> bool:
+    """A framing box as fractions of the picture: x,y,width,height inside it, not vanishingly small."""
+    try:
+        x, y, w, h = (float(part) for part in value.split(","))
+    except ValueError:
+        return False
+    return 0 <= x and 0 <= y and 0.05 <= w and 0.05 <= h and x + w <= 1.0001 and y + h <= 1.0001
+
+
+def validate_inputs(plugin: RuntimePlugin, inputs: dict, uploads=None) -> dict:
+    """Check generation-form values against the plugin's input specs. Unknown fields are refused.
+
+    Plugins with modes need "mode"; only that mode's fields are accepted. `uploads(upload_id)` returns an
+    upload's record (kind, name, ...) or None; files fields are checked against it.
+    """
     if not isinstance(inputs, dict):
         raise SettingsError(["Inputs must be an object."])
-    errors, result = [], {}
+    mode = None
+    if plugin.modes:
+        mode = inputs.get("mode", next(iter(plugin.modes)))
+        if mode not in plugin.modes:
+            raise SettingsError([f"mode must be one of {', '.join(plugin.modes)}."])
+    specs = plugin.mode_inputs(mode)
+    errors, result, files = [], {}, {}
     for key in inputs:
-        if key not in plugin.inputs:
+        if key not in specs and not (key == "mode" and plugin.modes):
             errors.append(f"{key} is not an input of {plugin.title}.")
-    for key, spec in plugin.inputs.items():
+    def chosen(key):
+        return inputs.get(key, specs[key].default if key in specs else None)
+
+    for key, spec in specs.items():
+        if any(chosen(other) != wanted for other, wanted in spec.show_when.items()):
+            continue  # a field that does not apply now (the custom size without resolution "custom")
         value = inputs.get(key, spec.default)
-        if value is None or (isinstance(value, str) and not value.strip()):
+        if value is None or (isinstance(value, (str, list)) and not value) or (isinstance(value, str) and not value.strip()):
             if spec.required:
                 errors.append(f"{spec.label} is required.")
             continue
-        if spec.kind in {"text", "textarea"}:
+        if spec.kind == "files":
+            if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+                errors.append(f"{spec.label} must be a list of uploaded files.")
+                continue
+            if spec.max_count and len(value) > spec.max_count:
+                errors.append(f"{spec.label} takes at most {spec.max_count}.")
+                continue
+            records = [uploads(item) if uploads else None for item in value]
+            if any(record is None for record in records):
+                errors.append(f"{spec.label}: a file is missing or has expired. Add it again.")
+                continue
+            if any(record["kind"] not in spec.accept for record in records):
+                errors.append(f"{spec.label} takes only {' or '.join(spec.accept)} files.")
+                continue
+            files[key] = [record["kind"] for record in records]
+        elif spec.kind == "crop":
+            if not isinstance(value, str) or not _valid_crop(value):
+                errors.append(f"{spec.label} must be four fractions: x,y,width,height.")
+                continue
+        elif spec.kind in {"text", "textarea"}:
             if not isinstance(value, str):
                 errors.append(f"{spec.label} must be text.")
                 continue
@@ -198,6 +245,10 @@ def validate_inputs(plugin: RuntimePlugin, inputs: dict) -> dict:
                 errors.append(f"{spec.label} must be between {spec.minimum} and {spec.maximum}.")
                 continue
         result[key] = value
+    if not errors:
+        errors = plugin.check_inputs(mode, result, files)
     if errors:
         raise SettingsError(errors)
+    if mode is not None:
+        result = {"mode": mode, **result}
     return result

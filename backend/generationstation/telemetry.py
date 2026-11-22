@@ -10,6 +10,8 @@ from pathlib import Path
 import psutil
 import pynvml
 
+from .process_memory import ProcessMemoryCollector
+
 
 def memory_values(total: int, available: int, used: int) -> dict:
     counters = (total, available, used)
@@ -75,9 +77,12 @@ class Collector:
 
 
 class Monitor:
-    def __init__(self, settings, collector=None, clock=time.monotonic):
+    def __init__(self, settings, collector=None, clock=time.monotonic, process_collector=None):
         self.settings = settings
         self.collector = collector or Collector()
+        self.process_collector = process_collector or ProcessMemoryCollector()
+        # Returns {model_id: (pid, create_time)} for the model processes this service owns.
+        self.owned_processes = dict
         self.clock = clock
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
@@ -99,6 +104,12 @@ class Monitor:
         except Exception:  # noqa: BLE001 - keep monitor alive and report failed collection.
             data = {"ram": None, "ram_error": "Host telemetry failed.", "gpus": [],
                     "gpu_error": "Host telemetry failed."}
+        # Display only; admission never reads these per-model figures.
+        try:
+            model_memory = self.process_collector.sample(self.owned_processes(), data.get("gpus") or [])
+        except Exception:  # noqa: BLE001 - per-model usage failing must not break host telemetry.
+            model_memory = {}
+        data = {**data, "model_memory": model_memory}
         with self.lock:
             self.sample_id += 1
             self.sample_time = started
@@ -111,7 +122,7 @@ class Monitor:
         stale = age is None or age >= self.settings.stale_after_seconds
         if data is None:
             data = {"ram": None, "ram_error": "Waiting for first sample.", "gpus": [],
-                    "gpu_error": None, "observed_at": None, "sequence": 0}
+                    "gpu_error": None, "observed_at": None, "sequence": 0, "model_memory": {}}
         return {
             **data, "host": self.identity, "age_seconds": age, "stale": stale,
             "stale_after_seconds": self.settings.stale_after_seconds,
@@ -120,6 +131,9 @@ class Monitor:
             "loading_enabled": False,
             "loading_reason": "Model loading will be available after capacity checks and a runtime are verified.",
         }
+
+    def watch_processes(self, owned_processes):
+        self.owned_processes = owned_processes
 
     def start(self):
         def run():

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Activity, Beaker, Cpu, Music, Plug, Server, ShieldCheck, Sparkles } from 'lucide-react'
+import { Activity, Plug, Server, ShieldCheck, Sparkles } from 'lucide-react'
 import { hostName, StatusDot, stateText } from './components/HostBits'
+import { WorkloadIcon } from './components/WorkloadIcon'
 import type { SavedHost } from './hosts'
 import { ConnectionsPage } from './pages/Connections'
 import { OverviewPage } from './pages/Overview'
-import { ProfilesPage, ServicePage } from './pages/Service'
+import { ModelsPage, ProfilesPage, ServicePage } from './pages/Service'
 import { href, type Route, useRoute } from './routes'
 import { HostStore, useHosts, useSession } from './store'
 
@@ -41,6 +42,7 @@ export default function App() {
         {route.page === 'connections' && <ConnectionsPage store={store} hosts={hosts} />}
         {route.page === 'service' && <ServicePage key={`${route.hostId}:${route.modelId}`} store={store} host={routeHost} modelId={route.modelId} />}
         {route.page === 'profiles' && <ProfilesPage key={route.hostId} store={store} host={routeHost} />}
+        {route.page === 'models' && <ModelsPage key={route.hostId} store={store} host={routeHost} />}
         <footer className="page-footer"><span>Generation Station <b>·</b> Host-first model management</span><span><span className="footer-dot" /> Measurements are reported by each connected service</span></footer>
       </div>
     </main>
@@ -49,7 +51,7 @@ export default function App() {
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
-  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'profiles' ? 'Test profiles'
+  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'profiles' ? 'Test profiles' : route.page === 'models' ? 'Models'
     : state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId
   return <div className="breadcrumb"><span>{host ? hostName(host, state) : 'Workspace'}</span><span className="crumb-slash">/</span><strong>{title}</strong></div>
 }
@@ -61,21 +63,22 @@ function NavLink({ route, current, icon, label, badge }: { route: Route; current
   return <a className={`nav-item ${active ? 'active' : ''}`} href={href(route)} aria-current={active ? 'page' : undefined}>{icon}<span>{label}</span>{badge}{active && <span className="nav-indicator" />}</a>
 }
 
-const workloadIcon: Record<string, React.ReactNode> = { music: <Music size={16} />, text: <Cpu size={16} /> }
 
 function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const state = useSession(store.session(host.id))
   const runtimes = state.runtimes ?? []
+  const running = runtimes.filter((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready').length
   return <div className="nav-host" aria-label={`Host ${hostName(host, state)}`}>
     <div className="nav-label nav-host-label"><StatusDot state={state} /><span>{hostName(host, state).toUpperCase()}</span></div>
-    {runtimes.map((runtime) => {
+    {runtimes.length > 0 && <NavLink route={{ page: 'models', hostId: host.id }} current={current} icon={<Server size={16} />} label="Models"
+      badge={<span className={`nav-state ${running ? 'nav-state-on' : ''}`} title={`${running} running`}>{running ? `${running} on` : ''}</span>} />}
+    {runtimes.filter((runtime) => runtime.generation).map((runtime) => {
       const model = state.models?.find((item) => item.id === runtime.id)
       const running = model?.state === 'ready'
       return <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
-        icon={workloadIcon[runtime.workload] ?? <Cpu size={16} />} label={runtime.name}
+        icon={<WorkloadIcon workload={runtime.workload} />} label={runtime.name}
         badge={<span className={`nav-state ${running ? 'nav-state-on' : ''}`} title={stateText[model?.state ?? ''] ?? ''}>{running ? 'on' : model && ['loading', 'unloading'].includes(model.state) ? '…' : ''}</span>} />
     })}
-    {state.connection === 'connected' && <NavLink route={{ page: 'profiles', hostId: host.id }} current={current} icon={<Beaker size={16} />} label="Test profiles" />}
     {state.connection !== 'connected' && state.connection !== 'connecting' && state.connection !== 'reconnecting' && <a className="nav-item nav-muted" href={href({ page: 'connections' })}><Plug size={16} /><span>{state.connection === 'error' ? 'Connection issue' : 'Not connected'}</span></a>}
   </div>
 }

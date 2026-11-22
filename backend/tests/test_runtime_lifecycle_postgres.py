@@ -155,6 +155,35 @@ def test_external_server_on_the_port_is_refused(tmp_path):
         listener.close()
 
 
+def test_restart_readopts_the_current_start_after_an_earlier_start_and_stop(tmp_path):
+    """An earlier start stays "ready" after its stop; a restart must not let it mark the model failed."""
+    port = free_port()
+    with migrated_store() as store:
+        first = manager(store, tmp_path, port, env={"FAKE_BASALT_DELAY": "0.2"})
+        earlier = first.create_runtime_load("basalt", None, {}, None, "key-cycle-1", host())
+        assert wait_for(first, earlier["id"], {"ready", "failed"})["status"] == "ready"
+        stop = first.create_unload("basalt", "key-cycle-2")
+        assert wait_for(first, stop["id"], {"unloaded", "cleanup_failed"})["status"] == "unloaded"
+        current = first.create_runtime_load("basalt", None, {}, None, "key-cycle-3", host())
+        assert wait_for(first, current["id"], {"ready", "failed"})["status"] == "ready"
+        handle = first.runtime_handles["basalt"]
+        first.shutdown()
+
+        second = manager(store, tmp_path, port)
+        try:
+            keep = second.recover_runtime_processes()
+            store.reconcile_restart(keep)
+            assert keep == [current["id"]]
+            model = store.list_models()[0]
+            assert model["state"] == "ready", model
+            assert second.operation(earlier["id"])["status"] == "ready"  # history is left as it was
+            stop = second.create_unload("basalt", "key-cycle-4")
+            assert wait_for(second, stop["id"], {"unloaded", "cleanup_failed"})["status"] == "unloaded"
+            assert not second.runtime_adapter.is_alive(handle)
+        finally:
+            second.shutdown()
+
+
 def test_restart_readopts_a_ready_runtime_and_detects_a_crash(tmp_path):
     port = free_port()
     with migrated_store() as store:
