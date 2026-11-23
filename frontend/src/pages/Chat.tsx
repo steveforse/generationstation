@@ -35,6 +35,8 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [loadError, setLoadError] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
+  // What a tool is doing between answers ("Starting Qwen Image on the RTX 4080…").
+  const [activity, setActivity] = useState('')
   const [sending, setSending] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [error, setError] = useState('')
@@ -125,7 +127,9 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
           if (saved.job) session.trackJob(saved.job)
           setLoaded((current) => current && { ...current, messages: [...current.messages.filter((other) => other.id !== saved.id), saved] })
           if (saved.role === 'assistant') setDraft(null)
-        } else if (event === 'start') setDraft({ content: '', reasoning: '', tool: '' })
+          if (saved.role === 'tool') setActivity('')
+        } else if (event === 'status') setActivity((data as { text?: string }).text ?? '')
+        else if (event === 'start') { setActivity(''); setDraft({ content: '', reasoning: '', tool: '' }) }
         else if (event === 'delta') {
           const piece = data as Partial<Draft>
           setDraft((current) => {
@@ -142,7 +146,7 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
     } finally {
       streaming.current = null
       abort.current = null
-      setSending(false); setStopping(false); setDraft(null)
+      setSending(false); setStopping(false); setDraft(null); setActivity('')
       void refreshList()
       if (id) session.conversation(id).then(setLoaded).catch(() => undefined)
     }
@@ -199,7 +203,7 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
           {!conversationId && <ChatWelcome runtimes={state.runtimes ?? []} models={state.models ?? []} />}
           {loaded && conversationId && loaded.messages.map((message) => <MessageView key={message.id} message={message} session={session} jobs={state.jobs} runtimes={state.runtimes ?? []} onOpenJob={setOpenJob} />)}
           {draft && <DraftView draft={draft} />}
-          {busy && !draft && <div className="chat-msg from-model chat-waiting"><span className="chat-avatar" aria-hidden="true"><Bot size={18} /></span><span><Loader2 size={16} className="spin" aria-hidden="true" /> {sending ? 'Reading…' : 'Answering in another window…'}</span></div>}
+          {busy && !draft && <div className="chat-msg from-model chat-waiting"><span className="chat-avatar" aria-hidden="true"><Bot size={18} /></span><span><Loader2 size={16} className="spin" aria-hidden="true" /> {activity || (sending ? 'Reading…' : 'Answering in another window…')}</span></div>}
           {error && <p className="chat-error" role="alert">{error}</p>}
         </div></div>
         <Composer text={text} setText={setText} attached={attached} setAttached={setAttached} thinking={thinking}
@@ -270,9 +274,12 @@ function MessageView({ message, session, jobs, runtimes, onOpenJob }: { message:
       {message.content && <p className="chat-user-text">{message.content}</p>}
     </div>
   </div>
+  if (message.role === 'tool' && message.attachments.length > 0) return <div className="chat-shown" aria-label={message.note ?? 'Results'}>
+    {message.attachments.map((item) => <JobCard key={item.job_id} jobId={item.job_id} jobs={jobs} runtimes={runtimes} session={session} onOpen={onOpenJob} />)}
+  </div>
   if (message.role === 'tool') return message.job_id
     ? <JobCard jobId={message.job_id} jobs={jobs} runtimes={runtimes} session={session} onOpen={onOpenJob} />
-    : <p className="chat-tool-note">{message.content}</p>
+    : <p className={`chat-tool-note ${message.status === 'error' ? 'chat-tool-note-problem' : ''}`}>{message.note || message.content}</p>
   if (!message.content && !message.reasoning && message.tool_calls.length && message.status === 'done') return null
   return <div className="chat-msg from-model">
     <span className="chat-avatar" aria-hidden="true"><Bot size={18} /></span>
@@ -291,7 +298,7 @@ function DraftView({ draft }: { draft: Draft }) {
     <div className="chat-answer">
       {draft.reasoning && <Thinking text={draft.reasoning} live={!draft.content} />}
       {draft.content ? <Markdown text={draft.content} /> : !draft.reasoning && !draft.tool && <span className="chat-typing"><Loader2 size={16} className="spin" aria-hidden="true" /> Writing…</span>}
-      {draft.tool && <span className="chat-typing"><Loader2 size={16} className="spin" aria-hidden="true" /> Setting up a job…</span>}
+      {draft.tool && <span className="chat-typing"><Loader2 size={16} className="spin" aria-hidden="true" /> Working…</span>}
     </div>
   </div>
 }

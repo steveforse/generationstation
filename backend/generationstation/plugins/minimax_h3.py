@@ -126,6 +126,33 @@ def _crop(target):
                      help="The part of the picture that is kept when the shape differs from the picture's.")
 
 
+# Pictures: H3 makes one frame instead of a clip (no sound), at several megapixels.
+PICTURE_SIZE = InputSpec(
+    label="Size", kind="choice", options=("1 MP", "2 MP", "4 MP", "8 MP"), default="4 MP",
+    option_labels={"1 MP": "1 megapixel (about 1344 x 768)", "2 MP": "2 megapixels (about 1888 x 1056)",
+                   "4 MP": "4 megapixels (about 2656 x 1504)", "8 MP": "8 megapixels (about 3776 x 2112)"},
+    help="How many pixels the picture has (sizes shown for landscape 16:9). At High quality about 21 s at 2 MP, "
+         "1 min at 4 MP and 2 min at 8 MP. Below 2 MP pictures are noticeably weaker.")
+EDIT_SIZE = PICTURE_SIZE.model_copy(update={"options": ("1 MP", "2 MP", "4 MP"), "default": "2 MP",
+                                           "help": "How many pixels the result has. 2 MP takes about 1.5 min at High quality."})
+PICTURE_QUALITY = InputSpec(
+    label="Quality (steps)", kind="choice", options=("extreme", "high", "standard"), default="high",
+    help="Standard: 20 steps, about 35 s at 4 MP. High: 30 steps, about 1 min at 4 MP; finer detail. Extreme: 50 "
+         "steps, for final pictures. (The Turbo add-on is made for clips and smears pictures.)")
+PICTURE_PROMPT = InputSpec(
+    label="Description", kind="textarea", required=True, max_length=3000,
+    placeholder="A weathered fisherman in a yellow raincoat mends a net on a wooden pier at golden hour, gulls "
+                "overhead, sharp detail on his hands, photographic, shallow depth of field.",
+    help="Describe the picture: the subject, the setting, the light, the style and the framing.")
+EDIT_PROMPT = InputSpec(
+    label="What to make", kind="textarea", required=True, max_length=3000,
+    placeholder="The bicycle from picture 1, painted bright blue, leans on a boardwalk railing at a sunny beach.",
+    help="Say what to keep from the pictures and what changes, naming them \"picture 1\", \"picture 2\". H3 draws a "
+         "new picture with them; it keeps their look but not every exact detail.")
+PICTURE_SEED = COMMON["seed"].model_copy(update={
+    "help": "Leave empty for a new picture each time. Reuse a seed to get the same picture again."})
+
+
 class MiniMaxH3Preset(WorkerPreset):
     pass
 
@@ -138,7 +165,8 @@ class MiniMaxH3Runtime(WorkerRuntime):
 class MiniMaxH3Plugin(WorkerPlugin):
     kind = "minimax_h3"
     title = "MiniMax H3"
-    description = "Makes short video clips with matching sound, including spoken lines, from a written description."
+    description = ("Makes short video clips with matching sound, including spoken lines, from a written description; "
+                   "also paints still pictures (up to 8 megapixels) and edits pictures.")
     runtime_model = MiniMaxH3Runtime
     worker_script = "minimax_h3_worker.py"
     max_gpus = 1
@@ -164,6 +192,13 @@ class MiniMaxH3Plugin(WorkerPlugin):
         TimingSpec(when={"length": "5", "mode": "frames", "quality": "turbo", "resolution": "540p"}, gpu=0, seconds=60),
         TimingSpec(when={"length": "5", "mode": "reference", "quality": "standard", "resolution": "540p"}, gpu=0, seconds=250,
                    note="with one picture at standard detail; each more picture adds about 45 s"),
+        # Pictures (one frame), 2026-11-22 direct worker runs on the RTX 5090 without the speed-up.
+        TimingSpec(when={"mode": "picture", "quality": "high", "size": "2 MP"}, gpu=0, seconds=21),
+        TimingSpec(when={"mode": "picture", "quality": "standard", "size": "4 MP"}, gpu=0, seconds=38),
+        TimingSpec(when={"mode": "picture", "quality": "high", "size": "4 MP"}, gpu=0, seconds=63),
+        TimingSpec(when={"mode": "picture", "quality": "high", "size": "8 MP"}, gpu=0, seconds=120),
+        TimingSpec(when={"mode": "edit", "quality": "high", "size": "2 MP"}, gpu=0, seconds=88,
+                   note="one picture at standard detail, including the switch to the reference model"),
     )
     settings: ClassVar[dict[str, SettingSpec]] = {
         "compile": SettingSpec(
@@ -231,6 +266,32 @@ class MiniMaxH3Plugin(WorkerPlugin):
                          "(standard) or several minutes (high, MiniMax's own size) of reading before filming, and "
                          "videos far more. 'high' keeps the most detail of faces and lettering.", advanced=True),
             }),
+        "picture": ModeSpec(
+            label="A picture", output_kind="image",
+            help="H3 paints one still picture instead of a clip, with no sound, at up to 8 megapixels.",
+            inputs={"prompt": PICTURE_PROMPT, "shape": SHAPE, "size": PICTURE_SIZE, "quality": PICTURE_QUALITY,
+                    "seed": PICTURE_SEED}),
+        "edit": ModeSpec(
+            label="Edit pictures", output_kind="image",
+            help="Give up to 4 pictures and say what to make with them: change a colour, the place, the light, or "
+                 "combine them. The result is a new picture that keeps their look.",
+            inputs={
+                "images": InputSpec(
+                    label="Pictures", kind="files", accept=("image",), max_count=4, required=True,
+                    help="The pictures to use, numbered in the order added: write \"picture 1\", \"picture 2\"."),
+                "prompt": EDIT_PROMPT,
+                "notes": InputSpec(
+                    label="What's in the pictures", kind="textarea", max_length=1000,
+                    placeholder="Picture 1: my red bicycle",
+                    help="Optional, one line each, starting \"Picture 1:\": what a picture shows, so H3 knows what to keep."),
+                "shape": FRAMES_SHAPE.model_copy(update={"help": "'match picture' keeps picture 1's proportions."}),
+                "size": EDIT_SIZE, "quality": PICTURE_QUALITY,
+                "detail": InputSpec(
+                    label="Picture detail", kind="choice", options=("fast", "standard", "high"), default="standard",
+                    help="How closely H3 studies the pictures. 'high' keeps the most detail of faces and lettering "
+                         "but reads each picture for minutes.", advanced=True),
+                "seed": PICTURE_SEED,
+            }),
     }
 
     def check_inputs(self, mode, values, files):
@@ -246,6 +307,8 @@ class MiniMaxH3Plugin(WorkerPlugin):
                 return ["Enter a custom width and height."]
             if round(width / 32) * 32 * round(height / 32) * 32 > MAX_PIXELS:
                 return ["The custom size is too large: at most 1280 x 720 worth of pixels."]
+        if mode == "edit" and not files.get("images"):
+            return ["Add at least one picture to edit."]
         if mode == "reference":
             counts = {key: len(files.get(key, [])) for key in ("images", "videos", "audio")}
             if not counts["images"] and not counts["videos"]:

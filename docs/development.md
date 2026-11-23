@@ -91,6 +91,31 @@ $hf = "C:\ai\envs\qwen-image-worker\Scripts\hf.exe"; $m = "D:\ai\models\minimax-
 
 `h3_silu_temb_grid.safetensors` (needed by the Turbo v4 add-on) comes from the GitHub repository `Larryvrh/ComfyUI-MiniMax-H3-Turbo`; put it in `$m\turbo-v4`. The `minimax_h3` entry in `runtimes.example.json` points at these files and writes clips to `D:\ai\outputs\minimax-h3`.
 
+## Web search for the chat (SearXNG)
+
+The chat's `web_search` tool asks a SearXNG instance; without an address set it is not offered (`read_page` works either way). The owner wants SearXNG on the Proxmox homelab server, not the desktop. On a Docker host there (an LXC or VM):
+
+```sh
+mkdir -p ~/searxng/config && cd ~/searxng
+cat > docker-compose.yml <<'YAML'
+services:
+  searxng:
+    image: searxng/searxng:latest   # pin a dated tag once it works
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    volumes: ["./config:/etc/searxng"]
+    environment:
+      SEARXNG_BASE_URL: http://<proxmox-host>:8080/
+YAML
+docker compose up -d && docker compose down   # writes config/settings.yml
+```
+
+In `config/settings.yml`: set `server.secret_key` to a long random string, `server.limiter: false` (only the home network can reach it), and add `json` to `search.formats` (`[html, json]`), which the app needs. Then `docker compose up -d`. Check it from the desktop: `curl "http://<proxmox-host>:8080/search?q=test&format=json"` returns JSON.
+
+Then enter the address under the gear menu → **Host settings** → Web search, press **Test**, and **Save**. It is stored in the host's database (`app_settings`, migration 0008), so it stays with this host, and the chat uses it from its next answer without a restart. `GS_SEARXNG_URL` in `.env` is only a fallback while nothing is saved; saving an empty address turns search off. The owner's instance on the homelab is saved there (HTTP for now: HTTPS on its name failed the TLS handshake with "unrecognized name" on 2026-11-22). Keep the port closed to the internet: SearXNG is reachable from the home network or the tailnet only.
+
+`read_page` refuses addresses on this machine and private networks (also after redirects), so web pages cannot steer it at local services; the chat's instructions treat web text as information, never instructions.
+
 ## Run the API and frontend
 
 Use separate PowerShell terminals, from the repository root unless noted.

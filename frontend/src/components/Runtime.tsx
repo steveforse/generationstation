@@ -69,9 +69,14 @@ export const makeLabel: Record<string, string> = { audio: 'Make a song', image: 
 const resultWord: Record<string, string> = { audio: 'song', image: 'picture', video: 'video' }
 const runningWord: Record<string, string> = { audio: 'Composing', image: 'Painting', video: 'Rendering' }
 /** The button, the word for one result, and the word for making one: the plugin's own, else its output kind's. */
-const labelOf = (generation: Generation) => generation.make_label ?? makeLabel[generation.output_kind] ?? 'Make something'
-const nounOf = (generation: Generation) => generation.result_noun ?? resultWord[generation.output_kind] ?? 'result'
-const makingOf = (generation: Generation) => generation.result_noun ? 'Working' : runningWord[generation.output_kind] ?? 'Working'
+const labelOf = (generation: Generation, kind = generation.output_kind) => generation.make_label ?? makeLabel[kind] ?? 'Make something'
+/** Whether the model makes more than one kind of result (H3: videos and pictures). */
+const mixed = (generation: Generation) => (generation.modes ?? []).some((mode) => mode.output_kind && mode.output_kind !== generation.output_kind)
+const nounOf = (generation: Generation) => generation.result_noun ?? (mixed(generation) ? 'result' : resultWord[generation.output_kind] ?? 'result')
+const makingOf = (generation: Generation) => generation.result_noun || mixed(generation) ? 'Working' : runningWord[generation.output_kind] ?? 'Working'
+/** What one result is: its mode's kind, else the model's. */
+export const jobKind = (job: Job, generation: Generation) =>
+  (generation.modes ?? []).find((mode) => mode.key === job.inputs?.mode)?.output_kind ?? generation.output_kind
 
 /** "39 s", "2 min 25 s". */
 export function formatSeconds(seconds: number) {
@@ -122,7 +127,7 @@ export function GenerateForm({ runtime, generation, onGenerate, error, initial, 
     {modes.map((item) => <div key={item.key} role="tabpanel" id={`${runtime.id}-panel-${item.key}`} aria-labelledby={`${runtime.id}-tab-${item.key}`} hidden={item.key !== current.key}>
       <p className="mode-help">{item.help}</p>
       <ModeForm runtime={runtime} generation={generation} fields={item.inputs} mode={item.key} onGenerate={onGenerate} error={item.key === current.key ? error : undefined}
-        initial={initial?.mode === item.key || (!initial?.mode && item.key === modes[0].key) ? initial : undefined} ahead={ahead} upload={upload} label={label} />
+        initial={initial?.mode === item.key || (!initial?.mode && item.key === modes[0].key) ? initial : undefined} ahead={ahead} upload={upload} label={labelOf(generation, item.output_kind ?? generation.output_kind)} />
     </div>)}
   </div>
 }
@@ -342,7 +347,7 @@ export function ResultsRail({ jobs, generation, selectedId, onSelect, fileUrl, o
         const StatusIcon = job.status === 'running' ? Loader2 : job.status === 'queued' ? Hourglass : job.status === 'failed' ? AlertCircle : job.status === 'cancelled' ? Ban : CheckCircle2
         return <li key={job.id} className={`result-row ${job.id === selectedId ? 'result-item-on' : ''} row-${job.status}`}>
           <button type="button" className="result-item" aria-current={job.id === selectedId} onClick={() => onSelect(job)}>
-            <ResultThumb job={job} kind={generation.output_kind} fileUrl={fileUrl} />
+            <ResultThumb job={job} kind={jobKind(job, generation)} fileUrl={fileUrl} />
             <span className="result-text"><strong>{jobTitle(job)}</strong>
               {status && <small className={`result-status status-${job.status}`}><StatusIcon size={14} aria-hidden="true" className={job.status === 'running' ? 'spin' : undefined} />{status}</small>}
               {job.status === 'done' && settings && <small className="result-meta" title={settings}>{settings}</small>}

@@ -827,6 +827,138 @@ def render(model, inputs, on_step=None):
     return result["videos"][0], result["audio"][0], result["sampling_rate"], details
 
 
+# ----- pictures: one frame ----------------------------------------------------------------------------
+# H3 makes pictures as a single latent frame (the community "one-frame" method, as in ComfyUI-Fizgig-H3-Still):
+# the denoiser runs on one frame instead of a clip, so a 4 MP picture is a few thousand tokens. Decoding a lone
+# frame through the video decoder comes out banded, so it is repeated to one decoder chunk and a middle frame kept.
+PICTURE_MODES = {"picture": "t2va", "edit": "ref2va"}
+PICTURE_SIZES = {"1 MP": 1_000_000, "2 MP": 2_000_000, "4 MP": 4_000_000, "8 MP": 8_000_000}
+PICTURE_FRAMES = 5      # the frame count the layout is resolved for: H3's smallest clip, so the audio part is tiny
+STILL_KEEP = 3          # the decoded frame kept (after the decoder's leading padding), as in Fizgig and Image Studio
+
+
+def picture_size(inputs, anchor=None):
+    """Width and height (multiples of 32) for the picture's megapixels and shape."""
+    pixels = PICTURE_SIZES.get(inputs.get("size") or "4 MP", PICTURE_SIZES["4 MP"])
+    ratio = _ratio(inputs, anchor)
+    width = (pixels * ratio) ** 0.5
+    # Not _round32: that caps an edge at 1344, H3's limit for video frames; one frame can be much larger.
+    return max(256, round(width / 32) * 32), max(256, round(width / ratio / 32) * 32)
+
+
+class _OneFrame:
+    """While active, H3's pipelines lay out and decode a single picture instead of a clip."""
+
+    def __enter__(self):
+        from diffusers.modular_pipelines.minimax_h3 import before_denoise, decoders, modular_pipeline
+
+        self.modules = (before_denoise, decoders, modular_pipeline)
+        pipeline_class = modular_pipeline.MiniMaxH3ModularPipeline
+        step = decoders.MiniMaxH3VideoDecodeStep
+        self.saved = (before_denoise.video_latent_num_frames, pipeline_class.__dict__["min_duration"],
+                      step.__call__)
+        before_denoise.video_latent_num_frames = lambda *args, **kwargs: 1
+        pipeline_class.min_duration = property(lambda self: 0.0)
+        step.__call__ = _decode_still
+        return self
+
+    def __exit__(self, *exc):
+        before_denoise, decoders, modular_pipeline = self.modules
+        count, minimum, call = self.saved
+        before_denoise.video_latent_num_frames = count
+        modular_pipeline.MiniMaxH3ModularPipeline.min_duration = minimum
+        decoders.MiniMaxH3VideoDecodeStep.__call__ = call
+        return False
+
+
+def _decode_still(self, components, state):
+    """The video decode step for one latent frame: repeat it to a decoder chunk and keep a middle frame."""
+    torch = _torch()
+    with torch.no_grad():
+        block_state = self.get_block_state(state)
+        device = components._execution_device
+        vae = components.vae
+        mean = torch.tensor(vae.config.latents_mean, device=device).view(1, -1, 1, 1, 1)
+        std = torch.tensor(vae.config.latents_std, device=device).view(1, -1, 1, 1, 1)
+        latent = block_state.latents * std + mean
+        group = latent.repeat(1, 1, vae.tokens_chunk_size + vae.token_overlap, 1, 1)
+        clip = vae._decode_clip(group.to(vae.post_quant_conv.weight.dtype))[:, :, vae.frame_pre_padding:]
+        frame = clip[:, :, STILL_KEEP:STILL_KEEP + 1]
+        pixel_mean = torch.tensor(components.pixel_mean, device=device).view(1, -1, 1, 1, 1)
+        pixel_std = torch.tensor(components.pixel_std, device=device).view(1, -1, 1, 1, 1)
+        frame = (frame.float() * pixel_std + pixel_mean).clamp(0, 1)
+        block_state.videos = components.video_processor.postprocess_video(frame, output_type=block_state.output_type)
+        self.set_block_state(state, block_state)
+    return components, state
+
+
+def render_picture(model, inputs, on_step=None):
+    """Make one picture. Returns (PIL image, details)."""
+    from PIL import Image
+
+    torch = model["torch"]
+    mode = inputs.get("mode") or "picture"
+    workflow = PICTURE_MODES[mode]
+    if on_step:
+        on_step(0, 0)
+    _use_transformer(model, TRANSFORMER_OF[workflow])
+    extra, anchor, pictures = {}, None, []
+    if workflow == "ref2va":
+        pictures, _, _ = _references({"images": inputs.get("images")})
+        extra = {"references": pictures}
+        if pictures:
+            image = pictures[0].image
+            anchor = image if isinstance(image, Image.Image) else Image.fromarray(image)
+    width, height = picture_size(inputs, anchor)
+    seed = inputs.get("seed")
+    seed = seed if isinstance(seed, int) else random.randrange(1, 2**31)
+    quality = inputs.get("quality") if inputs.get("quality") in STEPS else "high"
+    if quality == "turbo" and not model["turbo"]:
+        quality = "standard"
+    turbo = quality == "turbo"
+    if model["turbo"] and turbo != model["turbo_on"]:
+        set_turbo(model["transformer"], turbo)
+        model["turbo_on"] = turbo
+    steps = STEPS[quality]
+    if workflow == "ref2va":
+        prompt = build_reference_prompt({**inputs, "audio_use": None}, len(pictures), 0, 0)
+        detail = inputs.get("detail") if inputs.get("detail") in DETAIL else "standard"
+        edge = DETAIL[detail]
+        for pipe in (model["encoders"][workflow], model["pipes"][workflow]):
+            if pipe.config.get("reference_image_short_edge") != edge:
+                pipe.update_components(reference_image_short_edge=edge)
+    else:
+        prompt = str(inputs.get("prompt") or "").strip()
+    common = {"width": width, "height": height, "num_frames": PICTURE_FRAMES} if workflow == "ref2va" else \
+        {"width": width, "height": height}
+    with _OneFrame():
+        with torch.inference_mode():
+            encoded = model["encoders"][workflow](prompt=prompt, **common, **extra,
+                                                  output=["prompt_embeds", "text_token_tags"])
+        embeds = encoded["prompt_embeds"].to("cuda", DTYPE)
+        hook = None
+        if on_step:
+            done = [0]
+
+            def count(module, args):
+                done[0] += 1
+                on_step(min(done[0], steps), steps)
+            hook = model["transformer"].register_forward_pre_hook(count)
+        try:
+            result = model["pipes"][workflow](
+                prompt_embeds=embeds, text_token_tags=encoded["text_token_tags"], num_frames=PICTURE_FRAMES,
+                width=width, height=height, num_inference_steps=steps + 1,
+                generator=torch.Generator().manual_seed(seed), output=["videos"], **extra)
+        finally:
+            if hook:
+                hook.remove()
+    frame = result["videos"][0][0]
+    image = frame if isinstance(frame, Image.Image) else Image.fromarray(frame)
+    details = {"seed": seed, "steps": steps, "quality": quality, "width": width, "height": height, "mode": mode,
+               "prompt": prompt}
+    return image, details
+
+
 def _resize_frames(video, width, height):
     """Resize every frame (Lanczos): the simple upscale for resolutions that do not fit on the card."""
     import numpy as np
@@ -861,7 +993,10 @@ def generate(model, inputs, job):
     job.report("Reading the description")
     started = time.perf_counter()
     try:
-        _make_clip(model, inputs, job, started, encode_video)
+        if (inputs.get("mode") or "text") in PICTURE_MODES:
+            _make_picture(model, inputs, job, started)
+        else:
+            _make_clip(model, inputs, job, started, encode_video)
     finally:
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.empty_cache()  # hand cached working memory back between clips, also after a cancel
@@ -938,6 +1073,22 @@ def _make_clip(model, inputs, job, started, encode_video):
     job.detail(**details, fps=FPS, clip_seconds=round(details["frames"] / FPS, 1))
     job.thumbnail(_frame(path, FPS))
     print(f"[worker] clip {details['width']}x{details['height']} {details['frames']} frames {details['quality']}: "
+          f"{time.perf_counter() - started:.1f} s, peak {torch.cuda.max_memory_reserved() / 2**30:.1f} GiB reserved",
+          flush=True)
+    job.report(f"Done in {time.perf_counter() - started:.0f} s, seed {details['seed']}")
+
+
+def _make_picture(model, inputs, job, started):
+    torch = model["torch"]
+
+    def step(done, total):
+        job.report(f"Painting, step {done} of {total}" if total else "Getting the model ready")
+    image, details = render_picture(model, inputs, step)
+    path = job.output(f"picture-{details['seed']}.png", "image/png")
+    image.save(str(path))
+    job.detail(**details)
+    job.thumbnail(image, size=1024)  # large enough for the chat model to look at instead of the full picture
+    print(f"[worker] picture {details['width']}x{details['height']} {details['quality']}: "
           f"{time.perf_counter() - started:.1f} s, peak {torch.cuda.max_memory_reserved() / 2**30:.1f} GiB reserved",
           flush=True)
     job.report(f"Done in {time.perf_counter() - started:.0f} s, seed {details['seed']}")

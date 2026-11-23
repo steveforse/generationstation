@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # Local, machine-specific list of real runtimes (paths, presets). See runtimes.example.json.
     runtimes_file: Path | None = ROOT / "runtimes.json"
     runtime_dir: Path = ROOT / "runtime"
+    # A SearXNG instance for the chat's web search (its JSON output must be enabled). Unset: no web search.
+    searxng_url: str | None = None
 
     @model_validator(mode="after")
     def stale_window_exceeds_sample_interval(self):

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import pytest
 
 from generationstation.chat import ChatManager, tool_name
+from generationstation.chat_tools import JobTools
 from generationstation.lifecycle import LifecycleError
 from generationstation.plugins import get_plugin
 from generationstation.runtimes import parse_catalog
@@ -80,8 +81,8 @@ class Store:
         return [m for m in self.messages if m["conversation_id"] == conversation_id]
 
     def add_message(self, conversation_id, *, role, content="", reasoning=None, attachments=None, tool_calls=None,
-                    tool_call_id=None, job_id=None, status="done", error_message=None):
-        row = {"id": str(uuid.uuid4()), "conversation_id": conversation_id, "role": role, "content": content,
+                    tool_call_id=None, job_id=None, status="done", error_message=None, note=None):
+        row = {"id": str(uuid.uuid4()), "conversation_id": conversation_id, "role": role, "content": content, "note": note,
                "reasoning": reasoning or None, "attachments": attachments or [], "tool_calls": tool_calls or [],
                "tool_call_id": tool_call_id, "job_id": job_id, "status": status, "error_message": error_message,
                "created_at": datetime.now(timezone.utc), "position": len(self.list_messages(conversation_id)) + 1}
@@ -289,3 +290,64 @@ def test_a_basalt_model_can_run_on_its_own_install(tmp_path):
     assert (old.argv[0], old.cwd) == ("C:/basalt/bin/basalt.exe", "C:/basalt")
     assert (new.argv[0], new.cwd) == ("C:/basalt-new/bin/basalt.exe", "C:/basalt-new")
     assert new.env["PATH"] == "C:/cuda;P"  # the runtime's CUDA path unless the preset names its own
+
+
+def test_the_model_sees_what_its_jobs_made_and_results_it_shows(setup, tmp_path):
+    """A made picture reaches the model with the next message; shown results right after the tool, as cards."""
+    store, cat, generation, uploads = setup
+    made = {"id": "5e5e5e5e-0000-0000-0000-000000000000", "model_id": "h3", "status": "done",
+            "inputs": {"prompt": "a fox"}, "outputs": [{"name": "fox.png", "mime": "image/png"}]}
+    older = {"id": "7f7f7f7f-0000-0000-0000-000000000000", "model_id": "h3", "status": "done",
+             "inputs": {"prompt": "a lighthouse"}, "outputs": [{"name": "light.png", "mime": "image/png"}]}
+    for job in (made, older):
+        store.jobs[job["id"]] = job
+        (tmp_path / "jobs" / job["id"]).mkdir(parents=True)
+        (tmp_path / "jobs" / job["id"] / job["outputs"][0]["name"]).write_bytes(PNG)
+    jobs = JobTools(store, cat, generation, None)
+    chat = ChatManager(store, cat, generation, uploads, opener=Server(), job_tools=jobs)
+    conversation = chat.create()
+    cid = conversation["id"]
+    store.add_message(cid, role="user", content="Make a fox")
+    store.add_message(cid, role="assistant", tool_calls=[{"id": "c1", "name": "make_h3__text", "arguments": "{}"}])
+    store.add_message(cid, role="tool", content="Started job 5e5e5e5e.", tool_call_id="c1", job_id=made["id"])
+    store.add_message(cid, role="assistant", content="Started it.")
+    store.add_message(cid, role="user", content="How does it look? And show me the lighthouse.")
+    shown = jobs.show({"references": ["7f7f7f7f", "abcd9999"]})
+    assert shown["attachments"] == [{"job_id": older["id"], "name": "light.png"}] and "No job has the reference abcd9999." in shown["text"]
+    store.add_message(cid, role="assistant", tool_calls=[{"id": "c2", "name": "show_results", "arguments": "{}"}])
+    store.add_message(cid, role="tool", content=shown["text"], tool_call_id="c2", attachments=shown["attachments"], note=shown["note"])
+    context = chat._context(store.get_conversation(cid), {})
+    question = context[5]["content"]
+    assert question[0]["text"].startswith("[Finished since your answer: [result 5e5e5e5e: picture from MiniMax H3 videos")
+    assert question[1]["type"] == "image_url" and question[2]["text"].startswith("How does it look?")
+    assert context[7]["role"] == "tool" and context[8]["role"] == "user"
+    assert context[8]["content"][0]["text"].startswith("[The results shown above") and context[8]["content"][1]["type"] == "image_url"
+    # On the next turn those pictures are words: re-reading them on every request made answers much slower.
+    store.add_message(cid, role="assistant", content="A fox in snow, and the lighthouse.")
+    later = store.add_message(cid, role="user", content="Thanks")
+    context = chat._context(store.get_conversation(cid), {})
+    assert not any(isinstance(m["content"], list) and any(p.get("type") == "image_url" for p in m["content"]) for m in context)
+    store.messages.remove(later)
+    store.messages.pop()
+    store.launches["basalt"]["launch"]["settings"]["vision"] = "off"  # picture reading off: words only, no extra message
+    context = chat._context(store.get_conversation(cid), {})
+    assert len(context) == 8 and all(part["type"] == "text" for part in context[5]["content"])
+    assert jobs.show({"references": ["5e5e"]})["ok"] is True
+
+
+def test_a_large_picture_reaches_the_model_as_its_thumbnail(setup, tmp_path):
+    """A 4 MP picture took the chat model minutes to read; it gets the 1024 px thumbnail instead."""
+    from generationstation.chat import png_size
+    store, cat, generation, uploads = setup
+    big = PNG[:8] + (13).to_bytes(4, "big") + b"IHDR" + (2656).to_bytes(4, "big") + (1504).to_bytes(4, "big") + b"\0" * 9
+    job = {"id": "9a9a9a9a-0000-0000-0000-000000000000", "model_id": "h3", "status": "done", "inputs": {"prompt": "x"},
+           "outputs": [{"name": "picture.png", "mime": "image/png"}, {"name": "thumbnail.jpg", "mime": "image/jpeg"}]}
+    folder = tmp_path / "jobs" / job["id"]
+    folder.mkdir(parents=True)
+    (folder / "picture.png").write_bytes(big)
+    (folder / "thumbnail.jpg").write_bytes(b"\xff\xd8thumb")
+    chat = ChatManager(store, cat, generation, uploads, opener=Server())
+    assert png_size(folder / "picture.png") == (2656, 1504) and png_size(folder / "thumbnail.jpg") is None
+    assert chat._image_part(job, "picture.png")["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    (folder / "picture.png").write_bytes(PNG)  # a small picture goes as itself
+    assert chat._image_part(job, "picture.png")["image_url"]["url"].startswith("data:image/png;base64,")
