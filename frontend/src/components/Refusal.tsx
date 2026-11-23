@@ -8,5 +8,10 @@ export function RefusalDetails({ refusal, gpus }: { refusal: Refusal; gpus?: Gpu
     const gpu = resource.startsWith('gpu:') ? gpus?.find((item) => item.id === resource.slice(4)) : undefined
     return gpu ? gpu.name : resource
   }
-  return <div className="refusal-details" role="alert"><div><AlertCircle size={15} /><strong>{refusal.code}</strong><span>{refusal.message}</span></div>{refusal.resources?.map((resource, index) => <div className="refusal-resource" key={`${resource.resource}-${index}`}><strong>{resourceName(resource.resource)}</strong><span>Required {formatBytes(resource.required_bytes)}</span><span>Available {formatBytes(resource.available_bytes)}</span>{resource.headroom_bytes !== undefined && <span>Headroom {formatBytes(resource.headroom_bytes)}</span>}</div>)}</div>
+  // The sentence first, then the code (for support), then what each resource needed against what it had.
+  return <div className="refusal-details" role="alert">
+    <div className="refusal-head"><AlertCircle size={16} aria-hidden="true" /><span>{refusal.message}</span></div>
+    <code className="refusal-code">{refusal.code}</code>
+    {refusal.resources?.map((resource, index) => <div className="refusal-resource" key={`${resource.resource}-${index}`}><strong>{resourceName(resource.resource)}</strong><span>Required {formatBytes(resource.required_bytes)}</span><span>Available {formatBytes(resource.available_bytes)}</span>{resource.headroom_bytes !== undefined && <span>Headroom {formatBytes(resource.headroom_bytes)}</span>}</div>)}
+  </div>
 }

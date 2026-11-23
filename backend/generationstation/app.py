@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import queue
 import re
 import secrets
 import sys
@@ -19,9 +20,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from .chat import ChatManager
 from .config import ROOT, Settings
 from .generation import GenerationManager
 from .lifecycle import IdempotencyConflict, LifecycleError, LifecycleManager
+from .logs import LogNotFound, LogStore
 from .process_worker import ProcessSupervisor
 from .runtimes import load_catalog
 from .storage import Store
@@ -172,6 +175,29 @@ class RuntimeStartRequest(BaseModel):
         return value
 
 
+class ConversationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    model_id: StrictStr | None = Field(default=None, min_length=1, max_length=64)
+
+
+class ConversationRename(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: StrictStr = Field(max_length=200)
+
+
+class ChatAttachment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    job_id: StrictStr = Field(min_length=1, max_length=36)
+    name: StrictStr = Field(min_length=1, max_length=200)
+
+
+class ChatMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: StrictStr = Field(default="", max_length=20_000)
+    attachments: list[ChatAttachment] = Field(default_factory=list, max_length=6)
+    thinking: bool = True
+
+
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     inputs: dict[StrictStr, StrictStr | StrictInt | list[StrictStr] | None] = Field(default_factory=dict)
@@ -199,6 +225,8 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         monitor.watch_processes(lifecycle.owned_processes)
     uploads = UploadStore(settings.runtime_dir)
     generation = GenerationManager(store, catalog, uploads)
+    chat = ChatManager(store, catalog, generation, uploads)
+    logs = LogStore(settings.runtime_dir, store)
     access_logger = _access_logger()
     instance_id = None
 
@@ -352,6 +380,62 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     def job_file(job_id: str, name: str):
         path, mime = generation.output_path(job_id, name)
         return FileResponse(path, media_type=mime, filename=name)
+
+    @api.get("/conversations")
+    def conversations():
+        return chat.list()
+
+    @api.post("/conversations", status_code=201)
+    def create_conversation(payload: ConversationCreate):
+        return chat.create(payload.model_id)
+
+    @api.get("/conversations/{conversation_id}")
+    def conversation(conversation_id: str):
+        return chat.get(conversation_id)
+
+    @api.put("/conversations/{conversation_id}")
+    def rename_conversation(conversation_id: str, payload: ConversationRename):
+        return chat.rename(conversation_id, payload.title)
+
+    @api.delete("/conversations/{conversation_id}")
+    def delete_conversation(conversation_id: str):
+        return chat.delete(conversation_id)
+
+    @api.post("/conversations/{conversation_id}/stop")
+    def stop_conversation(conversation_id: str):
+        return chat.stop(conversation_id)
+
+    @api.post("/conversations/{conversation_id}/messages")
+    def send_message(conversation_id: str, payload: ChatMessageRequest):
+        """Answer a message as server-sent events: message (each saved message), start, delta, error, done.
+        The answer finishes and is saved even if the browser disconnects."""
+        turn = chat.start(conversation_id, payload.text, [a.model_dump() for a in payload.attachments],
+                          payload.thinking)
+
+        async def stream():
+            while True:
+                try:
+                    event, data = await asyncio.to_thread(turn.events.get, True, 15)
+                except queue.Empty:
+                    yield ": keep-alive\n\n"
+                    continue
+                yield f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+                if event == "done":
+                    return
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+    @api.get("/logs")
+    def log_list():
+        """Model server logs, one per start, newest first, with that start's model and outcome."""
+        return logs.list()
+
+    @api.get("/logs/{name}")
+    def log_text(name: str, lines: int = Query(default=500, ge=1, le=5000)):
+        try:
+            return logs.read(name, lines)
+        except LogNotFound:
+            raise HTTPException(404, {"code": "LOG_NOT_FOUND", "message": "That log is not available."}) from None
 
     @api.get("/profiles")
     def profiles():

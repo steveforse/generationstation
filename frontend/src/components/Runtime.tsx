@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, ArrowUpRight, Ban, Check, ChevronDown, Clock, Download, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Download, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
 import { formatBytes } from '../api'
 import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeSetting, SettingValue, UploadRecord } from '../types'
 import { FilePicker, type FileItem } from './FilePicker'
@@ -7,6 +7,7 @@ import { CropEditor, shapeAspect } from './CropEditor'
 import { estimateFit } from './Resources'
 import { WorkloadIcon } from './WorkloadIcon'
 import { RefusalDetails } from './Refusal'
+import { StatePill } from './StatePill'
 import type { VoiceTarget } from '../voiceSample'
 
 /**
@@ -26,14 +27,14 @@ export function HelpTip({ label, text }: { label: string; text: string }) {
   return <span className="help-tip" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
     <button type="button" className="help-tip-button" aria-label={`What ${label} does`} aria-describedby={id} aria-expanded={open}
       onClick={() => setOpen((current) => !current)} onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
-      onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false) }}><HelpCircle size={13} /></button>
+      onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false) }}><HelpCircle size={18} /></button>
     <span role="tooltip" id={id} className={`help-tip-text ${open ? 'help-tip-open' : ''}`}>{text}</span>
   </span>
 }
 
 /** A setting's label row: the label (tied to its control) and, when there is help, a "?" with the explanation. */
 function FieldLabel({ htmlFor, label, suffix = '', help }: { htmlFor: string; label: string; suffix?: string; help?: string }) {
-  return <span className="field-label"><label htmlFor={htmlFor}>{label.toUpperCase()}{suffix}</label>{help && <HelpTip label={label} text={help} />}</span>
+  return <span className="field-label"><label htmlFor={htmlFor}>{label}{suffix && <span className="field-label-suffix">{suffix}</span>}</label>{help && <HelpTip label={label} text={help} />}</span>
 }
 
 export function defaultLaunch(runtime: Runtime, presetKey: string): Launch {
@@ -224,18 +225,18 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
     })
     const shown = field.kind === 'files' ? problem(field) : value && problem(field)
     return <div className={`field ${field.kind === 'textarea' ? 'field-wide' : ''} ${field.kind === 'files' ? 'field-files' : ''}`} key={field.key}>
-      <FieldLabel htmlFor={id} label={field.label} suffix={field.required || field.kind === 'files' ? '' : ' (OPTIONAL)'} help={field.help} />
+      <FieldLabel htmlFor={id} label={field.label} suffix={field.required || field.kind === 'files' ? '' : ' (optional)'} help={field.help} />
       {field.kind === 'files' ? <><FilePicker id={id} field={field} items={files[field.key] ?? []} upload={upload}
           onChange={(update) => setFiles((current) => ({ ...current, [field.key]: update(current[field.key] ?? []) }))} />{framing(field)}</>
         : field.kind === 'textarea' ? <textarea id={id} className="text-input generate-textarea" rows={10} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? undefined} value={value} onChange={(event) => set(event.target.value)} />
         : field.kind === 'choice' ? <select id={id} className="text-input" value={value} onChange={(event) => set(event.target.value)}>{field.options.map((option) => <option key={option} value={option}>{optionLabel(option, field.option_labels)}</option>)}</select>
           : <input id={id} className="text-input" type={field.kind === 'text' ? 'text' : 'number'} step={field.kind === 'text' ? undefined : 1} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? (field.kind === 'seed' ? 'Random' : undefined)} value={value} onChange={(event) => set(event.target.value)} />}
-      {field.guide && field.guide.length > 0 && <details className="field-guide"><summary>Writing guide</summary><ul>
+      {field.guide && field.guide.length > 0 && <details className="field-guide disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Writing guide</summary><ul>
         {field.guide.map((tip) => { const [head, ...rest] = tip.split(': '); return <li key={tip}>{rest.length ? <><strong>{head}:</strong> {rest.join(': ')}</> : tip}</li> })}
       </ul></details>}
       {field.ratio_role === 'width' && field.ratio_partner && <button type="button" className="text-button ratio-lock" aria-pressed={locked}
-        onClick={() => setLocked(!locked)}>{locked ? <Lock size={12} /> : <Unlock size={12} />}{locked ? 'Locked to the shape’s proportions' : 'Proportions unlocked'}</button>}
-      {shown && <small className="field-problem">{shown}</small>}
+        onClick={() => setLocked(!locked)}>{locked ? <Lock size={16} /> : <Unlock size={16} />}{locked ? 'Locked to the shape’s proportions' : 'Proportions unlocked'}</button>}
+      {shown && <small className="field-problem"><AlertCircle size={16} aria-hidden="true" />{shown}</small>}
     </div>
   }
   // Fields such as the custom size appear only while they apply (resolution "custom").
@@ -245,13 +246,19 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
   const fileFields = basic.filter((field) => field.kind === 'files')
   const otherFields = basic.filter((field) => field.kind !== 'files')
   const expected = expectedTime(runtime, generation, mode ? { ...values, mode } : values)
+  // Why the Make button is off, from the same checks that switch it off.
+  const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1)
+  const blocking = fields.find((field) => shown(field) && problem(field))
+  const missing = sending ? '' : uploading ? 'Wait for the upload to finish.'
+    : blocking ? (problem(blocking) === 'Required.' ? `Add ${lower(blocking.label)} first.` : `${blocking.label}: ${lower(problem(blocking))}`) : ''
+  const missingId = `${runtime.id}-${mode ?? 'input'}-missing`
   return <form className="generate-form" onSubmit={submit} aria-label={label}>
     {fileFields.length > 0 && <div className="generate-files">{fileFields.map(renderField)}</div>}
     <div className="generate-fields">{otherFields.map(renderField)}</div>
-    {extra.length > 0 && <><button type="button" className="text-button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}><ChevronDown size={14} className={advanced ? 'chevron-open' : ''} /> More options</button>
+    {extra.length > 0 && <><button type="button" className="text-button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}><ChevronDown size={16} className={advanced ? 'chevron-open' : ''} /> More options</button>
       {advanced && <div className="generate-fields">{extra.map(renderField)}</div>}</>}
-    {error && <div className="form-error" role="alert"><AlertCircle size={15} />{error}</div>}
-    <div className="generate-actions">{(expected || ahead > 0) && <span className="generate-expected"><Clock size={14} /><span>{expected}{ahead > 0 && <> {ahead === 1 ? 'One is' : `${ahead} are`} ahead in the queue; this one starts after {ahead === 1 ? 'it' : 'them'}.</>}</span></span>}<button className="button button-primary" type="submit" disabled={!valid || sending}><Sparkles size={15} />{sending ? 'Sending…' : uploading ? 'Uploading…' : ahead > 0 ? 'Add to queue' : label}</button></div>
+    {error && <div className="form-error" role="alert"><AlertCircle size={16} />{error}</div>}
+    <div className="generate-actions">{(expected || ahead > 0) && <span className="generate-expected"><Clock size={16} /><span>{expected}{ahead > 0 && <> {ahead === 1 ? 'One is' : `${ahead} are`} ahead in the queue; this one starts after {ahead === 1 ? 'it' : 'them'}.</>}</span></span>}<span className="generate-submit">{!valid && missing && <span className="generate-missing" id={missingId}>{missing}</span>}<button className="button button-primary button-lg" type="submit" disabled={!valid || sending} aria-describedby={!valid && missing ? missingId : undefined}><Sparkles size={16} />{sending ? 'Sending…' : uploading ? 'Uploading…' : ahead > 0 ? 'Add to queue' : label}</button></span></div>
   </form>
 }
 
@@ -278,13 +285,13 @@ export function queuePositions(jobs: Job[]) {
   const queued = jobs.filter((job) => job.status === 'queued').sort((a, b) => a.created_at.localeCompare(b.created_at))
   return Object.fromEntries(queued.map((job, index) => [job.id, index + 1]))
 }
-const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+export const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
 const THUMBNAIL = 'thumbnail.jpg'
 const isThumbnail = (job: Job, output: JobOutput) => output.name === (typeof job.details?.thumbnail === 'string' ? job.details.thumbnail : THUMBNAIL)
 
 /** A result's preview: the worker's thumbnail, else a picture itself, else an icon for its kind. */
-function ResultThumb({ job, kind, fileUrl }: { job: Job; kind: string; fileUrl: GenerateHandlers['fileUrl'] }) {
+export function ResultThumb({ job, kind, fileUrl }: { job: Job; kind: string; fileUrl: GenerateHandlers['fileUrl'] }) {
   const [url, setUrl] = useState('')
   const source = job.status === 'done' ? job.outputs.find((output) => isThumbnail(job, output)) ?? job.outputs.find((output) => output.mime.startsWith('image/')) : undefined
   useEffect(() => {
@@ -298,7 +305,7 @@ function ResultThumb({ job, kind, fileUrl }: { job: Job; kind: string; fileUrl: 
   }, [job.id, source?.name])
   const Icon = job.status === 'cancelled' ? Ban : kind === 'audio' ? Music : kind === 'image' ? ImageIcon : Film
   return <span className={`result-thumb ${url ? '' : 'result-thumb-empty'} thumb-${job.status}`} aria-hidden="true">
-    {url ? <img src={url} alt="" /> : job.status === 'running' ? <Loader2 size={20} className="spin" /> : job.status === 'queued' ? <Hourglass size={18} /> : <Icon size={18} />}
+    {url ? <img src={url} alt="" /> : job.status === 'running' ? <Loader2 size={24} className="spin" /> : job.status === 'queued' ? <Hourglass size={22} /> : <Icon size={22} />}
     {job.status === 'done' && kind === 'video' && url && <span className="result-thumb-play" />}
   </span>
 }
@@ -323,24 +330,27 @@ export function ResultsRail({ jobs, generation, selectedId, onSelect, fileUrl, o
     setProblems((current) => ({ ...current, [job.id]: problem }))
   }
   return <aside className="results-rail" aria-label={`Your ${word}s`}>
-    <div className="results-rail-head"><strong>Your {word}s</strong><span>{[working ? `${working} ${makingOf(generation).toLowerCase()}` : '', waiting ? `${waiting} queued` : ''].filter(Boolean).join(' · ') || jobs.length}</span></div>
+    <div className="results-rail-head"><h2>Your {word}s</h2><span>{[working ? `${working} ${makingOf(generation).toLowerCase()}` : '', waiting ? `${waiting} queued` : ''].filter(Boolean).join(' · ') || jobs.length}</span></div>
     {jobs.length === 0 ? <p className="results-empty">Nothing yet. What you make appears here.</p>
       : <ul className="results-list">{jobs.map((job) => {
         const seconds = jobSeconds(job)
-        const meta = [modeLabel(job) ?? '', ...choices(job).filter((field) => job.inputs[field.key] != null).map((field) => optionLabel(String(job.inputs[field.key]), field.option_labels)),
-          job.status === 'done' && seconds != null ? formatSeconds(seconds) : '', when(job.created_at)].filter(Boolean).join(' · ')
-        const status = job.status === 'done' ? meta
-          : job.status === 'queued' ? `Queued · ${ordinal(places[job.id] ?? 1)}`
-            : job.status === 'running' ? `${makingOf(generation)} · ${job.progress ?? 'starting'}`
-              : `${statusLabel(job)} · ${when(job.created_at)}`
+        const settings = [modeLabel(job) ?? '', ...choices(job).filter((field) => job.inputs[field.key] != null).map((field) => optionLabel(String(job.inputs[field.key]), field.option_labels))].filter(Boolean).join(' · ')
+        const time = [when(job.created_at), job.status === 'done' && seconds != null ? formatSeconds(seconds) : ''].filter(Boolean).join(' · ')
+        const status = job.status === 'queued' ? `Queued · ${ordinal(places[job.id] ?? 1)}`
+          : job.status === 'running' ? `${makingOf(generation)} · ${job.progress ?? 'starting'}`
+            : job.status === 'done' ? '' : statusLabel(job)
+        const StatusIcon = job.status === 'running' ? Loader2 : job.status === 'queued' ? Hourglass : job.status === 'failed' ? AlertCircle : job.status === 'cancelled' ? Ban : CheckCircle2
         return <li key={job.id} className={`result-row ${job.id === selectedId ? 'result-item-on' : ''} row-${job.status}`}>
           <button type="button" className="result-item" aria-current={job.id === selectedId} onClick={() => onSelect(job)}>
             <ResultThumb job={job} kind={generation.output_kind} fileUrl={fileUrl} />
-            <span className="result-text"><strong>{jobTitle(job)}</strong><small className={`result-status status-${job.status}`}>{status}</small>
+            <span className="result-text"><strong>{jobTitle(job)}</strong>
+              {status && <small className={`result-status status-${job.status}`}><StatusIcon size={14} aria-hidden="true" className={job.status === 'running' ? 'spin' : undefined} />{status}</small>}
+              {job.status === 'done' && settings && <small className="result-meta" title={settings}>{settings}</small>}
+              <small className="result-time">{time}</small>
               {problems[job.id] && <small className="operation-error">{problems[job.id]}</small>}</span>
           </button>
           {active(job) && <button type="button" className="icon-button result-cancel" aria-label={`Cancel ${jobTitle(job)}`} title="Cancel"
-            disabled={cancelling[job.id] || job.progress === 'Cancelling'} onClick={() => void cancel(job)}><X size={14} /></button>}
+            disabled={cancelling[job.id] || job.progress === 'Cancelling'} onClick={() => void cancel(job)}><X size={16} /></button>}
         </li>
       })}</ul>}
   </aside>
@@ -363,7 +373,7 @@ function InputThumb({ job, file, inputUrl }: { job: Job; file: JobFile; inputUrl
   }, [job.id, file.name])
   return <a className="input-thumb" href={url || undefined} download={file.original} title={file.original}>
     {file.kind === 'image' && url ? <img src={url} alt={file.original} /> : file.kind === 'video' && url ? <video src={url} muted preload="metadata" aria-label={file.original} />
-      : <span className="file-icon">{file.kind === 'audio' ? <Music size={18} /> : <Film size={18} />}</span>}
+      : <span className="file-icon">{file.kind === 'audio' ? <Music size={22} /> : <Film size={22} />}</span>}
     <small>{file.original}</small>
   </a>
 }
@@ -422,7 +432,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     if (problem) { setError(problem); setConfirming(false) }
   }
   return <article className="job-detail" aria-label={`${nounOf(generation)}: ${title}`}>
-    <div className="job-head"><span className={`model-state state-${job.status === 'done' ? 'ready' : job.status === 'failed' ? 'error' : job.status === 'cancelled' ? 'unloaded' : 'loading'}`}>{statusLabel(job)}</span>
+    <div className="job-head"><StatePill state={job.status}>{statusLabel(job)}</StatePill>
       <small>{when(job.created_at)}{job.status === 'done' && seconds != null ? ` · took ${formatSeconds(seconds)}` : ''}</small></div>
     {job.status === 'failed' && job.error_message && <small className="operation-error">{job.error_message}</small>}
     {error && <small className="operation-error" role="alert">{error}</small>}
@@ -432,20 +442,20 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
           : <video controls src={urls[output.name]} aria-label={`Play ${title}`} />) : <div className="job-media-loading"><small>Loading…</small></div>}
     </div>)}
     <div className="job-actions">
-      <button type="button" className="button button-secondary" onClick={() => void onReuse(job)}><RotateCcw size={14} />Use these settings</button>
+      <button type="button" className="button button-secondary" onClick={() => void onReuse(job)}><RotateCcw size={16} />Use these settings</button>
       {job.status === 'done' && onUseVoice && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).flatMap((output) => voiceTargets.map((target) =>
         <button key={target.runtime.id} type="button" className="button button-secondary" disabled={!urls[output.name] || !!voiceBusy}
           title={`Send this clip's sound to ${target.runtime.name} as the voice to speak in${target.ready ? '' : ` (${target.runtime.name} is not running: start it on the Models page)`}`}
           onClick={async () => { setVoiceBusy(target.runtime.id); setError(''); const problem = await onUseVoice(job, urls[output.name], target); setVoiceBusy(''); if (problem) setError(problem) }}>
-          {voiceBusy === target.runtime.id ? <Loader2 size={14} className="spin" /> : <MessageCircleMore size={14} />}Use voice in {target.runtime.name}</button>))}
-      {[...media, ...others].map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={14} />{output.name}</a>)}
+          {voiceBusy === target.runtime.id ? <Loader2 size={16} className="spin" /> : <MessageCircleMore size={16} />}Use voice in {target.runtime.name}</button>))}
+      {[...media, ...others].map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={16} />{output.name}</a>)}
       {active(job) && <button type="button" className="button button-secondary job-delete" disabled={deleting || job.progress === 'Cancelling'}
-        onClick={async () => { setDeleting(true); setError(await onCancel(job)); setDeleting(false) }}><X size={14} />{job.progress === 'Cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
+        onClick={async () => { setDeleting(true); setError(await onCancel(job)); setDeleting(false) }}><X size={16} />{job.progress === 'Cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
       {!active(job)
         ? confirming ? <span className="job-confirm"><span>Delete this {nounOf(generation)} and its files?</span>
-            <button type="button" className="button button-danger" disabled={deleting} onClick={() => void remove()}><Trash2 size={14} />{deleting ? 'Deleting…' : 'Delete'}</button>
+            <button type="button" className="button button-danger" disabled={deleting} onClick={() => void remove()}><Trash2 size={16} />{deleting ? 'Deleting…' : 'Delete'}</button>
             <button type="button" className="button button-secondary" disabled={deleting} onClick={() => setConfirming(false)}>Keep</button></span>
-          : <button type="button" className="button button-secondary job-delete" onClick={() => setConfirming(true)}><Trash2 size={14} />Delete</button>
+          : <button type="button" className="button button-secondary button-danger-outline job-delete" onClick={() => setConfirming(true)}><Trash2 size={16} />Delete</button>
         : null}
     </div>
     {fileFields.length > 0 && <section className="job-section"><h4>Pictures and references</h4><div className="input-thumbs">
@@ -469,7 +479,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
       {gpus && <Row label="Card">{gpus}</Row>}
       {startSettings.map(([label, value]) => <Row key={label} label={label}>{value}</Row>)}
     </dl></section>}
-    {sentPrompt && <details className="job-section job-sent"><summary>Full prompt sent to the model</summary><pre>{sentPrompt}</pre></details>}
+    {sentPrompt && <details className="job-section job-sent disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Full prompt sent to the model</summary><pre>{sentPrompt}</pre></details>}
   </article>
 }
 
@@ -484,7 +494,7 @@ export function JobModal({ open, onClose, title, children }: { open: boolean; on
   }, [open])
   return <dialog ref={ref} className="job-modal" aria-label={title} onClose={onClose} onClick={(event) => { if (event.target === ref.current) onClose() }}>
     {open && <div className="job-modal-body">
-      <div className="job-modal-head"><strong>{title}</strong><button type="button" className="icon-button" aria-label="Close" onClick={onClose}><X size={16} /></button></div>
+      <div className="job-modal-head"><strong>{title}</strong><button type="button" className="icon-button" aria-label="Close" onClick={onClose}><X size={18} /></button></div>
       {children}
     </div>}
   </dialog>
@@ -506,6 +516,11 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
   const initialPreset = runtime.last_launch?.preset && runtime.presets[runtime.last_launch.preset] ? runtime.last_launch.preset : runtime.default_preset
   const [launch, setLaunch] = useState<Launch>(() => defaultLaunch(runtime, initialPreset))
   const [advanced, setAdvanced] = useState(false)
+  // Cards start folded to one row; a fresh refusal or message opens it so the reason is in view. An old error
+  // state does not: its badge in the row already says so.
+  const [open, setOpen] = useState(false)
+  const needsAttention = !!refusal || !!message
+  useEffect(() => { if (needsAttention) setOpen(true) }, [needsAttention])
   const preset = runtime.presets[launch.preset]
   const state = model?.state ?? 'unknown'
   const stopped = ['unloaded', 'error'].includes(state)
@@ -535,43 +550,12 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
   const choosePreset = (key: string) => setLaunch(defaultLaunch(runtime, key))
   const reset = () => setLaunch(defaultLaunch({ ...runtime, last_launch: null }, launch.preset))
 
-  return <article className="profile-card runtime-card">
-    <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={18} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload} · port {runtime.port}</span></div><span className={`model-state state-${state}`}>{pending ? 'Working…' : stateText}</span></div></div>
-    {runtime.description && <p className="runtime-description">{runtime.description}</p>}
-
-    <div className={`runtime-body ${aside ? 'runtime-body-split' : ''}`}><div className="runtime-controls">
-    <fieldset className="runtime-choice" disabled={!stopped || pending}>
-      <legend>Model</legend>
-      {Object.entries(runtime.presets).map(([key, item]) => <label key={key} className={`runtime-option ${launch.preset === key ? 'runtime-option-on' : ''}`}><input type="radio" name={`${runtime.id}-preset`} checked={launch.preset === key} onChange={() => choosePreset(key)} /><span>{item.name}</span></label>)}
-      {preset?.description && <p className="runtime-preset-description">{preset.description}</p>}
-    </fieldset>
-
-    {preset && <fieldset className="runtime-choice" disabled={!stopped || pending}>
-      <legend>GPUs</legend>
-      {preset.allowed_gpus.map((gpu) => <label key={gpu.index} className={`runtime-option ${launch.gpus.includes(gpu.index) ? 'runtime-option-on' : ''}`}>{runtime.max_gpus === 1
-        ? <input type="radio" name={`${runtime.id}-gpu`} checked={launch.gpus.includes(gpu.index)} onChange={() => setLaunch((current) => ({ ...current, gpus: [gpu.index] }))} />
-        : <input type="checkbox" checked={launch.gpus.includes(gpu.index)} onChange={(event) => setLaunch((current) => ({ ...current, gpus: event.target.checked ? [...current.gpus, gpu.index].sort() : current.gpus.filter((item) => item !== gpu.index) }))} />}<span>{gpu.name}</span></label>)}
-      {launch.gpus.length === 0 && <small className="field-problem">Choose at least one GPU.</small>}
-    </fieldset>}
-
-    {stopped && need && <div className="runtime-fit" aria-label={`${runtime.name} if started`}>
-      <span className="runtime-fit-head">IF YOU START IT</span>
-      {fits.map((fit) => <div className="runtime-fit-row" key={fit.key}>
-        <strong>{fit.label === 'RAM' ? 'RAM' : `${fit.label} VRAM`}</strong>
-        <span>needs {formatBytes(fit.need)}</span>
-        <small>{fit.free == null ? 'free amount unknown' : `${formatBytes(fit.free)} free after ${formatBytes(fit.headroom)} headroom`}</small>
-        {fit.fits === true ? <span className="fit-yes"><Check size={13} />Fits</span>
-          : fit.fits === false ? <span className="fit-no"><X size={13} />{formatBytes(fit.need - (fit.free ?? 0))} short</span>
-            : <span className="fit-unknown"><HelpCircle size={13} />Unknown</span>}
-      </div>)}
-      <p className="runtime-fit-note">Estimates from the plugin. The host checks again when you press Start.{runtime.kind === 'basalt' ? ' Basalt then uses whatever VRAM is free beyond its reserve.' : ''}</p>
-    </div>}
-    {stopped && needError && <p className="runtime-fit-error" role="status"><AlertCircle size={14} />{needError}</p>}
-
-    {preset && <div className="runtime-advanced">
-      <button type="button" className="text-button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}><ChevronDown size={14} className={advanced ? 'chevron-open' : ''} /> Advanced settings</button>
-      {advanced && <div className="runtime-settings">
-        {preset.settings.map((setting) => {
+  const cardNote = preset?.card_notes?.[[...launch.gpus].sort((a, b) => a - b).join(',')]
+  // Settings marked advanced fold away; a plugin that marks none keeps all of them folded, as before.
+  const anyAdvanced = !!preset?.settings.some((setting) => setting.advanced)
+  const essentials = anyAdvanced ? preset!.settings.filter((setting) => !setting.advanced) : []
+  const advancedSettings = anyAdvanced ? preset!.settings.filter((setting) => setting.advanced) : (preset?.settings ?? [])
+  const settingField = (setting: RuntimeSetting) => {
           const value = launch.settings[setting.key] ?? null
           const id = `${runtime.id}-${setting.key}`
           return <div className="field" key={setting.key}>
@@ -581,10 +565,78 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
               : <input id={id} className="text-input" type="number" step={1} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} disabled={!stopped || pending}
                   placeholder={setting.kind === 'optional_int' ? 'Automatic' : undefined} value={value === null ? '' : String(value)}
                   onChange={(event) => setValue(setting.key, event.target.value === '' ? null : Number(event.target.value))} />}
-            {problems[setting.key] && <small className="field-problem">{problems[setting.key]}</small>}
-            {setting.key === 'ram_reserve_mib' && value === 0 && <small className="field-warning">The RAM guard is off. Fine when Basalt is the only thing running; risky when other models or games need RAM.</small>}
+            {problems[setting.key] && <small className="field-problem"><AlertCircle size={16} aria-hidden="true" />{problems[setting.key]}</small>}
+            {setting.key === 'ram_reserve_mib' && value === 0 && <small className="field-warning"><AlertTriangle size={16} aria-hidden="true" />The RAM guard is off. Fine when this model is the only thing running; risky when other models need RAM.</small>}
           </div>
-        })}
+  }
+  const detailsId = `${runtime.id}-details`
+  const shortName = (name: string) => name.replace(/^NVIDIA (GeForce )?/, '')
+  const gpuLimit = preset?.max_gpus ?? runtime.max_gpus
+  // The cards in the folded row: choosable while stopped, the ones in use while running.
+  const shownGpus = running || !stopped ? (runtime.last_launch?.gpus ?? launch.gpus) : launch.gpus
+  const shortFall = fits.find((fit) => fit.fits === false)
+  const fitWord = !stopped ? null
+    : launch.gpus.length === 0 ? { kind: 'no', text: 'Choose a card' }
+      : !valid ? { kind: 'no', text: 'Check settings' }
+        : needError ? null
+          : !need ? { kind: 'wait', text: 'Checking…' }
+            : shortFall ? { kind: 'no', text: `${shortFall.label === 'RAM' ? 'RAM' : shortName(shortFall.label)}: ${formatBytes(shortFall.need - (shortFall.free ?? 0))} short` }
+              : fits.every((fit) => fit.fits === true) ? { kind: 'yes', text: 'Fits' } : { kind: 'wait', text: 'Fit unknown' }
+  const usedVram = usage ? Object.values(usage.gpus).reduce((sum, bytes) => sum + bytes, 0) : 0
+  const summary = preset && <div className="runtime-summary">
+    <fieldset className="runtime-chips" disabled={!stopped || pending}>
+      <legend className="sr-only">GPUs</legend>
+      {preset.allowed_gpus.filter((gpu) => stopped || shownGpus.includes(gpu.index)).map((gpu) => {
+        const on = shownGpus.includes(gpu.index)
+        return <label key={gpu.index} title={gpu.name} className={`runtime-chip ${on ? 'runtime-chip-on' : ''}`}>
+          {gpuLimit === 1
+            ? <input type="radio" name={`${runtime.id}-gpu`} aria-label={gpu.name} checked={on} onChange={() => setLaunch((current) => ({ ...current, gpus: [gpu.index] }))} />
+            : <input type="checkbox" aria-label={gpu.name} checked={on} onChange={(event) => setLaunch((current) => ({ ...current, gpus: event.target.checked ? [...current.gpus, gpu.index].sort() : current.gpus.filter((item) => item !== gpu.index) }))} />}
+          <span>{shortName(gpu.name)}</span></label>
+      })}
+    </fieldset>
+    {fitWord && <span className={`runtime-fitword fitword-${fitWord.kind}`}>{fitWord.kind === 'yes' ? <Check size={14} aria-hidden="true" /> : fitWord.kind === 'no' ? <X size={14} aria-hidden="true" /> : null}{fitWord.text}</span>}
+    {running && usage && <span className="runtime-fitword">{formatBytes(usedVram)} VRAM · {formatBytes(usage.ram_bytes)} RAM</span>}
+  </div>
+  return <article className={`profile-card runtime-card ${open ? 'runtime-card-open' : ''}`}>
+    <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={20} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload}</span></div>
+      {summary}
+      <div className="profile-actions runtime-head-actions">
+        {!stopped && <StatePill state={pending ? 'loading' : state}>{pending ? 'Working…' : stateText}</StatePill>}
+        {stopped && <button className="button button-primary" disabled={!canStart} title={!fresh ? 'A fresh telemetry sample is required.' : !host?.loading_enabled ? host?.loading_reason : !valid ? 'Fix the highlighted settings first.' : undefined} onClick={() => void onRun(runtime, 'start', launch)}><ArrowUpRight size={16} />Start</button>}
+        {running && <button className="button button-secondary" disabled={pending || !fresh} onClick={() => void onRun(runtime, 'stop')}><X size={16} />Stop</button>}
+        <button type="button" className="icon-button runtime-toggle" aria-expanded={open} aria-controls={detailsId} aria-label={`${open ? 'Hide' : 'Show'} details for ${runtime.name}`} title={open ? 'Hide details' : 'Details and settings'} onClick={() => setOpen(!open)}><ChevronDown size={18} className={open ? 'chevron-open' : ''} /></button>
+      </div></div></div>
+    {open && <div className="runtime-details" id={detailsId}>
+    {runtime.description && <p className="runtime-description">{runtime.description}</p>}
+
+    <div className={`runtime-body ${aside ? 'runtime-body-split' : ''}`}><div className="runtime-controls">
+    {Object.keys(runtime.presets).length > 1 && <fieldset className="runtime-choice" disabled={!stopped || pending}>
+      <legend>Model</legend>
+      {Object.entries(runtime.presets).map(([key, item]) => <label key={key} title={item.name} className={`runtime-option ${launch.preset === key ? 'runtime-option-on' : ''}`}><input type="radio" name={`${runtime.id}-preset`} checked={launch.preset === key} onChange={() => choosePreset(key)} /><span>{item.name}</span></label>)}
+      {preset?.description && <p className="runtime-preset-description">{preset.description}</p>}
+    </fieldset>}
+
+    {cardNote && <p className="runtime-preset-description">{cardNote}</p>}
+
+    {stopped && need && <div className="runtime-fit" aria-label={`${runtime.name} if started`}>
+      <span className="runtime-fit-head">If you start it</span>
+      {fits.map((fit) => <div className="runtime-fit-row" key={fit.key}>
+        <strong>{fit.label === 'RAM' ? 'RAM' : `${fit.label} VRAM`}</strong>
+        <span>needs {formatBytes(fit.need)}, {fit.free == null ? 'free amount unknown' : `${formatBytes(fit.free)} free after ${formatBytes(fit.headroom)} headroom`}</span>
+        {fit.fits === true ? <span className="fit-yes"><Check size={16} />Fits</span>
+          : fit.fits === false ? <span className="fit-no"><X size={16} />{formatBytes(fit.need - (fit.free ?? 0))} short</span>
+            : <span className="fit-unknown"><HelpCircle size={16} />Unknown</span>}
+      </div>)}
+      <p className="runtime-fit-note">These are estimates. The host checks again when you press Start.{runtime.chat ? ' A text model then uses whatever VRAM is free beyond what you leave free.' : ''}</p>
+    </div>}
+    {stopped && needError && <p className="runtime-fit-error" role="status"><AlertCircle size={16} />{needError}</p>}
+
+    {preset && essentials.length > 0 && <div className="runtime-settings runtime-settings-main">{essentials.map(settingField)}</div>}
+    {preset && advancedSettings.length > 0 && <div className="runtime-advanced">
+      <button type="button" className="text-button" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}><ChevronDown size={16} className={advanced ? 'chevron-open' : ''} /> Advanced settings</button>
+      {advanced && <div className="runtime-settings">
+        {advancedSettings.map(settingField)}
         <div className="runtime-settings-actions"><button type="button" className="button button-secondary" disabled={!stopped || pending} onClick={reset}>Reset to defaults</button></div>
       </div>}
     </div>}
@@ -599,10 +651,8 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
     </div>{aside && <div className="runtime-aside">{aside}</div>}</div>
     <div className="profile-card-footer"><span className="worker-caption">{running && model ? 'Running. Stop it to free its RAM and VRAM.' : stopped ? 'Stopped. Nothing is using memory.' : 'Working. This can take several minutes.'}</span><div className="profile-actions">
       {openHref && state === 'ready' && <a className="button button-secondary" href={openHref}>Open {runtime.name}</a>}
-      {stopped && <button className="button button-primary" disabled={!canStart} title={!fresh ? 'A fresh telemetry sample is required.' : !host?.loading_enabled ? host?.loading_reason : !valid ? 'Fix the highlighted settings first.' : undefined} onClick={() => void onRun(runtime, 'start', launch)}><ArrowUpRight size={14} />{state === 'error' ? 'Start again' : 'Start'}</button>}
-      {running && <button className="button button-secondary" disabled={pending || !fresh} onClick={() => void onRun(runtime, 'stop')}><X size={14} />Stop</button>}
-      {!stopped && !running && <button className="button button-secondary" disabled>{stateText}…</button>}
     </div></div>
+    </div>}
   </article>
 }
 

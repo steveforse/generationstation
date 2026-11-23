@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Activity, ArrowUpRight, Beaker, MemoryStick } from 'lucide-react'
+import { Activity, ArrowUpRight, ChevronDown, MemoryStick } from 'lucide-react'
+import { StatePill } from '../components/StatePill'
+import { groupByWorkload } from '../components/WorkloadIcon'
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
-import { ProfileManager } from '../components/Profiles'
 import { estimateFit, GpuCard, modelColor, modelUsage, type Preview, ramSegments, ResourceCard } from '../components/Resources'
 import { fieldsFor, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
 import type { FileItem } from '../components/FilePicker'
@@ -17,8 +18,15 @@ function Missing({ title, text }: { title: string; text: string }) {
 
 function OperationHistory({ id, operations, title, text, empty }: { id: string; operations: Operation[]; title: string; text: string; empty?: string }) {
   if (operations.length === 0 && !empty) return null
-  return <section className="operations-section" aria-labelledby={id}><div className="section-heading"><div><h3 id={id}>{title}</h3><p>{text}</p></div></div>
-    {operations.length === 0 ? <p className="operation-empty">{empty}</p> : <div className="operation-list">{operations.map((operation) => <div className="operation-row" key={operation.id}><span className={`operation-mark op-${operation.status}`}><Activity size={15} /></span><div className="operation-copy"><strong>{operation.action === 'load' ? 'Start' : 'Stop'} · {operation.status.replaceAll('_', ' ')}</strong><small>operation {operation.id}</small>{operation.error_message && <small className="operation-error">{operation.error_code ? `${operation.error_code}: ` : ''}{operation.error_message}</small>}</div><span className="simulation-badge">MODEL SERVER</span></div>)}</div>}</section>
+  const list = operations.length === 0 ? <p className="operation-empty">{empty}</p> : <OperationList operations={operations} />
+  // A short history stays folded away so an empty or near-empty list does not take half the card.
+  if (operations.length <= 2) return <details className="operations-section disclosure history-disclosure" aria-labelledby={id}>
+    <summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" /><span id={id}>{title} ({operations.length})</span></summary><p className="history-text">{text}</p>{list}</details>
+  return <section className="operations-section" aria-labelledby={id}><div className="section-heading"><div><h3 id={id}>{title} ({operations.length})</h3><p>{text}</p></div></div>{list}</section>
+}
+
+function OperationList({ operations }: { operations: Operation[] }) {
+  return <div className="operation-list">{operations.map((operation) => <div className="operation-row" key={operation.id}><span className={`operation-mark op-${operation.status}`}><Activity size={16} /></span><div className="operation-copy"><strong>{operation.action === 'load' ? 'Start' : 'Stop'} · {operation.status.replaceAll('_', ' ')}</strong><small>operation {operation.id}</small>{operation.error_message && <small className="operation-error">{operation.error_code ? `${operation.error_code}: ` : ''}{operation.error_message}</small>}</div><span className="simulation-badge">Model server</span></div>)}</div>
 }
 
 /** Loading and unloading: every model server on the host, with its model, GPU and advanced settings. */
@@ -29,7 +37,8 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
   const [estimates, setEstimates] = useState<Record<string, RuntimeEstimate | null>>({})
   const [focusId, setFocusId] = useState<string | null>(null)
   if (!host || !session) return <Missing title="Host not found" text="This host is no longer saved on this device." />
-  const runtimes = state.runtimes ?? []
+  // The sidebar's order: text models first, then speech, pictures, video and music.
+  const runtimes = groupByWorkload(state.runtimes ?? [], (runtime) => runtime.workload).flatMap((group) => group.items)
   // Preview the model being worked on: the card last hovered or focused, else the first with an estimate.
   const previewId = focusId && estimates[focusId] ? focusId : runtimes.find((runtime) => estimates[runtime.id])?.id
   const previewEstimate = previewId ? estimates[previewId] : null
@@ -39,8 +48,8 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
   const ramPreview = previewEstimate ? preview('ram', previewEstimate.ram_bytes) : undefined
   const gpuPreviews = Object.fromEntries(Object.entries(previewEstimate?.gpu_vram_bytes_by_id ?? {}).map(([id, bytes]) => [id, preview(id, bytes)]))
   return <>
-    <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state).toUpperCase()}</div><h1>Models</h1><p>Start and stop the model servers on {hostName(host, state)}. Each one holds RAM and VRAM while it runs.</p></div></section>
-    {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={14} /></a></div>}
+    <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state)}</div><h1>Models</h1><p>Start and stop the model servers on {hostName(host, state)}. Each one holds RAM and VRAM while it runs.</p></div></section>
+    {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={16} /></a></div>}
     <div className="models-layout"><div className="models-main">
     {state.runtimes && runtimes.length === 0 && <div className="empty-models"><div><strong>No model servers</strong><p>This host does not list any model servers.</p></div></div>}
     {runtimes.map((runtime) => {
@@ -57,11 +66,10 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     })}
     </div>
     {!!state.snapshot && state.connection !== 'idle' && <aside className="models-rail"><section className="resource-grid models-resources" aria-label={`${hostName(host, state)} resource usage`}>
-      <ResourceCard title="System memory" icon={<MemoryStick size={17} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent error={view.host?.ram_error ?? undefined} kind="RAM" stale={view.stale} segments={ramSegments(view.host, state.runtimes)} preview={ramPreview} />
-      <GpuCard host={view.host} age={view.age} stale={view.stale} isCurrent runtimes={state.runtimes} previews={gpuPreviews} />
+      <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent error={view.host?.ram_error ?? undefined} kind="RAM" stale={view.stale} segments={ramSegments(view.host, state.runtimes)} preview={ramPreview} legend />
+      <GpuCard host={view.host} age={view.age} stale={view.stale} isCurrent runtimes={state.runtimes} previews={gpuPreviews} legend />
     </section></aside>}
     </div>
-    <p className="models-dev-link"><Beaker size={13} /><a href={href({ page: 'profiles', hostId: host.id })}>Capacity test profiles</a><span>Simulated loads for checking the capacity rules during development. No model is run.</span></p>
   </>
 }
 
@@ -86,11 +94,11 @@ export function ServicePage({ store, host, modelId }: { store: HostStore; host?:
     : ['loading', 'unloading'].includes(modelState) ? `${stateText[modelState]}. This can take several minutes.`
       : `${runtime?.name ?? modelId} is not running. Start it on the Models page first.`
   return <>
-    <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state).toUpperCase()}</div><h1>{runtime?.name ?? modelId}</h1><p>{runtime ? runtime.description || `${runtime.workload} · runs on ${hostName(host, state)}` : 'Waiting for this host’s model list.'}</p></div></section>
-    {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={14} /></a></div>}
+    <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state)}</div><h1>{runtime?.name ?? modelId}</h1><p>{runtime ? runtime.description || `${runtime.workload} · runs on ${hostName(host, state)}` : 'Waiting for this host’s model list.'}</p></div></section>
+    {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={16} /></a></div>}
     {runtime && !runtime.generation && <Missing title="Nothing to make here" text={`${runtime.name} is started and stopped on the Models page.`} />}
     {runtime?.generation && <div className="service-layout"><div className="service-main"><article className="profile-card service-panel">
-      <div className="service-status" aria-live="polite"><span className={`model-state state-${modelState}`}>{stateText[modelState] ?? 'Unknown'}</span><span>{status}</span><a className="text-button" href={modelsHref}>{ready ? 'Model settings' : 'Go to Models'} <ArrowUpRight size={13} /></a></div>
+      <div className="service-status" aria-live="polite"><StatePill state={modelState}>{stateText[modelState] ?? 'Unknown'}</StatePill><span>{status}</span><a className="text-button" href={modelsHref}>{ready ? 'Model settings' : 'Go to Models'} <ArrowUpRight size={16} /></a></div>
       {ready && <GenerateForm key={reuse.n} runtime={runtime} generation={runtime.generation} initial={reuse.start} error={state.jobErrors[runtime.id]}
         upload={(file) => session.uploadFile(file)}
         ahead={jobs.filter((job) => job.status === 'queued' || job.status === 'running').length}
@@ -145,19 +153,4 @@ function gpuNames(runtime: Runtime) {
   const preset = launch ? runtime.presets[launch.preset] : undefined
   if (!launch || !preset) return 'this host'
   return launch.gpus.map((index) => preset.allowed_gpus.find((gpu) => gpu.index === index)?.name ?? `GPU ${index}`).join(' and ')
-}
-
-export function ProfilesPage({ store, host }: { store: HostStore; host?: SavedHost }) {
-  const session = host ? store.session(host.id) : undefined
-  const state = useSession(session)
-  const view = useHostView(state)
-  if (!host || !session) return <Missing title="Host not found" text="This host is no longer saved on this device." />
-  return <>
-    <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state).toUpperCase()}</div><h1>Test profiles</h1><p>Simulation profiles exercise capacity checks with a fake worker. Nothing is loaded or generated.</p></div></section>
-    {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /></div>}
-    <ProfileManager key={`${host.id}|${view.host?.instance_id ?? 'disconnected'}`} profiles={state.profiles} models={state.models} host={view.host} fresh={view.fresh}
-      catalogError={state.catalogError} actionError={state.actionError} operations={state.operations.filter((operation) => operation.simulation)}
-      pendingModelId={state.pendingModelId} refusals={state.refusals} onRegister={(profile) => session.registerProfile(profile)}
-      onLifecycle={(model, action, profile) => session.runLifecycle(model, action, profile)} />
-  </>
 }

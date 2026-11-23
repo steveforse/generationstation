@@ -1,83 +1,5 @@
 {
   "runtimes": {
-    "basalt": {
-      "kind": "basalt",
-      "name": "Basalt",
-      "workload": "text",
-      "executable": "C:\\ai\\basalt-win\\bin\\basalt.exe",
-      "working_dir": "C:\\ai\\basalt-win",
-      "port": 8160,
-      "path_prepend": [
-        "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\x64",
-        "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin"
-      ],
-      "ready_timeout_seconds": 1500,
-      "stop_timeout_seconds": 30,
-      "default_preset": "ds41",
-      "presets": {
-        "ds41": {
-          "name": "DeepSeek V4.1 Flash",
-          "alias": "DeepSeek-V4.1-Flash-1017 GSQ-RCO-IQ2_XXS",
-          "model_path": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS.basalt",
-          "gpus": [
-            0,
-            1
-          ],
-          "env": {
-            "BASALT_ENGRAM_FILE": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
-            "BASALT_ENGRAM_OFFSET": "416"
-          },
-          "settings": {
-            "max_context": 262144,
-            "vram_reserve_mib": 700,
-            "peer_reserve_mib": 600,
-            "resident_budget_gib": 48,
-            "ram_reserve_mib": 0,
-            "conversation_cache_mib": 4096
-          },
-          "estimate": {
-            "ram_gib": 16,
-            "gpu_min_free_gib": {
-              "0": 24,
-              "1": 10
-            }
-          }
-        },
-        "fn": {
-          "name": "Qwen3.8 Flash-Next",
-          "alias": "Qwen3.8-Flash-Next GSQ-RCO-IQ3_S",
-          "model_path": "D:\\ai\\models\\basalt-fn-win\\Qwen3.8-FN-GSQ-RCO-IQ3_S.v2.basalt",
-          "gpus": [
-            0,
-            1
-          ],
-          "fixed": {
-            "ple-io": "direct"
-          },
-          "kv_options": [
-            "int8",
-            "k8v4",
-            "q4_0"
-          ],
-          "settings": {
-            "max_context": 262144,
-            "kv": "int8",
-            "resident_experts": true,
-            "vram_reserve_mib": 700,
-            "peer_reserve_mib": 3072,
-            "resident_budget_gib": null,
-            "ram_reserve_mib": 2048
-          },
-          "estimate": {
-            "ram_gib": 40,
-            "gpu_min_free_gib": {
-              "0": 24,
-              "1": 10
-            }
-          }
-        }
-      }
-    },
     "yue2": {
       "kind": "yue2",
       "name": "YuE2 songs",
@@ -297,6 +219,276 @@
             "gpu_min_free_gib": {
               "0": 8,
               "1": 8
+            }
+          }
+        }
+      }
+    },
+    "deepseek41": {
+      "kind": "llm",
+      "name": "DeepSeek V4.1 Flash",
+      "description": "A large reasoning and coding model. Uses both cards, or the RTX 5090 alone with more of it in RAM.",
+      "workload": "text",
+      "port": 8160,
+      "ready_timeout_seconds": 1500,
+      "stop_timeout_seconds": 30,
+      "default_preset": "main",
+      "presets": {
+        "main": {
+          "name": "DeepSeek V4.1 Flash",
+          "gpus": [
+            0,
+            1
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "kv_options": [],
+          "vision_options": [
+            "card",
+            "off"
+          ],
+          "settings": {
+            "max_context": 262144,
+            "vram_reserve_mib": 700,
+            "peer_reserve_mib": 600,
+            "resident_budget_gib": 48,
+            "ram_reserve_mib": 0,
+            "conversation_cache_mib": 4096,
+            "vision": "card"
+          },
+          "estimate": {
+            "ram_gib": 16,
+            "gpu_min_free_gib": {
+              "0": 24,
+              "1": 10
+            }
+          },
+          "cards": {
+            "0,1": {
+              "engine": "basalt",
+              "executable": "C:\\ai\\basalt-win\\bin\\basalt.exe",
+              "working_dir": "C:\\ai\\basalt-win",
+              "path_prepend": [
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\x64",
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin"
+              ],
+              "alias": "DeepSeek-V4.1-Flash-1017 GSQ-RCO-IQ2_XXS",
+              "model_path": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS.basalt",
+              "estimate": {
+                "ram_gib": 16,
+                "gpu_min_free_gib": {
+                  "0": 24,
+                  "1": 10
+                }
+              },
+              "env": {
+                "BASALT_ENGRAM_FILE": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
+                "BASALT_ENGRAM_OFFSET": "416"
+              }
+            },
+            "0": {
+              "engine": "basalt",
+              "executable": "C:\\ai\\basalt-win\\bin\\basalt.exe",
+              "working_dir": "C:\\ai\\basalt-win",
+              "path_prepend": [
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\x64",
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin"
+              ],
+              "alias": "DeepSeek-V4.1-Flash-1017 GSQ-RCO-IQ2_XXS",
+              "model_path": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS.basalt",
+              "estimate": {
+                "ram_gib": 16,
+                "gpu_min_free_gib": {
+                  "0": 24
+                }
+              },
+              "env": {
+                "BASALT_ENGRAM_FILE": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
+                "BASALT_ENGRAM_OFFSET": "416"
+              }
+            }
+          }
+        }
+      }
+    },
+    "flash_next": {
+      "kind": "llm",
+      "name": "Qwen3.8 Flash-Next",
+      "description": "A fast general model with picture reading. Uses both cards, or the RTX 5090 alone with more of it in RAM.",
+      "workload": "text",
+      "port": 8162,
+      "ready_timeout_seconds": 1500,
+      "stop_timeout_seconds": 30,
+      "default_preset": "main",
+      "presets": {
+        "main": {
+          "name": "Qwen3.8 Flash-Next",
+          "gpus": [
+            0,
+            1
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "kv_options": [
+            "int8",
+            "k8v4",
+            "q4_0"
+          ],
+          "vision_options": [
+            "card",
+            "processor",
+            "off"
+          ],
+          "settings": {
+            "max_context": 262144,
+            "kv": "int8",
+            "resident_experts": true,
+            "vram_reserve_mib": 700,
+            "peer_reserve_mib": 3072,
+            "resident_budget_gib": null,
+            "ram_reserve_mib": 2048,
+            "vision": "card"
+          },
+          "estimate": {
+            "ram_gib": 40,
+            "gpu_min_free_gib": {
+              "0": 24,
+              "1": 10
+            }
+          },
+          "cards": {
+            "0,1": {
+              "engine": "basalt",
+              "executable": "C:\\ai\\basalt-win\\bin\\basalt.exe",
+              "working_dir": "C:\\ai\\basalt-win",
+              "path_prepend": [
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\x64",
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin"
+              ],
+              "alias": "Qwen3.8-Flash-Next GSQ-RCO-IQ3_S",
+              "model_path": "D:\\ai\\models\\basalt-fn-win\\Qwen3.8-FN-GSQ-RCO-IQ3_S.v2.basalt",
+              "estimate": {
+                "ram_gib": 40,
+                "gpu_min_free_gib": {
+                  "0": 24,
+                  "1": 10
+                }
+              },
+              "fixed": {
+                "ple-io": "direct"
+              }
+            },
+            "0": {
+              "engine": "basalt",
+              "executable": "C:\\ai\\basalt-win\\bin\\basalt.exe",
+              "working_dir": "C:\\ai\\basalt-win",
+              "path_prepend": [
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\x64",
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin"
+              ],
+              "alias": "Qwen3.8-Flash-Next GSQ-RCO-IQ3_S",
+              "model_path": "D:\\ai\\models\\basalt-fn-win\\Qwen3.8-FN-GSQ-RCO-IQ3_S.v2.basalt",
+              "estimate": {
+                "ram_gib": 40,
+                "gpu_min_free_gib": {
+                  "0": 24
+                }
+              },
+              "fixed": {
+                "ple-io": "direct"
+              }
+            }
+          }
+        }
+      }
+    },
+    "inkling2": {
+      "kind": "llm",
+      "name": "Inkling 2 Mini",
+      "workload": "text",
+      "port": 8161,
+      "description": "Thinking Machines' small, fast model. Reads pictures and is good at using the app's tools.",
+      "ready_timeout_seconds": 900,
+      "stop_timeout_seconds": 30,
+      "default_preset": "main",
+      "presets": {
+        "main": {
+          "name": "Inkling 2 Mini",
+          "gpus": [
+            1
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "kv_options": [
+            "fp8",
+            "fp16"
+          ],
+          "vision_options": [
+            "card",
+            "off"
+          ],
+          "settings": {
+            "max_context": 131072,
+            "vision": "card",
+            "kv": "fp8",
+            "vram_reserve_mib": 700
+          },
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {
+              "0": 24,
+              "1": 10.5
+            }
+          },
+          "card_notes": {
+            "1": "On the RTX 4080: the standard model, about 80 to 120 tokens a second.",
+            "0": "On the RTX 5090: an uncensored version that does not refuse requests, about 300 tokens a second."
+          },
+          "cards": {
+            "1": {
+              "engine": "strata",
+              "python": "C:\\ai\\strata\\terminal\\current\\python\\python.exe",
+              "server_dir": "C:\\ai\\strata\\terminal\\current",
+              "component": "component:strata-inkling",
+              "pack": "D:\\ai\\models\\strata\\models\\inkling-2-mini\\Inkling-2-Mini-SQ-10.strata",
+              "vision_pack": "D:\\ai\\models\\strata\\models\\inkling-2-mini\\Inkling-2-Mini-Vision.strata",
+              "tokenizer": "D:\\ai\\models\\strata\\packs\\inkling-2-mini-sq-10\\tokenizer",
+              "arch": "inkling2_loop",
+              "model_name": "inkling-2-mini",
+              "drafter": "dspark",
+              "sampling": {
+                "temperature": 1.0,
+                "top_k": 50
+              },
+              "estimate": {
+                "ram_gib": 6,
+                "gpu_min_free_gib": {
+                  "1": 10.5
+                }
+              }
+            },
+            "0": {
+              "engine": "basalt",
+              "executable": "C:\\ai\\basalt-v0.5.5\\bin\\basalt.exe",
+              "working_dir": "C:\\ai\\basalt-v0.5.5",
+              "path_prepend": [
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin\\x64",
+                "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.1\\bin"
+              ],
+              "alias": "Inkling-2-Mini-Unbound-v2",
+              "model_path": "D:\\ai\\models\\basalt-inkling2-mini-unbound\\Inkling-2-Mini-Unbound-v2-NVFP4-q8.basalt",
+              "estimate": {
+                "ram_gib": 6,
+                "gpu_min_free_gib": {
+                  "0": 24
+                }
+              }
             }
           }
         }
