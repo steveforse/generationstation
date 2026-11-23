@@ -134,7 +134,15 @@ chat_messages = Table(
     Column("status", String(16), nullable=False, server_default="done"),
     Column("error_message", String(2000)),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("note", String(500)),
     UniqueConstraint("conversation_id", "position", name="chat_messages_order"),
+)
+
+app_settings = Table(
+    "app_settings", metadata,
+    Column("key", String(80), primary_key=True),
+    Column("value", JSONB),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
 SCHEDULER_LOCK_ID = 746238190
@@ -681,9 +689,10 @@ class Store:
             return [dict(row) for row in conn.execute(query).mappings()]
 
     def add_message(self, conversation_id, *, role, content="", reasoning=None, attachments=None, tool_calls=None,
-                    tool_call_id=None, job_id=None, status="done", error_message=None):
+                    tool_call_id=None, job_id=None, status="done", error_message=None, note=None):
         now = self._now()
         row = {"id": str(uuid.uuid4()), "conversation_id": conversation_id, "role": role, "content": content,
+               "note": note[:500] if note else None,
                "reasoning": reasoning or None, "attachments": attachments or [], "tool_calls": tool_calls or [],
                "tool_call_id": tool_call_id, "job_id": job_id, "status": status,
                "error_message": error_message[:2000] if error_message else None, "created_at": now}
@@ -694,6 +703,19 @@ class Store:
             conn.execute(insert(chat_messages).values(**row))
             conn.execute(update(conversations).where(conversations.c.id == conversation_id).values(updated_at=now))
         return row
+
+    # ----- settings ----------------------------------------------------------------------------
+
+    def get_setting(self, key, default=None):
+        with self.engine.connect() as conn:
+            row = conn.execute(select(app_settings.c.value).where(app_settings.c.key == key)).first()
+        return default if row is None else row[0]
+
+    def set_setting(self, key, value):
+        statement = pg_insert(app_settings).values(key=key, value=value, updated_at=self._now())
+        with self.engine.begin() as conn:
+            conn.execute(statement.on_conflict_do_update(index_elements=["key"],
+                                                         set_={"value": value, "updated_at": self._now()}))
 
     def close(self):
         try:

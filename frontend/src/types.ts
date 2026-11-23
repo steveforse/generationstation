@@ -24,7 +24,7 @@ export type RuntimePreset = { name: string; description?: string | null; gpus: n
   max_gpus?: number | null; card_notes?: Record<string, string> }
 export type InputField = { key: string; label: string; kind: 'text' | 'textarea' | 'int' | 'choice' | 'seed' | 'files' | 'crop'; required: boolean; default: string | number | null; minimum: number | null; maximum: number | null; max_length: number | null; options: string[]; placeholder: string | null; help: string; advanced: boolean; accept?: ('image' | 'video' | 'audio')[]; max_count?: number | null; target?: string | null; shape_field?: string | null; show_when?: Record<string, string>; option_labels?: Record<string, string>; ratio_partner?: string | null; ratio_role?: 'width' | 'height' | null; guide?: string[] }
 /** A way of making something, shown as a tab with its own form. */
-export type GenerationMode = { key: string; label: string; help: string; inputs: InputField[] }
+export type GenerationMode = { key: string; label: string; help: string; inputs: InputField[]; output_kind?: 'audio' | 'image' | 'video' }
 /** A file uploaded for a request, before a job uses it. */
 export type UploadRecord = { id: string; name: string; kind: 'image' | 'video' | 'audio'; mime: string; bytes: number }
 /** A job's own copy of a file it was given (a reference picture, video or audio). */
@@ -59,6 +59,8 @@ export type ToolCall = { id: string; name: string; arguments: string }
 export type ChatMessage = {
   id: string; position: number; role: 'user' | 'assistant' | 'tool'; content: string; reasoning: string | null
   attachments: ChatAttachment[]; tool_calls: ToolCall[]; tool_call_id: string | null; job_id: string | null
+  /** A tool result's one line for the chat (the model reads the full content). */
+  note?: string | null
   status: 'done' | 'stopped' | 'error'; error_message: string | null; created_at: string
 }
 /** A model server's log: one per start, with that start's model and outcome. */
@@ -68,3 +70,6 @@ export type LogEntry = {
   error_message: string | null; started_at: string | null
 }
 export type LogText = { name: string; bytes: number; lines: string[]; truncated: boolean }
+/** Settings kept on the host; `searxng_source` says where the search address came from. */
+export type HostSettings = { searxng_url: string; searxng_source: 'settings' | 'environment' | 'none' }
+export type SearchTestResult = { ok: boolean; message: string }

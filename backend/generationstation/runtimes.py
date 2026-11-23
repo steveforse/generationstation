@@ -163,7 +163,8 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
         fields = lambda specs: [{"key": key, **spec.model_dump()} for key, spec in specs.items()]
         generation = {"output_kind": plugin.output_kind, "inputs": fields(plugin.inputs),
                       "make_label": plugin.make_label, "result_noun": plugin.result_noun,
-                      "modes": [{"key": key, "label": mode.label, "help": mode.help, "inputs": fields(mode.inputs)}
+                      "modes": [{"key": key, "label": mode.label, "help": mode.help, "inputs": fields(mode.inputs),
+                                 "output_kind": mode.output_kind or plugin.output_kind}
                                 for key, mode in plugin.modes.items()],
                       "timings": [timing.model_dump() for timing in plugin.timings]}
     return {"id": model_id, "kind": runtime.kind, "plugin": plugin.title, "name": runtime.name,

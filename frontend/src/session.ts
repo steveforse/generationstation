@@ -6,7 +6,7 @@ import type { SavedHost } from './hosts'
 import {
   ApiError, type Connection, type Job, type JobOutput, type Launch, type Model,
   type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord,
-  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText,
+  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult,
 } from './types'
 
 /** How many recent results to keep in view (the results sidebar lists them). */
@@ -363,6 +363,18 @@ export class HostSession {
       }
       throw error
     }
+  }
+
+  async settings(): Promise<HostSettings> {
+    return await this.call('/api/settings') as HostSettings
+  }
+
+  async saveSettings(searxngUrl: string): Promise<HostSettings> {
+    return await this.call('/api/settings', { method: 'PUT', body: JSON.stringify({ searxng_url: searxngUrl }) }) as HostSettings
+  }
+
+  async testSearch(searxngUrl: string): Promise<SearchTestResult> {
+    return await this.call('/api/settings/test-search', { method: 'POST', body: JSON.stringify({ searxng_url: searxngUrl }) }) as SearchTestResult
   }
 
   async logs(): Promise<LogEntry[]> {

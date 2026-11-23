@@ -68,6 +68,8 @@ function videoRuntimeFixture() {
         field('prompt', 'What happens', 'textarea', { required: true, max_length: 3000, guide: ['Pauses: commas give short pauses.', 'Sounds: [laughter] a laugh.'] }),
         field('shape', 'Shape', 'choice', { options: ['match picture', 'landscape 16:9', 'portrait 9:16'], default: 'match picture' }),
         field('first_crop', 'First frame framing', 'crop', { target: 'first', shape_field: 'shape' }), ...common] },
+      { key: 'picture', label: 'A picture', help: 'H3 paints one still picture.', output_kind: 'image', inputs: [field('prompt', 'Description', 'textarea', { required: true, max_length: 3000 }),
+        field('size', 'Size', 'choice', { options: ['2 MP', '4 MP', '8 MP'], default: '4 MP' })] },
     ] },
   }
 }
@@ -1000,11 +1002,14 @@ test('chats with the text model, which starts a song; conversations can be attac
     const user = chatMessage('m1', 1, 'user', { content: 'Write me a short song', attachments: [{ job_id: 'job-00000099', name: 'video-1.mp4', mime: 'video/mp4', model_id: 'minimax_h3' }] })
     const call = chatMessage('m2', 2, 'assistant', { reasoning: 'They want a song.', tool_calls: [{ id: 'c1', name: 'make_yue2__full', arguments: '{}' }] })
     const tool = chatMessage('m3', 3, 'tool', { content: 'Started job job-0000 on YuE2 songs.', tool_call_id: 'c1', job_id: song.id })
+    const started = chatMessage('m3b', 3, 'tool', { content: 'YuE2 songs is running on the RTX 4080 (ready in 12 s). Its tools are available now.', note: 'Started YuE2 songs on the RTX 4080', tool_call_id: 'c0' })
     const reply = chatMessage('m4', 4, 'assistant', { content: 'I started a **dream pop** song:\n\n- verse\n- chorus' })
-    messages.push(user, call, tool, reply)
+    const shown = chatMessage('m5', 5, 'tool', { content: 'Shown in the chat: job-0000.', note: 'Showing 1 result', tool_call_id: 'c2', attachments: [{ job_id: 'job-00000099', name: 'video-1.mp4' }] })
+    messages.push(user, call, started, tool, reply, shown)
     await route.fulfill({ status: 200, contentType: 'text/event-stream', body: chatStream([
       ['message', user], ['start', {}], ['delta', { reasoning: 'They want a song.' }], ['delta', { tool: 'make_yue2__full' }], ['message', call],
-      ['message', { ...tool, job: song }], ['start', {}], ['delta', { content: 'I started a **dream pop** song:' }], ['message', reply], ['done', {}],
+      ['status', { text: 'Starting YuE2 songs on the RTX 4080…' }], ['message', started],
+      ['message', { ...tool, job: song }], ['start', {}], ['delta', { content: 'I started a **dream pop** song:' }], ['message', reply], ['message', shown], ['done', {}],
     ]) })
   })
 
@@ -1030,10 +1035,16 @@ test('chats with the text model, which starts a song; conversations can be attac
   await expect(thread.locator('strong', { hasText: 'dream pop' })).toBeVisible()
   await expect(thread.getByRole('listitem').filter({ hasText: 'chorus' })).toBeVisible()
   await expect(thread.getByText('Thinking', { exact: true })).toBeVisible()
+  await expect(thread.getByText('Started YuE2 songs on the RTX 4080')).toBeVisible()
+  await expect(thread.getByText(/ready in 12 s/)).toHaveCount(0)
   // The song the model started shows its progress and then plays in the chat.
   const card = thread.locator('.chat-job')
   await expect(card.getByText('YuE2 songs')).toBeVisible()
   await expect(card.getByLabel('Play dream pop')).toBeVisible({ timeout: 20_000 })
+  // A result the model shows from earlier is a card too, playable in place.
+  const shownCards = thread.getByLabel('Showing 1 result').locator('.chat-job')
+  await expect(shownCards).toHaveCount(1)
+  await expect(shownCards.locator('video')).toBeVisible()
   await expect(page.getByRole('complementary', { name: 'Conversations' }).getByRole('link', { name: /Write me a short song/ })).toHaveAttribute('aria-current', 'page')
   await page.screenshot({ path: 'test-results/screenshots/chat.png', fullPage: true })
 
@@ -1138,4 +1149,50 @@ test("keeps logs behind the gear: each start's outcome, its error, and the log's
   await view.getByRole('combobox').selectOption('2000')
   await expect.poll(() => asked).toBe(2000)
   await page.screenshot({ path: 'test-results/screenshots/logs.png', fullPage: true })
+})
+
+test('keeps the search address in host settings: test it, then save it', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { songs: true })
+  let stored = { searxng_url: 'http://env-searx:8080', searxng_source: 'environment' }
+  const tested: string[] = []
+  await page.route('**/api/settings', (route) => {
+    if (route.request().method() === 'PUT') {
+      stored = { searxng_url: (route.request().postDataJSON() as { searxng_url: string }).searxng_url.replace(/\/+$/, ''), searxng_source: 'settings' }
+    }
+    return route.fulfill({ json: stored })
+  })
+  await page.route('**/api/settings/test-search', (route) => {
+    tested.push((route.request().postDataJSON() as { searxng_url: string }).searxng_url)
+    return route.fulfill({ json: { ok: true, message: 'Works: 5 results for a test search, e.g. “Lighthouse - Wikipedia”.' } })
+  })
+  await go(page, '#/overview')
+  const gear = page.getByRole('button', { name: 'Settings' })
+  if (await gear.getAttribute('aria-expanded') !== 'true') await gear.click()
+  await page.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Host settings' }).click()
+  await expect(page).toHaveURL(/#\/hosts\/local\/settings$/)
+  const address = page.getByLabel('Search service address')
+  await expect(address).toHaveValue('http://env-searx:8080')
+  await expect(page.getByText("Set in this host's .env file")).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await address.fill('http://searxng.example.lan/')
+  await page.getByRole('button', { name: 'Test' }).click()
+  await expect(page.getByRole('status')).toContainText('Works: 5 results')
+  expect(tested).toEqual(['http://searxng.example.lan/'])
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('status')).toContainText('Saved. The chat uses it from its next answer.')
+  await expect(address).toHaveValue('http://searxng.example.lan')
+  await expect(page.getByText("Set in this host's .env file")).toHaveCount(0)
+  await page.screenshot({ path: 'test-results/screenshots/host-settings.png', fullPage: true })
+})
+
+test('a model that also paints pictures labels each tab and result by what it makes', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { videos: true })
+  await go(page, '#/hosts/local/services/minimax_h3')
+  const tabs = page.getByRole('tablist', { name: 'How to make it' })
+  await expect(page.getByRole('tabpanel', { name: 'From a description' }).getByRole('button', { name: /^Make a video/ })).toBeVisible()
+  await tabs.getByRole('tab', { name: 'A picture' }).click()
+  const panel = page.getByRole('tabpanel', { name: 'A picture' })
+  await expect(panel.getByRole('button', { name: /^Make a picture/ })).toBeVisible()
+  await expect(panel.getByLabel(/^size/i)).toHaveValue('4 MP')
+  await expect(page.getByRole('heading', { name: 'Your results' })).toBeVisible()
 })

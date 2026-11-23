@@ -81,6 +81,8 @@ class ModeSpec(BaseModel):
     label: str
     help: str
     inputs: dict[str, InputSpec]
+    # What this mode makes when it differs from the plugin's output_kind (H3 makes pictures as well as videos).
+    output_kind: Literal["audio", "image", "video"] | None = None
 
 
 class TimingSpec(BaseModel):

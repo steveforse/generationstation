@@ -4,7 +4,7 @@ import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
 import { GpuCard, modelColor, ramSegments, ResourceCard } from '../components/Resources'
 import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
 import { StatePill } from '../components/StatePill'
-import { jobTitle, ResultThumb, when } from '../components/Runtime'
+import { jobTitle, ResultThumb, jobKind, when } from '../components/Runtime'
 import type { SavedHost } from '../hosts'
 import { href } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
@@ -51,7 +51,7 @@ function HostOverview({ store, host }: { store: HostStore; host: SavedHost }) {
       const runtime = state.runtimes?.find((item) => item.id === job.model_id)
       const session = store.session(host.id)
       return <li key={job.id}><a href={href({ page: 'service', hostId: host.id, modelId: job.model_id })}>
-        {runtime?.generation && session ? <ResultThumb job={job} kind={runtime.generation.output_kind} fileUrl={(item, output) => session.fileUrl(item, output)} /> : null}
+        {runtime?.generation && session ? <ResultThumb job={job} kind={jobKind(job, runtime.generation)} fileUrl={(item, output) => session.fileUrl(item, output)} /> : null}
         <span className="overview-recent-text"><strong>{jobTitle(job)}</strong><small>{runtime?.name ?? job.model_id} · {when(job.created_at)}</small></span>
       </a></li>
     })}</ul></section>}

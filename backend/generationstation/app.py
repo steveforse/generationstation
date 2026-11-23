@@ -21,8 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_v
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .chat import ChatManager
+from .chat_tools import HostTools, JobTools, WebTools
 from .config import ROOT, Settings
 from .generation import GenerationManager
+from .host_settings import HostSettings, SettingsInvalid
 from .lifecycle import IdempotencyConflict, LifecycleError, LifecycleManager
 from .logs import LogNotFound, LogStore
 from .process_worker import ProcessSupervisor
@@ -198,6 +200,16 @@ class ChatMessageRequest(BaseModel):
     thinking: bool = True
 
 
+class SettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    searxng_url: StrictStr = Field(default="", max_length=300)
+
+
+class SearchTest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    searxng_url: StrictStr | None = Field(default=None, max_length=300)
+
+
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     inputs: dict[StrictStr, StrictStr | StrictInt | list[StrictStr] | None] = Field(default_factory=dict)
@@ -225,8 +237,13 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         monitor.watch_processes(lifecycle.owned_processes)
     uploads = UploadStore(settings.runtime_dir)
     generation = GenerationManager(store, catalog, uploads)
-    chat = ChatManager(store, catalog, generation, uploads)
+    host_settings = HostSettings(store, settings.searxng_url)
+    web_tools = WebTools(host_settings.searxng_url)
+    host_settings.web = web_tools
     logs = LogStore(settings.runtime_dir, store)
+    chat = ChatManager(store, catalog, generation, uploads,
+                       host_tools=HostTools(store, catalog, lifecycle, lambda: snapshot()), web_tools=web_tools,
+                       job_tools=JobTools(store, catalog, generation, logs))
     access_logger = _access_logger()
     instance_id = None
 
@@ -424,6 +441,24 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
                     return
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+    @api.get("/settings")
+    def host_settings_get():
+        return host_settings.get()
+
+    @api.put("/settings")
+    def host_settings_put(payload: SettingsUpdate):
+        try:
+            return host_settings.set(payload.searxng_url)
+        except SettingsInvalid as exc:
+            raise HTTPException(422, {"code": "SETTINGS_INVALID", "message": str(exc)}) from None
+
+    @api.post("/settings/test-search")
+    def host_settings_test(payload: SearchTest):
+        try:
+            return host_settings.test_search(payload.searxng_url)
+        except SettingsInvalid as exc:
+            return {"ok": False, "message": str(exc)}
 
     @api.get("/logs")
     def log_list():

@@ -276,6 +276,8 @@ def test_1080p_renders_at_720p_then_resizes_to_exact_proportions(worker):
 
 def test_look_defaults_to_none_in_every_tab():
     for mode in H3.modes.values():
+        if mode.output_kind == "image":
+            continue  # pictures have no "look" field
         assert mode.inputs["style"].default == "none" and mode.inputs["style"].options[0] == "none"
 
 
@@ -313,3 +315,24 @@ def test_longer_clips_fit_only_at_smaller_sizes():
     for extra in bad:
         with pytest.raises(SettingsError, match="limited to smaller sizes"):
             validate_inputs(H3, {"prompt": "x", **extra})
+
+
+def test_pictures_are_modes_of_their_own_kind(worker):
+    """H3 paints one frame: picture and edit tabs make images, sized by megapixels, never capped like clip frames."""
+    from generationstation.runtimes import describe_runtime
+    catalog = parse_catalog({"runtimes": {"h3": {
+        "kind": "minimax_h3", "name": "MiniMax H3 videos", "workload": "video", "port": 8190, "python": sys.executable,
+        "output_dir": "out", "default_preset": "h3", "presets": {"h3": {
+            "name": "H3", "gpus": [0], "options": {}, "settings": {}, "estimate": {"ram_gib": 8, "gpu_min_free_gib": {"0": 29}}}}}}})
+    modes = {m["key"]: m for m in describe_runtime("h3", catalog.runtimes["h3"], [])["generation"]["modes"]}
+    assert modes["picture"]["output_kind"] == "image" and modes["edit"]["output_kind"] == "image"
+    assert modes["text"]["output_kind"] == "video"
+    values = validate_inputs(H3, {"mode": "picture", "prompt": "a fisherman"})
+    assert values == {"mode": "picture", "prompt": "a fisherman", "shape": "landscape 16:9", "size": "4 MP", "quality": "high"}
+    with pytest.raises(SettingsError):
+        validate_inputs(H3, {"mode": "picture", "prompt": "x", "quality": "turbo"})
+    assert H3.check_inputs("edit", {}, {}) == ["Add at least one picture to edit."]
+    assert worker.picture_size({"size": "4 MP", "shape": "landscape 16:9"}) == (2656, 1504)
+    assert worker.picture_size({"size": "8 MP", "shape": "landscape 16:9"}) == (3776, 2112)
+    assert worker.picture_size({"size": "2 MP", "shape": "portrait 9:16"}) == (1056, 1888)
+    assert worker.picture_size({"size": "4 MP", "shape": "square 1:1"}) == (1984, 1984)

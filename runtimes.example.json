@@ -110,7 +110,7 @@
     },
     "minimax_h3": {
       "kind": "minimax_h3",
-      "name": "MiniMax H3 videos",
+      "name": "MiniMax H3 videos & pictures",
       "workload": "video",
       "python": "C:\\ai\\envs\\minimax-h3-worker\\Scripts\\python.exe",
       "output_dir": "D:\\ai\\outputs\\minimax-h3",

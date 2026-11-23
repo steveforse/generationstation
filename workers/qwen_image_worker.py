@@ -391,7 +391,7 @@ def generate(model, inputs, job):
         raise
     image.save(job.output(f"picture-{details['seed']}.png", "image/png"))
     job.detail(**details)
-    job.thumbnail(image)
+    job.thumbnail(image, size=1024)  # large enough for the chat model to look at instead of the full picture
     torch = model["torch"]
     print(f"[worker] picture {details['width']}x{details['height']} {details['quality']}: "
           f"{time.perf_counter() - started:.1f} s, peak {torch.cuda.max_memory_reserved() / 2**30:.1f} GiB reserved",

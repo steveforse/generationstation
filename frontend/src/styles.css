@@ -871,6 +871,8 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent) }
 .chat-stopped { font-size: var(--fs-meta); font-style: italic; color: var(--text-3) }
 .chat-error { margin: 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--danger-line); border-radius: var(--r-md); background: var(--danger-soft); font-size: var(--fs-small); color: var(--danger) }
 .chat-tool-note { display: inline-flex; align-items: center; gap: var(--sp-2); margin: 0 0 0 44px; font-size: var(--fs-small); color: var(--text-2) }
+.chat-tool-note-problem { color: var(--warning) }
+.chat-shown { display: flex; flex-direction: column; gap: var(--sp-3) }
 .chat-job { display: flex; flex-direction: column; gap: var(--sp-2); width: min(520px, calc(100% - 44px)); margin-left: 44px; padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-page) }
 .chat-job-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--fs-small); font-weight: 600; color: var(--text-2) }
 .chat-job-head .text-button { margin-left: auto; color: var(--accent) }
@@ -982,3 +984,14 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
   .log-back { display: inline-grid }
   .logs-list, .log-text { max-height: none }
 }
+
+/* ============ Host settings ============ */
+.settings-section { display: flex; flex-direction: column; gap: var(--sp-3); max-width: 720px }
+.settings-section h2 { margin: 0; font: 700 var(--fs-h2)/var(--lh-h2) var(--font-display); color: var(--text) }
+.settings-help { margin: 0; color: var(--text-2); max-width: 65ch }
+.settings-source { font-size: var(--fs-meta); color: var(--text-3) }
+.settings-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2) }
+.settings-result { display: flex; align-items: flex-start; gap: var(--sp-2); margin: 0; font-size: var(--fs-small) }
+.settings-result svg { flex: none; margin-top: 2px }
+.settings-ok { color: var(--success) }
+.settings-problem { color: var(--danger) }

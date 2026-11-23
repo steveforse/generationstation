@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, AlertCircle, FileText, Loader2, Menu, MessagesSquare, Plug, Server, Settings, Sparkles } from 'lucide-react'
+import { Activity, AlertCircle, FileText, Loader2, Menu, MessagesSquare, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { hostName, StatusDot, stateText } from './components/HostBits'
 import { groupByWorkload, WorkloadIcon } from './components/WorkloadIcon'
 import type { SavedHost } from './hosts'
@@ -7,6 +7,7 @@ import { ConnectionsPage } from './pages/Connections'
 import { OverviewPage } from './pages/Overview'
 import { ChatPage } from './pages/Chat'
 import { LogsPage } from './pages/Logs'
+import { HostSettingsPage } from './pages/HostSettings'
 import { ModelsPage, ServicePage } from './pages/Service'
 import { href, type Route, useRoute } from './routes'
 import { HostStore, useHosts, useSession } from './store'
@@ -76,6 +77,7 @@ export default function App() {
         {route.page === 'connections' && <ConnectionsPage store={store} hosts={hosts} />}
         {route.page === 'service' && <ServicePage key={`${route.hostId}:${route.modelId}`} store={store} host={routeHost} modelId={route.modelId} />}
         {route.page === 'models' && <ModelsPage key={route.hostId} store={store} host={routeHost} />}
+        {route.page === 'settings' && <HostSettingsPage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'logs' && <LogsPage key={route.hostId} store={store} host={routeHost} name={route.name} />}
         {route.page === 'chat' && <ChatPage key={route.hostId} store={store} host={routeHost} conversationId={route.conversationId} />}
         {route.page !== 'chat' && <footer className="page-footer"><span>Generation Station <b>·</b> Host-first model management</span><span><span className="footer-dot" /> Measurements are reported by each connected service</span></footer>}
@@ -86,7 +88,7 @@ export default function App() {
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
-  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs'
+  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
     : state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId
   return <div className="breadcrumb"><span className="crumb-host">{host ? hostName(host, state) : 'Workspace'}</span><span className="crumb-slash" aria-hidden="true">/</span><strong>{title}</strong></div>
 }
@@ -149,9 +151,9 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   </div>
 }
 
-/** Quiet tools at the bottom of the sidebar: connections and each host's logs. */
+/** Quiet tools at the bottom of the sidebar: connections, and each host's settings and logs. */
 function ToolsMenu({ hosts, current }: { hosts: SavedHost[]; current: Route }) {
-  const onToolPage = current.page === 'connections' || current.page === 'logs'
+  const onToolPage = current.page === 'connections' || current.page === 'logs' || current.page === 'settings'
   const [open, setOpen] = useState(onToolPage)
   useEffect(() => { if (onToolPage) setOpen(true) }, [onToolPage])
   return <div className="sidebar-tools">
@@ -167,5 +169,8 @@ function ToolsMenu({ hosts, current }: { hosts: SavedHost[]; current: Route }) {
 function ToolsHostLinks({ host, current, several }: { host: SavedHost; current: Route; several: boolean }) {
   const state = useSession(store.session(host.id))
   const suffix = several ? ` · ${hostName(host, state)}` : ''
-  return <NavLink route={{ page: 'logs', hostId: host.id }} current={current} icon={<FileText size={18} />} label={`Logs${suffix}`} />
+  return <>
+    <NavLink route={{ page: 'settings', hostId: host.id }} current={current} icon={<SlidersHorizontal size={18} />} label={`Host settings${suffix}`} />
+    <NavLink route={{ page: 'logs', hostId: host.id }} current={current} icon={<FileText size={18} />} label={`Logs${suffix}`} />
+  </>
 }
