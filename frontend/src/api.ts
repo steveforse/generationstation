@@ -1,4 +1,4 @@
-import { ApiError, type ApiErrorBody, type Host, type Job, type Memory, type Model, type ModelProfile, type Operation, type Refusal, type Runtime } from './types'
+import { ApiError, type ApiErrorBody, type Host, type Job, type Memory, type Model, type Operation, type Refusal, type Runtime } from './types'
 
 export function formatBytes(value?: number | null) {
   if (value == null || !Number.isFinite(value) || value < 0) return 'Unavailable'
@@ -72,18 +72,6 @@ export function isCatalog(value: unknown): value is { models: Model[] } {
     && typeof (entry as Record<string, unknown>).workload === 'string'
     && typeof (entry as Record<string, unknown>).state === 'string'
     && typeof (entry as Record<string, unknown>).loading_enabled === 'boolean')
-}
-
-export function isProfiles(value: unknown): value is { profiles: ModelProfile[] } {
-  if (!value || typeof value !== 'object' || !Array.isArray((value as Record<string, unknown>).profiles)) return false
-  return ((value as { profiles: unknown[] }).profiles).every((entry) => {
-    if (!entry || typeof entry !== 'object') return false
-    const profile = entry as Record<string, unknown>
-    if (!(typeof profile.model_id === 'string' || typeof profile.id === 'string') || typeof profile.name !== 'string' || typeof profile.workload !== 'string'
-        || !isFiniteNumber(profile.ram_peak_bytes) || profile.ram_peak_bytes <= 0 || profile.mode !== 'simulation'
-        || !profile.gpu_vram_bytes_by_id || typeof profile.gpu_vram_bytes_by_id !== 'object' || Array.isArray(profile.gpu_vram_bytes_by_id)) return false
-    return Object.values(profile.gpu_vram_bytes_by_id as Record<string, unknown>).every((bytes) => isFiniteNumber(bytes) && bytes > 0)
-  })
 }
 
 export function isOperation(value: unknown): value is Operation {

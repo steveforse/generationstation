@@ -17,6 +17,12 @@ class BasaltPreset(BasePreset):
     fixed: dict[str, str | int | bool] = Field(default_factory=dict,
                                                description="Basalt keys always written; not user-editable.")
     kv_options: list[str] = Field(default_factory=list)
+    # A model that needs another Basalt install (a newer release) names it here; else the runtime's is used.
+    executable: str | None = Field(default=None, min_length=1)
+    working_dir: str | None = None
+    path_prepend: list[str] | None = None
+    # The picture reader modes this model supports (DeepSeek reads pictures only inside the engine).
+    vision_options: list[str] = Field(default_factory=lambda: ["dynamic", "cpu", "off"])
 
 
 class BasaltRuntime(BaseRuntime):
@@ -34,6 +40,7 @@ class BasaltPlugin(RuntimePlugin):
     title = "Basalt"
     description = "Runs a large language model for chat and coding, answering through an OpenAI-style API."
     runtime_model = BasaltRuntime
+    chats = True
     settings: ClassVar[dict[str, SettingSpec]] = {
         "max_context": SettingSpec(
             label="Max context", target="max-context", kind="int", minimum=1024, maximum=1_048_576,
@@ -41,6 +48,11 @@ class BasaltPlugin(RuntimePlugin):
         "kv": SettingSpec(
             label="KV cache precision", target="kv", kind="choice",
             help="Lower precision fits more context in VRAM at a small quality cost."),
+        "vision": SettingSpec(
+            label="Read pictures", target="vision", kind="choice", options=("dynamic", "cpu", "off"),
+            option_labels={"dynamic": "On (on the main card)", "cpu": "On the processor (slow)", "off": "Off"},
+            help="Lets the model look at pictures in a chat. On the main card it borrows expert-cache room only while "
+                 "reading a picture and holds about 1 GiB of RAM."),
         "vram_reserve_mib": SettingSpec(
             label="VRAM left free on the main card", target="vram-reserve-mib", kind="int",
             minimum=256, maximum=32768, unit="MiB",
@@ -65,12 +77,17 @@ class BasaltPlugin(RuntimePlugin):
     }
 
     def choice_options(self, preset, name):
-        return list(preset.kv_options) if name == "kv" else super().choice_options(preset, name)
+        if name == "kv":
+            return list(preset.kv_options)
+        if name == "vision":
+            return list(preset.vision_options)
+        return super().choice_options(preset, name)
 
     def estimate(self, runtime, preset, values, gpus):
         ram, gpu = super().estimate(runtime, preset, values, gpus)
         budget = values.get("resident_budget_gib")
-        return ram + (budget if isinstance(budget, int) else 0), gpu
+        reader = 1 if values.get("vision") not in (None, "off") else 0  # pinned RAM for the picture reader
+        return ram + (budget if isinstance(budget, int) else 0) + reader, gpu
 
     def config(self, runtime: BasaltRuntime, preset: BasaltPreset, values: dict, gpus: list[int]) -> dict:
         entry = {"alias": preset.alias, "model": preset.model_path, "gpu": ",".join(str(g) for g in gpus)}
@@ -86,16 +103,17 @@ class BasaltPlugin(RuntimePlugin):
         env.update(preset.env)
         # Make CUDA indices match NVML/nvidia-smi order, which the telemetry and UI use.
         env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        if runtime.path_prepend:
-            env["PATH"] = ";".join(runtime.path_prepend + [env.get("PATH", "")])
+        prepend = preset.path_prepend if preset.path_prepend is not None else runtime.path_prepend
+        if prepend:
+            env["PATH"] = ";".join(prepend + [env.get("PATH", "")])
         return env
 
     def launch(self, runtime, preset, values, gpus, base_env, launch_dir: Path):
         config_path = Path(launch_dir) / "basalt-config.json"
         return LaunchSpec(
-            argv=[runtime.executable, *runtime.leading_args, "serve", "--config", str(config_path)],
+            argv=[preset.executable or runtime.executable, *runtime.leading_args, "serve", "--config", str(config_path)],
             env=self.environment(runtime, preset, base_env),
-            cwd=runtime.working_dir,
+            cwd=preset.working_dir if preset.executable else runtime.working_dir,
             files={"basalt-config.json": json.dumps(self.config(runtime, preset, values, gpus), indent=2)},
         )
 

@@ -34,6 +34,8 @@ class SettingSpec(BaseModel):
     # Without one, an option is shown with a capital first letter (codes such as "q8_0" in capitals).
     option_labels: dict[str, str] = Field(default_factory=dict)
     help: str
+    # Shown under "Advanced settings" instead of with the main choices.
+    advanced: bool = False
 
 
 class InputSpec(BaseModel):
@@ -177,6 +179,8 @@ class RuntimePlugin:
     make_label: ClassVar[str | None] = None
     result_noun: ClassVar[str | None] = None
     timings: ClassVar[tuple[TimingSpec, ...]] = ()  # measured times per setting, for the form
+    # A server that answers chat (an OpenAI-style /v1/chat/completions): the dashboard offers it on the Chat page.
+    chats: ClassVar[bool] = False
 
     @property
     def generates(self) -> bool:
@@ -208,6 +212,18 @@ class RuntimePlugin:
 
     def choice_options(self, preset: BasePreset, name: str) -> list[str]:
         return list(self.settings[name].options)
+
+    def gpu_limit(self, preset: BasePreset) -> int | None:
+        """How many GPUs one start may use; None means no limit."""
+        return self.max_gpus
+
+    def check_gpus(self, preset: BasePreset, gpus: list[int]) -> list[str]:
+        """Problems with a GPU choice beyond the allowed list and the limit, in plain words."""
+        return []
+
+    def chat_sampling(self, preset: BasePreset, gpus: list[int]) -> dict:
+        """Sampling the chat sends when the person sets none (for servers whose own default is greedy)."""
+        return {}
 
     # ----- capacity ----------------------------------------------------------------------
 

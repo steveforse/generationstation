@@ -57,6 +57,9 @@ A generation plugin subclasses `WorkerPlugin` (`plugins/worker.py`) and sets:
 - `output_kind`: `audio`, `image` or `video`, which chooses the button ("Make a song") and the player. `make_label` and `result_noun` override the button and the word for one result when the kind's own do not fit (OmniVoice: "Make speech", "recording").
 - `max_gpus`: 1 for single-card models; the UI then offers a single choice.
 - `timings`: measured times as `TimingSpec`s (`seconds`, optional `first_seconds` for the first result after a start, and the `when` form choices, `preset` and `gpu` they apply to). The form shows the first one that matches the current choices and the card the model runs on. Record only measured times.
+- `chats`: true for a server with an OpenAI-style `/v1/chat/completions` (the `llm` plugin). The dashboard then offers it on the Chat page, where it can call every running generator's tabs as tools (`backend/generationstation/chat.py`); a generator needs nothing extra for that, but clear `help` text on its fields is what the chat model reads.
+- `advanced` on a `SettingSpec`: shown under "Advanced settings" on the Models card; the others are shown with the card choice. A plugin that marks none keeps all its settings folded, as before.
+- `gpu_limit(preset)`, `check_gpus(preset, gpus)` and `chat_sampling(preset, gpus)`: per-preset card rules and chat sampling. The `llm` plugin uses them so that one model entry can run on different engines depending on the card chosen.
 
 The worker sees only the chosen card(s) (`CUDA_VISIBLE_DEVICES`, in `nvidia-smi` order), so it always uses `cuda:0`. Preset `options` (model folders, and so on) are owner-set and passed through to `load()`; start settings come from the plugin's `settings`.
 

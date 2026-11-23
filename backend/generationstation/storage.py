@@ -12,6 +12,8 @@ from sqlalchemy import (
     MetaData,
     String,
     Table,
+    Text,
+    UniqueConstraint,
     create_engine,
     delete,
     event,
@@ -107,6 +109,32 @@ generation_jobs = Table(
     Column("finished_at", DateTime(timezone=True)),
     Column("details", JSONB),
     Column("launch", JSONB),
+)
+
+conversations = Table(
+    "conversations", metadata,
+    Column("id", String(36), primary_key=True),
+    Column("title", String(200), nullable=False),
+    Column("model_id", String(64), ForeignKey("models.id", ondelete="CASCADE"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+chat_messages = Table(
+    "chat_messages", metadata,
+    Column("id", String(36), primary_key=True),
+    Column("conversation_id", String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False),
+    Column("position", Integer, nullable=False),
+    Column("role", String(16), nullable=False),
+    Column("content", Text, nullable=False, server_default=""),
+    Column("reasoning", Text),
+    Column("attachments", JSONB, nullable=False),
+    Column("tool_calls", JSONB, nullable=False),
+    Column("tool_call_id", String(80)),
+    Column("job_id", String(36)),
+    Column("status", String(16), nullable=False, server_default="done"),
+    Column("error_message", String(2000)),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("conversation_id", "position", name="chat_messages_order"),
 )
 
 SCHEDULER_LOCK_ID = 746238190
@@ -609,6 +637,63 @@ class Store:
             query = query.where(generation_jobs.c.model_id == model_id)
         with self.engine.connect() as conn:
             return [dict(row) for row in conn.execute(query).mappings()]
+
+    def find_jobs_by_prefix(self, prefix, limit=2):
+        """Jobs whose ID starts with `prefix` (a short reference to a result, as the chat model writes it)."""
+        query = (select(generation_jobs).where(generation_jobs.c.id.like(prefix.replace("%", "") + "%"))
+                 .order_by(generation_jobs.c.created_at.desc()).limit(limit))
+        with self.engine.connect() as conn:
+            return [dict(row) for row in conn.execute(query).mappings()]
+
+    # ----- chat ------------------------------------------------------------------------------
+
+    def list_conversations(self, limit=200):
+        query = select(conversations).order_by(conversations.c.updated_at.desc()).limit(limit)
+        with self.engine.connect() as conn:
+            return [dict(row) for row in conn.execute(query).mappings()]
+
+    def create_conversation(self, *, conversation_id, title, model_id):
+        now = self._now()
+        row = {"id": conversation_id, "title": title, "model_id": model_id, "created_at": now, "updated_at": now}
+        with self.engine.begin() as conn:
+            conn.execute(insert(conversations).values(**row))
+        return row
+
+    def get_conversation(self, conversation_id):
+        with self.engine.connect() as conn:
+            row = conn.execute(select(conversations).where(conversations.c.id == conversation_id)).mappings().first()
+            return dict(row) if row else None
+
+    def update_conversation(self, conversation_id, **values):
+        values["updated_at"] = self._now()
+        with self.engine.begin() as conn:
+            conn.execute(update(conversations).where(conversations.c.id == conversation_id).values(**values))
+        return self.get_conversation(conversation_id)
+
+    def delete_conversation(self, conversation_id):
+        with self.engine.begin() as conn:
+            return conn.execute(delete(conversations).where(conversations.c.id == conversation_id)).rowcount > 0
+
+    def list_messages(self, conversation_id):
+        query = (select(chat_messages).where(chat_messages.c.conversation_id == conversation_id)
+                 .order_by(chat_messages.c.position))
+        with self.engine.connect() as conn:
+            return [dict(row) for row in conn.execute(query).mappings()]
+
+    def add_message(self, conversation_id, *, role, content="", reasoning=None, attachments=None, tool_calls=None,
+                    tool_call_id=None, job_id=None, status="done", error_message=None):
+        now = self._now()
+        row = {"id": str(uuid.uuid4()), "conversation_id": conversation_id, "role": role, "content": content,
+               "reasoning": reasoning or None, "attachments": attachments or [], "tool_calls": tool_calls or [],
+               "tool_call_id": tool_call_id, "job_id": job_id, "status": status,
+               "error_message": error_message[:2000] if error_message else None, "created_at": now}
+        with self.engine.begin() as conn:
+            last = conn.execute(select(func.max(chat_messages.c.position))
+                                .where(chat_messages.c.conversation_id == conversation_id)).scalar()
+            row["position"] = (last or 0) + 1
+            conn.execute(insert(chat_messages).values(**row))
+            conn.execute(update(conversations).where(conversations.c.id == conversation_id).values(updated_at=now))
+        return row
 
     def close(self):
         try:

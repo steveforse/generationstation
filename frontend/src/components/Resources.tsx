@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { AlertCircle, CircleHelp, Cpu } from 'lucide-react'
 import { formatBytes, humanAge } from '../api'
+import { StatePill } from './StatePill'
 import type { Host, Memory, ModelMemory, Runtime, RuntimeEstimate } from '../types'
 
 
@@ -64,7 +65,7 @@ export function estimateFit(host: Host | undefined, estimate: RuntimeEstimate, f
 export type Preview = { label: string; bytes: number; color: string; fits: boolean | null }
 
 /** A used-memory bar split into each running model's share and everything else; hover a part for its size. */
-function UsageBar({ label, used, total, fillClass, segments = [], preview }: { label: string; used: number | null; total: number | null; fillClass: string; segments?: Segment[]; preview?: Preview }) {
+function UsageBar({ label, used, total, fillClass, segments = [], preview, legend = false }: { label: string; used: number | null; total: number | null; fillClass: string; segments?: Segment[]; preview?: Preview; legend?: boolean }) {
   const percent = (bytes: number) => total ? Math.min(100, Math.max(0, bytes / total * 100)) : 0
   const usedPercent = used == null ? 0 : percent(used)
   let left = usedPercent
@@ -74,7 +75,7 @@ function UsageBar({ label, used, total, fillClass, segments = [], preview }: { l
     return { ...segment, width }
   }).filter((part) => part.width > 0)
   const otherBytes = used == null ? 0 : Math.max(0, used - segments.reduce((sum, segment) => sum + segment.bytes, 0))
-  return <div className="progress-track usage-track" role="progressbar" aria-label={`${label} used`} aria-valuenow={used == null ? undefined : Math.round(usedPercent)} aria-valuemin={0} aria-valuemax={100}>
+  return <><div className="progress-track usage-track" role="progressbar" aria-label={`${label} used`} aria-valuenow={used == null ? undefined : Math.round(usedPercent)} aria-valuemin={0} aria-valuemax={100}>
     {parts.map((part) => <span key={part.id} className="usage-seg" tabIndex={0} style={{ width: `${part.width}%`, background: part.color }}
       aria-label={`${part.label}: ${formatBytes(part.bytes)}`} data-tip={`${part.label} · ${formatBytes(part.bytes)}`} />)}
     {left > 0 && <span className={`usage-seg progress-fill ${fillClass} ${parts.length ? 'usage-other' : ''}`} tabIndex={parts.length ? 0 : -1} style={{ width: `${left}%` }}
@@ -87,11 +88,17 @@ function UsageBar({ label, used, total, fillClass, segments = [], preview }: { l
         style={{ width: `${Math.max(width, 1)}%`, color: preview.color }} data-tip={tip} aria-label={tip} />
     })()}
   </div>
+  {/* What each part of the bar is, in words, so the colours are not needed to read it. */}
+  {legend && parts.length > 0 && <ul className="usage-legend" aria-label={`${label}: what is using it`}>
+    {parts.map((part) => <li key={part.id}><span className="usage-swatch" style={{ background: part.color }} aria-hidden="true" /><span className="usage-legend-name">{part.label}</span><span className="usage-legend-size">{formatBytes(part.bytes)}</span></li>)}
+    {otherBytes > 0 && <li><span className={`usage-swatch usage-swatch-other ${fillClass}`} aria-hidden="true" /><span className="usage-legend-name">Other programs</span><span className="usage-legend-size">{formatBytes(otherBytes)}</span></li>}
+  </ul>}
+  </>
 }
 
-export function ResourceCard({ title, icon, iconClass, memory, age, isCurrent, error, kind, stale, segments, preview }: {
+export function ResourceCard({ title, icon, iconClass, memory, age, isCurrent, error, kind, stale, segments, preview, legend }: {
   title: string; icon: ReactNode; iconClass: string; memory?: Memory | null
-  age: number | null; isCurrent: boolean; error?: string; kind: string; stale: boolean; segments?: Segment[]; preview?: Preview
+  age: number | null; isCurrent: boolean; error?: string; kind: string; stale: boolean; segments?: Segment[]; preview?: Preview; legend?: boolean
 }) {
   const known = !!memory && isCurrent
   const used = known ? memory.used_bytes : null
@@ -99,20 +106,20 @@ export function ResourceCard({ title, icon, iconClass, memory, age, isCurrent, e
   const available = known ? memory.available_bytes : null
   const percent = total && used != null ? Math.min(100, Math.max(0, used / total * 100)) : 0
   return <article className={`resource-card ${stale && known ? 'resource-stale' : ''}`}>
-    <div className="resource-card-top"><div className="resource-title"><span className={`resource-icon ${iconClass}`}>{icon}</span><div><h3>{title}</h3><span>{kind === 'RAM' ? 'Physical RAM' : 'NVIDIA · NVML'}</span></div></div><span className="icon-help" title={`${title} measurements are supplied by host telemetry.`} aria-label={`${title} information`}><CircleHelp size={16} /></span></div>
+    <div className="resource-card-top"><div className="resource-title"><span className={`resource-icon ${iconClass}`}>{icon}</span><div><h3>{title}</h3><span>{kind === 'RAM' ? 'Physical RAM' : 'NVIDIA · NVML'}</span></div></div><span className="icon-help" title={`${title} measurements are supplied by host telemetry.`} aria-label={`${title} information`}><CircleHelp size={18} /></span></div>
     <div className="resource-value-row"><strong>{formatBytes(used)}</strong><span>of {formatBytes(total)}</span></div>
-    <UsageBar label={title} used={used} total={total} fillClass={iconClass} segments={known ? segments : []} preview={known ? preview : undefined} />
+    <UsageBar label={title} used={used} total={total} fillClass={iconClass} segments={known ? segments : []} preview={known ? preview : undefined} legend={legend} />
     <div className="resource-stats"><span><span className="stats-dot used-dot" />Used <b>{known ? `${percent.toFixed(0)}%` : '—'}</b></span><span><span className="stats-dot available-dot" />Available <b>{formatBytes(available)}</b></span></div>
-    <div className="resource-card-bottom">{error ? <span className="resource-error"><AlertCircle size={13} />{error}</span> : known ? <span className={stale ? 'stale-copy' : 'sample-copy'}>{stale ? 'Last known measurement' : humanAge(age)}</span> : <span className="sample-copy">{isCurrent ? 'Waiting for a valid sample' : 'Connect to view measurements'}</span>}<span className="capacity-label">{stale && known ? 'STALE' : known ? 'MEASURED' : 'NO DATA'}</span></div>
+    <div className="resource-card-bottom">{error ? <span className="resource-error"><AlertCircle size={16} />{error}</span> : known ? <span className={stale ? 'stale-copy' : 'sample-copy'}>{stale ? 'Last known measurement' : humanAge(age)}</span> : <span className="sample-copy">{isCurrent ? 'Waiting for a valid sample' : 'Connect to view measurements'}</span>}<StatePill className="capacity-label" state={stale && known ? 'stale' : known ? 'measured' : 'nodata'}>{stale && known ? 'Stale' : known ? 'Measured' : 'No data'}</StatePill></div>
   </article>
 }
 
-export function GpuCard({ host, age, stale, isCurrent, runtimes, previews }: { host?: Host; age: number | null; stale: boolean; isCurrent: boolean; runtimes?: Runtime[] | null; previews?: Record<string, Preview> }) {
+export function GpuCard({ host, age, stale, isCurrent, runtimes, previews, legend }: { host?: Host; age: number | null; stale: boolean; isCurrent: boolean; runtimes?: Runtime[] | null; previews?: Record<string, Preview>; legend?: boolean }) {
   const gpus = host?.gpus ?? []
   const availableDevices = gpus.filter((gpu) => gpu.memory !== null).length
-  if (!isCurrent || !host) return <ResourceCard title="Graphics memory" icon={<Cpu size={17} />} iconClass="icon-blue" memory={null} age={age} isCurrent={false} kind="VRAM" stale={stale} />
-  if (gpus.length === 0) return <article className="resource-card"><div className="resource-card-top"><div className="resource-title"><span className="resource-icon icon-blue"><Cpu size={17} /></span><div><h3>Graphics memory</h3><span>GPU telemetry</span></div></div><span className="icon-help" title="VRAM is measured with NVIDIA NVML." aria-label="Graphics memory information"><CircleHelp size={16} /></span></div><div className="gpu-unavailable"><div className="gpu-empty-icon"><Cpu size={20} /></div><strong>GPU memory unavailable</strong><p>{host.gpu_error ?? 'No GPU devices have been reported by the host.'}</p></div><div className="resource-card-bottom"><span className="sample-copy">{humanAge(age)}</span><span className="capacity-label">NO DATA</span></div></article>
-  const capacityState = stale ? 'STALE' : availableDevices === 0 ? 'NO DATA' : availableDevices < gpus.length || host.gpu_error ? 'PARTIAL' : 'MEASURED'
-  return <article className={`resource-card gpu-card ${stale ? 'resource-stale' : ''}`}><div className="resource-card-top"><div className="resource-title"><span className="resource-icon icon-blue"><Cpu size={17} /></span><div><h3>Graphics memory</h3><span>{gpus.length} physical GPU{gpus.length === 1 ? '' : 's'}</span></div></div><span className="icon-help" title="VRAM is measured with NVIDIA NVML." aria-label="Graphics memory information"><CircleHelp size={16} /></span></div><div className="gpu-list">{gpus.map((gpu, i) => <div className="gpu-item" key={gpu.id}><div className="gpu-name"><strong>{gpu.name}</strong><span>DEVICE {String(i + 1).padStart(2, '0')}</span></div>{gpu.memory ? <><div className="resource-value-row gpu-value"><strong>{formatBytes(gpu.memory.used_bytes)}</strong><span>of {formatBytes(gpu.memory.total_bytes)}</span></div><UsageBar label={gpu.name} used={gpu.memory.used_bytes} total={gpu.memory.total_bytes} fillClass="icon-blue" segments={gpuSegments(host, runtimes, gpu.id)} preview={previews?.[gpu.id]} /><div className="resource-stats"><span><span className="stats-dot used-dot" />Used <b>{(gpu.memory.used_bytes / gpu.memory.total_bytes * 100).toFixed(0)}%</b></span><span><span className="stats-dot available-dot" />Available <b>{formatBytes(gpu.memory.available_bytes)}</b></span></div></> : <div className="gpu-error"><AlertCircle size={14} />{gpu.error ?? host.gpu_error ?? 'VRAM accounting unavailable for this device.'}</div>}</div>)}</div><div className="resource-card-bottom"><span className={stale ? 'stale-copy' : 'sample-copy'}>{stale ? 'Last known measurement' : humanAge(age)}{host.gpu_error ? ` · ${host.gpu_error}` : ''}</span><span className="capacity-label">{capacityState}</span></div></article>
+  if (!isCurrent || !host) return <ResourceCard title="Graphics memory" icon={<Cpu size={20} />} iconClass="icon-blue" memory={null} age={age} isCurrent={false} kind="VRAM" stale={stale} />
+  if (gpus.length === 0) return <article className="resource-card"><div className="resource-card-top"><div className="resource-title"><span className="resource-icon icon-blue"><Cpu size={20} /></span><div><h3>Graphics memory</h3><span>GPU telemetry</span></div></div><span className="icon-help" title="VRAM is measured with NVIDIA NVML." aria-label="Graphics memory information"><CircleHelp size={18} /></span></div><div className="gpu-unavailable"><div className="gpu-empty-icon"><Cpu size={24} /></div><strong>GPU memory unavailable</strong><p>{host.gpu_error ?? 'No GPU devices have been reported by the host.'}</p></div><div className="resource-card-bottom"><span className="sample-copy">{humanAge(age)}</span><StatePill className="capacity-label" state="nodata">No data</StatePill></div></article>
+  const capacityState = stale ? 'Stale' : availableDevices === 0 ? 'No data' : availableDevices < gpus.length || host.gpu_error ? 'Partial' : 'Measured'
+  return <article className={`resource-card gpu-card ${stale ? 'resource-stale' : ''}`}><div className="resource-card-top"><div className="resource-title"><span className="resource-icon icon-blue"><Cpu size={20} /></span><div><h3>Graphics memory</h3><span>{gpus.length} physical GPU{gpus.length === 1 ? '' : 's'}</span></div></div><span className="icon-help" title="VRAM is measured with NVIDIA NVML." aria-label="Graphics memory information"><CircleHelp size={18} /></span></div><div className="gpu-list">{gpus.map((gpu, i) => <div className="gpu-item" key={gpu.id}><div className="gpu-name"><strong>{gpu.name}</strong><span>Device {i + 1}</span></div>{gpu.memory ? <><div className="resource-value-row gpu-value"><strong>{formatBytes(gpu.memory.used_bytes)}</strong><span>of {formatBytes(gpu.memory.total_bytes)}</span></div><UsageBar label={gpu.name} used={gpu.memory.used_bytes} total={gpu.memory.total_bytes} fillClass="icon-blue" segments={gpuSegments(host, runtimes, gpu.id)} preview={previews?.[gpu.id]} legend={legend} /><div className="resource-stats"><span><span className="stats-dot used-dot" />Used <b>{(gpu.memory.used_bytes / gpu.memory.total_bytes * 100).toFixed(0)}%</b></span><span><span className="stats-dot available-dot" />Available <b>{formatBytes(gpu.memory.available_bytes)}</b></span></div></> : <div className="gpu-error"><AlertCircle size={16} />{gpu.error ?? host.gpu_error ?? 'VRAM accounting unavailable for this device.'}</div>}</div>)}</div><div className="resource-card-bottom"><span className={stale ? 'stale-copy' : 'sample-copy'}>{stale ? 'Last known measurement' : humanAge(age)}{host.gpu_error ? ` · ${host.gpu_error}` : ''}</span><StatePill className="capacity-label" state={capacityState.toLowerCase().replace(' ', '')}>{capacityState}</StatePill></div></article>
 }
 

@@ -120,8 +120,10 @@ def resolve_settings(plugin: RuntimePlugin, preset: BasePreset, overrides: dict 
         errors.append("Choose at least one GPU.")
     elif len(set(chosen)) != len(chosen) or not set(chosen) <= set(preset.allowed_gpus):
         errors.append("The GPU selection is not allowed for this preset.")
-    elif plugin.max_gpus is not None and len(chosen) > plugin.max_gpus:
-        errors.append(f"{plugin.title} runs on {plugin.max_gpus} GPU{'' if plugin.max_gpus == 1 else 's'} at a time.")
+    elif (limit := plugin.gpu_limit(preset)) is not None and len(chosen) > limit:
+        errors.append(f"{plugin.title} runs on {limit} GPU{'' if limit == 1 else 's'} at a time.")
+    else:
+        errors.extend(plugin.check_gpus(preset, sorted(chosen)))
     if errors:
         raise SettingsError(errors)
     return values, sorted(chosen)
@@ -154,6 +156,7 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
             "name": preset.name, "description": preset.description, "gpus": preset.gpus,
             "allowed_gpus": [{"index": i, "name": names.get(i, f"GPU {i}")} for i in preset.allowed_gpus],
             "settings": settings, "estimate": preset.estimate.model_dump(),
+            "max_gpus": plugin.gpu_limit(preset), "card_notes": getattr(preset, "card_notes", {}) or {},
         }
     generation = None
     if plugin.generates:
@@ -166,7 +169,7 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
     return {"id": model_id, "kind": runtime.kind, "plugin": plugin.title, "name": runtime.name,
             "description": runtime.description or plugin.description or None,
             "workload": runtime.workload, "port": runtime.port, "default_preset": runtime.default_preset,
-            "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation}
+            "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation, "chat": plugin.chats}
 
 
 def _valid_crop(value: str) -> bool:

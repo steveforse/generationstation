@@ -21,7 +21,7 @@ export function ConnectionBanner({ state }: { state: SessionState }) {
   const view = useHostView(state)
   const warn = view.degraded || state.connection === 'reconnecting' || (state.connection === 'connected' && view.stale)
   return <section className={`connection-banner ${view.live ? 'banner-live' : warn ? 'banner-warn' : 'banner-muted'}`} aria-live="polite">
-    <div className="connection-symbol">{view.live ? <Wifi size={17} /> : warn ? <AlertCircle size={17} /> : state.connection === 'error' ? <WifiOff size={17} /> : <Server size={17} />}</div>
+    <div className="connection-symbol">{view.live ? <Wifi size={20} /> : warn ? <AlertCircle size={20} /> : state.connection === 'error' ? <WifiOff size={20} /> : <Server size={20} />}</div>
     <div className="connection-copy"><strong>{connectionLabel(state, view)}</strong><span>{state.message}</span></div>
   </section>
 }
@@ -29,7 +29,7 @@ export function ConnectionBanner({ state }: { state: SessionState }) {
 export function StatusDot({ state }: { state: SessionState }) {
   const view = useHostView(state)
   const tone = view.live ? 'dot-live' : state.connection === 'error' ? 'dot-error' : state.connection === 'idle' ? 'dot-idle' : 'dot-warn'
-  return <span className={`status-dot ${tone}`} aria-label={connectionLabel(state, view)} title={connectionLabel(state, view)} />
+  return <span className={`status-dot ${tone}`} role="img" aria-label={connectionLabel(state, view)} title={connectionLabel(state, view)} />
 }
 
 export const stateText: Record<string, string> = {

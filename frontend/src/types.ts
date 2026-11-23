@@ -13,15 +13,15 @@ export type Host = {
 export type ModelMemory = { ram_bytes: number | null; gpus: Record<string, number>; error: string | null }
 export type Snapshot = { data: Host; arrivedAt: number }
 export type Model = { id: string; name: string; workload: string; state: string; loading_enabled: boolean; loading_reason?: string | null }
-export type ModelProfile = { id: string; model_id: string; name: string; workload: string; ram_peak_bytes: number; gpu_vram_bytes_by_id: Record<string, number>; mode: 'simulation' }
-export type NewProfile = { id: string; name: string; workload: string; ram_peak_bytes: number; gpu_vram_bytes_by_id: Record<string, number>; mode: 'simulation' }
 export type RefusalResource = { resource: string; required_bytes: number; available_bytes: number; headroom_bytes?: number }
 export type Refusal = { code: string; message: string; resources?: RefusalResource[] }
 export type SettingValue = string | number | boolean | null
 export type Launch = { preset: string; settings: Record<string, SettingValue>; gpus: number[] }
 export type Operation = { id: string; model_id: string; action: string; status: string; simulation: boolean; worker_type: string; created_at?: string; updated_at?: string; error_code?: string | null; error_message?: string | null; refusal?: Refusal | null; launch?: Launch | null }
-export type RuntimeSetting = { key: string; label: string; kind: 'int' | 'bool' | 'choice' | 'optional_int'; minimum: number | null; maximum: number | null; unit: string | null; help: string; default: SettingValue; options: string[] | null; option_labels?: Record<string, string> }
-export type RuntimePreset = { name: string; description?: string | null; gpus: number[]; allowed_gpus: { index: number; name: string }[]; settings: RuntimeSetting[]; estimate: { ram_gib: number; gpu_min_free_gib: Record<string, number> } }
+export type RuntimeSetting = { key: string; label: string; kind: 'int' | 'bool' | 'choice' | 'optional_int'; minimum: number | null; maximum: number | null; unit: string | null; help: string; default: SettingValue; options: string[] | null; option_labels?: Record<string, string>; advanced?: boolean }
+export type RuntimePreset = { name: string; description?: string | null; gpus: number[]; allowed_gpus: { index: number; name: string }[]; settings: RuntimeSetting[]; estimate: { ram_gib: number; gpu_min_free_gib: Record<string, number> }
+  /** GPUs one start may use (overrides the runtime's), and a note per card choice ("0", "1", "0,1") on how the model behaves there. */
+  max_gpus?: number | null; card_notes?: Record<string, string> }
 export type InputField = { key: string; label: string; kind: 'text' | 'textarea' | 'int' | 'choice' | 'seed' | 'files' | 'crop'; required: boolean; default: string | number | null; minimum: number | null; maximum: number | null; max_length: number | null; options: string[]; placeholder: string | null; help: string; advanced: boolean; accept?: ('image' | 'video' | 'audio')[]; max_count?: number | null; target?: string | null; shape_field?: string | null; show_when?: Record<string, string>; option_labels?: Record<string, string>; ratio_partner?: string | null; ratio_role?: 'width' | 'height' | null; guide?: string[] }
 /** A way of making something, shown as a tab with its own form. */
 export type GenerationMode = { key: string; label: string; help: string; inputs: InputField[] }
@@ -32,7 +32,7 @@ export type JobFile = { name: string; kind: string; mime: string; original: stri
 /** A measured time for one result; the first whose conditions all match applies. */
 export type Timing = { seconds: number; first_seconds: number | null; when: Record<string, string>; preset: string | null; gpu: number | null; note: string | null }
 export type Generation = { output_kind: 'audio' | 'image' | 'video'; inputs: InputField[]; modes?: GenerationMode[]; timings?: Timing[]; make_label?: string | null; result_noun?: string | null }
-export type Runtime = { id: string; kind: string; name: string; description?: string | null; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null; max_gpus?: number | null; generation?: Generation | null }
+export type Runtime = { id: string; kind: string; name: string; description?: string | null; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null; max_gpus?: number | null; generation?: Generation | null; chat?: boolean }
 export type JobOutput = { name: string; mime: string; bytes: number }
 /** `details` is what the worker actually used (seed, steps, size, full prompt) and `seconds` taken; `launch` the model settings it ran with. */
 export type Job = { id: string; model_id: string; inputs: Record<string, string | number | JobFile[]>; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'; progress: string | null; outputs: JobOutput[]; error_message: string | null; created_at: string; finished_at: string | null; details?: Record<string, unknown> | null; launch?: Launch | null }
@@ -50,3 +50,21 @@ export type RuntimeEstimate = {
   ram_headroom_bytes: number; gpu_headroom_bytes: number
   reserved_ram_bytes: number; reserved_gpu_vram_bytes_by_id: Record<string, number>
 }
+/** A conversation with a text model; `busy` while an answer is being written. */
+export type Conversation = { id: string; title: string; model_id: string; created_at: string; updated_at: string; busy: boolean }
+/** A result attached to a chat message. */
+export type ChatAttachment = { job_id: string; name: string; mime?: string | null; model_id?: string }
+export type ToolCall = { id: string; name: string; arguments: string }
+/** One saved message. A "tool" message is the outcome of one tool call: `job_id` names the job it started. */
+export type ChatMessage = {
+  id: string; position: number; role: 'user' | 'assistant' | 'tool'; content: string; reasoning: string | null
+  attachments: ChatAttachment[]; tool_calls: ToolCall[]; tool_call_id: string | null; job_id: string | null
+  status: 'done' | 'stopped' | 'error'; error_message: string | null; created_at: string
+}
+/** A model server's log: one per start, with that start's model and outcome. */
+export type LogEntry = {
+  name: string; bytes: number; kind: string; modified_at: string; operation_id: string
+  model_id: string | null; action: string | null; status: string | null; error_code: string | null
+  error_message: string | null; started_at: string | null
+}
+export type LogText = { name: string; bytes: number; lines: string[]; truncated: boolean }
