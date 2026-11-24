@@ -82,7 +82,7 @@ class ModeSpec(BaseModel):
     help: str
     inputs: dict[str, InputSpec]
     # What this mode makes when it differs from the plugin's output_kind (H3 makes pictures as well as videos).
-    output_kind: Literal["audio", "image", "video"] | None = None
+    output_kind: Literal["audio", "image", "video", "document"] | None = None
 
 
 class TimingSpec(BaseModel):
@@ -141,6 +141,8 @@ class BaseRuntime(BaseModel):
     stop_timeout_seconds: float = Field(default=30, gt=0, le=600)
     default_preset: str
     presets: dict[str, BasePreset] = Field(min_length=1)
+    # The text model the help assistant (the bubble on every page) runs on. At most one; a chat model.
+    assistant: bool = False
 
     @model_validator(mode="after")
     def default_exists(self):
@@ -176,7 +178,11 @@ class RuntimePlugin:
     # chosen mode arrives as the input "mode".
     inputs: ClassVar[dict[str, InputSpec]] = {}
     modes: ClassVar[dict[str, ModeSpec]] = {}
-    output_kind: ClassVar[str | None] = None  # "audio", "image" or "video"
+    output_kind: ClassVar[str | None] = None  # "audio", "image", "video" or "document" (text files)
+    text_model_jobs: ClassVar[bool] = False  # its jobs may ask the host for a running text model (text_models.py)
+    # Other programs whose GPU memory belongs to this model while it runs (display only): Drama 3 runs inside WSL,
+    # whose GPU memory Windows charges to the virtual machine's process, vmwp.
+    gpu_helpers: ClassVar[tuple[str, ...]] = ()
     # The button and the word for one result, when the output kind's own ("Make a song", "song") do not fit.
     make_label: ClassVar[str | None] = None
     result_noun: ClassVar[str | None] = None
@@ -226,6 +232,11 @@ class RuntimePlugin:
     def chat_sampling(self, preset: BasePreset, gpus: list[int]) -> dict:
         """Sampling the chat sends when the person sets none (for servers whose own default is greedy)."""
         return {}
+
+    def chat_thinking(self, preset: BasePreset, gpus: list[int]) -> dict | None:
+        """The thinking levels a chat may ask this model for on these cards: {"levels": [...] lowest first,
+        "default": level, "off": whether thinking can be turned off}, or None when the model does not chat."""
+        return None
 
     # ----- capacity ----------------------------------------------------------------------
 

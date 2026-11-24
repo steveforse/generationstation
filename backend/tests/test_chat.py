@@ -60,11 +60,15 @@ class Store:
     def list_conversations(self, limit=200):
         return sorted(self.conversations.values(), key=lambda row: row["updated_at"], reverse=True)
 
-    def create_conversation(self, *, conversation_id, title, model_id):
+    def create_conversation(self, *, conversation_id, title, model_id, kind="chat"):
         now = datetime.now(timezone.utc)
         row = self.conversations[conversation_id] = {"id": conversation_id, "title": title, "model_id": model_id,
-                                                     "created_at": now, "updated_at": now}
+                                                     "created_at": now, "updated_at": now, "kind": kind}
         return row
+
+    def latest_conversation(self, kind):
+        rows = [(row["created_at"], n, row) for n, row in enumerate(self.conversations.values()) if row.get("kind") == kind]
+        return max(rows, key=lambda item: item[:2])[2] if rows else None  # the newest inserted wins a timestamp tie
 
     def get_conversation(self, conversation_id):
         return self.conversations.get(conversation_id)
@@ -351,3 +355,95 @@ def test_a_large_picture_reaches_the_model_as_its_thumbnail(setup, tmp_path):
     assert chat._image_part(job, "picture.png")["image_url"]["url"].startswith("data:image/jpeg;base64,")
     (folder / "picture.png").write_bytes(PNG)  # a small picture goes as itself
     assert chat._image_part(job, "picture.png")["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_the_help_assistant_keeps_one_thread_knows_the_app_and_the_page(setup):
+    """The bubble opens the same conversation each time; it is taught the app and told which page is open."""
+    store, cat, generation, uploads = setup
+    server = Server([({"content": "Press **Make a song**."}, "stop")])
+    chat = ChatManager(store, cat, generation, uploads, opener=server)
+    first = chat.assistant()
+    assert first["conversation"]["kind"] == "assistant" and first["conversation"]["title"] == "Assistant"
+    assert chat.assistant()["conversation"]["id"] == first["conversation"]["id"]
+    events = follow(chat.start(first["conversation"]["id"], "How do I make a song?", [], where="YuE2 songs page"))
+    assert ("done", {}) in events or events[-1][0] == "done"
+    system = server.requests[0]["messages"][0]["content"]
+    assert system.startswith("You are the help assistant of Generation Station")
+    assert "- **YuE2 songs** (menu: Music; now running; id yue2)" in system
+    assert "The person is looking at: YuE2 songs page." in system and "# Your tools" in system
+    assert chat.get(first["conversation"]["id"])["conversation"]["title"] == "Assistant"  # not renamed by the question
+    fresh = chat.assistant(fresh=True)
+    assert fresh["conversation"]["id"] != first["conversation"]["id"] and fresh["messages"] == []
+    assert chat.assistant()["conversation"]["id"] == fresh["conversation"]["id"]
+    # A Chat page conversation is not taught the guide.
+    plain = chat.create()
+    assert plain["kind"] == "chat"
+    assert not chat._context(store.get_conversation(plain["id"]), {})[0]["content"].startswith("You are the help assistant")
+
+
+def test_the_assistant_runs_on_the_model_marked_for_it(setup, tmp_path):
+    """Not the first text model, nor whichever is running: the one marked `assistant` (Inkling on the desktop)."""
+    store, _, generation, uploads = setup
+    entry = {"kind": "basalt", "workload": "text", "executable": "basalt.exe", "default_preset": "fn", "presets": {"fn": {
+        "name": "FN", "alias": "FN", "model_path": "D:/fn.basalt", "gpus": [0], "settings": {},
+        "estimate": {"ram_gib": 4, "gpu_min_free_gib": {"0": 4}}}}}
+    cat = parse_catalog({"runtimes": {"big": {**entry, "name": "Big model", "port": 8160},
+                                      "helper": {**entry, "name": "Helper", "port": 8161, "assistant": True}}})
+    store.states = {"big": {"state": "ready"}, "helper": {"state": "unloaded"}}
+    chat = ChatManager(store, cat, generation, uploads, opener=Server())
+    assert chat.assistant()["conversation"]["model_id"] == "helper"
+    assert chat.create()["model_id"] == "big"  # the Chat page still takes a running model
+    # A thread made before the mark moves to the marked model.
+    row = store.latest_conversation("assistant")
+    store.update_conversation(row["id"], model_id="big")
+    assert chat.assistant()["conversation"]["model_id"] == "helper"
+
+
+def leveled_chat(tmp_path, levels=("minimal", "low", "high", "max"), default="low", off=True):
+    """A chat with a text model whose card declares its thinking levels."""
+    card = {"engine": "basalt", "executable": "basalt.exe", "alias": "Ink", "model_path": "D:/ink.basalt",
+            "estimate": {"ram_gib": 6, "gpu_min_free_gib": {"0": 24}}, "thinking_levels": list(levels),
+            "thinking_default": default, "thinking_off": off}
+    cat = parse_catalog({"runtimes": {"ink": {
+        "kind": "llm", "name": "Inkling", "workload": "text", "port": 8161, "default_preset": "main",
+        "presets": {"main": {"name": "Inkling", "gpus": [0], "settings": {}, "cards": {"0": card},
+                             "estimate": {"ram_gib": 6, "gpu_min_free_gib": {"0": 24}}}}}}})
+    store = Store()
+    store.states["ink"] = {"state": "ready"}
+    store.launches["ink"] = {"launch": {"preset": "main", "settings": {}, "gpus": [0]}}
+    server = Server([({"content": "Hi."}, "stop")] * 6)
+    chat = ChatManager(store, cat, Generation(store, tmp_path / "jobs"), UploadStore(tmp_path / "runtime"), opener=server)
+    return chat, server
+
+
+def test_a_chosen_thinking_level_is_sent_and_one_the_model_lacks_is_refused(tmp_path):
+    chat, server = leveled_chat(tmp_path)
+    conversation = chat.create("ink")["id"]
+    assert chat.thinking_for("ink") == {"levels": ["minimal", "low", "high", "max"], "default": "low", "off": True}
+    follow(chat.start(conversation, "hi", [], thinking="high"))
+    assert server.requests[-1]["reasoning_effort"] == "high" and "enable_thinking" not in server.requests[-1]
+    follow(chat.start(conversation, "hi", [], thinking=True))  # on: the model's default level
+    assert server.requests[-1]["reasoning_effort"] == "low"
+    follow(chat.start(conversation, "hi", [], thinking="off"))
+    assert server.requests[-1]["enable_thinking"] is False and server.requests[-1]["reasoning_effort"] == "none"
+    with pytest.raises(LifecycleError) as refused:
+        chat.start(conversation, "hi", [], thinking="xhigh")
+    assert refused.value.code == "THINKING_LEVEL_INVALID" and "off, minimal, low, high, max" in refused.value.message
+
+
+def test_a_model_that_cannot_turn_thinking_off_gets_its_lowest_level(tmp_path):
+    chat, server = leveled_chat(tmp_path, levels=("low", "high"), default="high", off=False)
+    follow(chat.start(chat.create("ink")["id"], "hi", [], thinking=False))
+    assert server.requests[-1]["reasoning_effort"] == "low" and "enable_thinking" not in server.requests[-1]
+
+
+def test_the_message_request_takes_on_off_or_a_level_name():
+    from pydantic import ValidationError
+
+    from generationstation.app import ChatMessageRequest
+    for value in (True, False, "off", "high"):
+        assert ChatMessageRequest(text="hi", thinking=value).thinking == value
+    assert ChatMessageRequest(text="hi").thinking is True
+    for bad in ("x" * 21, 3, None):
+        with pytest.raises(ValidationError):
+            ChatMessageRequest(text="hi", thinking=bad)

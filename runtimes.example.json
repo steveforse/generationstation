@@ -286,7 +286,13 @@
               "env": {
                 "BASALT_ENGRAM_FILE": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
                 "BASALT_ENGRAM_OFFSET": "416"
-              }
+              },
+              "thinking_levels": [
+                "low",
+                "high",
+                "max"
+              ],
+              "thinking_default": "high"
             },
             "0": {
               "engine": "basalt",
@@ -307,7 +313,13 @@
               "env": {
                 "BASALT_ENGRAM_FILE": "D:\\ai\\models\\basalt-ds41-win\\DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf",
                 "BASALT_ENGRAM_OFFSET": "416"
-              }
+              },
+              "thinking_levels": [
+                "low",
+                "high",
+                "max"
+              ],
+              "thinking_default": "high"
             }
           }
         }
@@ -380,7 +392,13 @@
               },
               "fixed": {
                 "ple-io": "direct"
-              }
+              },
+              "thinking_levels": [
+                "low",
+                "medium",
+                "xhigh"
+              ],
+              "thinking_default": "xhigh"
             },
             "0": {
               "engine": "basalt",
@@ -400,7 +418,13 @@
               },
               "fixed": {
                 "ple-io": "direct"
-              }
+              },
+              "thinking_levels": [
+                "low",
+                "medium",
+                "xhigh"
+              ],
+              "thinking_default": "xhigh"
             }
           }
         }
@@ -409,6 +433,7 @@
     "inkling2": {
       "kind": "llm",
       "name": "Inkling 2 Mini",
+      "assistant": true,
       "workload": "text",
       "port": 8161,
       "description": "Thinking Machines' small, fast model. Reads pictures and is good at using the app's tools.",
@@ -471,7 +496,16 @@
                 "gpu_min_free_gib": {
                   "1": 10.5
                 }
-              }
+              },
+              "thinking_levels": [
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "max"
+              ],
+              "inkling_thinking": true,
+              "thinking_default": "low"
             },
             "0": {
               "engine": "basalt",
@@ -488,7 +522,162 @@
                 "gpu_min_free_gib": {
                   "0": 24
                 }
-              }
+              },
+              "thinking_levels": [
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "max"
+              ],
+              "thinking_default": "high"
+            }
+          }
+        }
+      }
+    },
+    "fish_drama3": {
+      "kind": "fish_drama3",
+      "name": "Drama 3 speech",
+      "workload": "speech",
+      "python": "C:\\Projects\\generationstation\\backend\\.venv\\Scripts\\python.exe",
+      "output_dir": "D:\\ai\\outputs\\fish-drama3",
+      "port": 8220,
+      "ready_timeout_seconds": 1260,
+      "stop_timeout_seconds": 60,
+      "default_preset": "nvfp4",
+      "presets": {
+        "nvfp4": {
+          "name": "Fast (NVFP4)",
+          "description": "Drama 3 with its experts in NVFP4 (Reza2kn/drama-3-nvfp4), on SGLang-Omni in WSL, on the RTX 5090 alone: about 3x real time; Inkling keeps the RTX 4080. Uses about 31 GB of the 5090.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "distro": "Ubuntu",
+            "max_frames": 512,
+            "check_python": "C:\\ai\\envs\\omnivoice-worker\\Scripts\\python.exe",
+            "check_model": "D:\\ai\\models\\whisper-base.en",
+            "engine": "sglang",
+            "server_dir": "~/ai/sglang-omni",
+            "model_path": "/mnt/d/ai/models/fish-audio/drama-3-nvfp4",
+            "server_port": 8251,
+            "wsl_gpus": "0",
+            "serve_args": "--tts_engine.gpu_memory_fraction 0.835 --vocoder.gpu_memory_fraction 0.11 --preprocessing.gpu null --vocoder.factory.non_streaming_cuda_graph_max_frames 256 --tts_engine.factory.max_running_requests 4 --tts_engine.factory.reference_sampling true --tts_engine.engine.moe_runner_backend flashinfer_cutlass --tts_engine.engine.disable_flashinfer_autotune true --preprocessing.factory.max_reference_audio_seconds 15"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {
+              "0": 29
+            }
+          }
+        },
+        "full": {
+          "name": "Full quality",
+          "description": "The full Drama 3 (FP8 experts, the official checkpoint) on Fish Audio's own code over both cards: the most expressive, about 2x real time, and it follows a seed. Needs both cards: stop Inkling first.",
+          "gpus": [
+            0,
+            1
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "options": {
+            "distro": "Ubuntu",
+            "max_frames": 512,
+            "check_python": "C:\\ai\\envs\\omnivoice-worker\\Scripts\\python.exe",
+            "check_model": "D:\\ai\\models\\whisper-base.en",
+            "engine": "fish",
+            "server_dir": "~/ai/fish-speech",
+            "model_path": "/mnt/d/ai/models/fish-audio/drama-3",
+            "server_port": 8253,
+            "wsl_gpus": "0,1",
+            "device_weights": "0.865,0.135"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 16,
+            "gpu_min_free_gib": {
+              "0": 28.9,
+              "1": 11.0
+            }
+          }
+        }
+      }
+    },
+    "meeting_notes": {
+      "kind": "meeting_notes",
+      "name": "Meeting notes",
+      "workload": "text",
+      "description": "A meeting recording in; a transcript with who said what, a summary, action items and decisions out. The speech model loads for each job and frees its card when done; the notes use a text model, started for the job if none is running.",
+      "python": "C:\\Projects\\generationstation\\backend\\.venv\\Scripts\\python.exe",
+      "output_dir": "D:\\ai\\outputs\\meeting-notes",
+      "port": 8230,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 90,
+      "default_preset": "nemotron",
+      "default_text_model": "flash_next",
+      "no_correction_models": [
+        "inkling2"
+      ],
+      "presets": {
+        "nemotron": {
+          "name": "Best accuracy (Nemotron, RTX 5090)",
+          "description": "NVIDIA Nemotron 3.5 Transcribe: words, speakers and times in one pass; 17% speaker-attributed word error on AMI meetings, the best tested. Needs the RTX 5090 (Blackwell) and about 29 GiB on it while it transcribes; its server takes about 3.5 minutes to start for each job.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "nemotron",
+            "distro": "Ubuntu",
+            "nemotron_venv": "/home/sforse/ai/asr-bench/nemo-speech/.venv",
+            "nemotron_python": "/home/sforse/ai/asr-bench/nemo-speech/.venv/bin/python",
+            "nemotron_model": "/mnt/d/ai/models/asr/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-NVFP4",
+            "need_gib": 29,
+            "gpu_memory_utilization": 0.88,
+            "start_timeout": 1500
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 4,
+            "gpu_min_free_gib": {
+              "0": 1
+            }
+          }
+        },
+        "qwen": {
+          "name": "Fast (Qwen3-ASR with DiariZen)",
+          "description": "DiariZen works out who spoke when, then Qwen3-ASR transcribes each turn: 24% speaker-attributed word error on AMI meetings, a 30-minute meeting in under a minute and a half. About 11 GiB while it runs, on either card.",
+          "gpus": [
+            1
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "options": {
+            "engine": "qwen",
+            "distro": "Ubuntu",
+            "diar_python": "/home/sforse/ai/asr-bench/diar/bin/python",
+            "qwen_python": "/home/sforse/ai/asr-bench/qwen/bin/python",
+            "qwen_model": "/mnt/d/ai/models/asr/Qwen3-ASR-1.7B",
+            "diarizen_model": "BUT-FIT/diarizen-wavlm-large-s80-md",
+            "need_gib": 12
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 4,
+            "gpu_min_free_gib": {
+              "0": 1,
+              "1": 1
             }
           }
         }

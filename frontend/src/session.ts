@@ -401,6 +401,16 @@ export class HostSession {
     return { conversation: body.conversation, messages: body.messages }
   }
 
+  /** The help assistant's ongoing conversation (the host creates it when there is none). */
+  async assistant(): Promise<{ conversation: Conversation; messages: ChatMessage[] }> {
+    return await this.call('/api/assistant') as { conversation: Conversation; messages: ChatMessage[] }
+  }
+
+  /** Start the assistant over: a new conversation (the old one stays on the Chat page). */
+  async assistantNew(): Promise<{ conversation: Conversation; messages: ChatMessage[] }> {
+    return await this.call('/api/assistant/new', { method: 'POST' }) as { conversation: Conversation; messages: ChatMessage[] }
+  }
+
   async createConversation(modelId?: string): Promise<Conversation> {
     return await this.call('/api/conversations', { method: 'POST', body: JSON.stringify(modelId ? { model_id: modelId } : {}) }) as Conversation
   }
@@ -422,7 +432,7 @@ export class HostSession {
    * message), start, delta ({content?, reasoning?, tool?}), error and done. The host finishes and saves the
    * answer even if this stream is dropped.
    */
-  async sendMessage(id: string, body: { text: string; attachments: ChatAttachment[]; thinking: boolean },
+  async sendMessage(id: string, body: { text: string; attachments: ChatAttachment[]; thinking: boolean | string; where?: string },
     onEvent: (event: string, data: unknown) => void, signal?: AbortSignal) {
     const ctx = this.context()
     if (!ctx) throw new Error('Not connected to the host.')

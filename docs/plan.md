@@ -161,6 +161,26 @@ Add durable job queue, per-request capacity checks, output library, cancellation
 
 Add explicit priority/eviction policies, measured concurrency, bounded logs/history, startup service, upgrade procedure, and authenticated remote access hardening. Profile larger workloads individually. Concurrent execution is enabled only for measured combinations with sufficient headroom; the user still needs to choose coding-versus-media priority.
 
+### M7 — Meeting notes from a recording (proposed 2026-11-23, not yet accepted)
+
+The owner wants a Zoom recording turned into a speaker-labelled transcript, a bullet-point summary, and action items with a decision log, all downloadable from the app. Meetings are usually under an hour, English only. Whether the team can record locally (and so get one audio file per participant) is still to be asked.
+
+**Flow (one job, several models in turn).** Upload the recording (MP4/M4A, or a set of per-participant audio files) on a new "Meeting notes" page.
+1. Extract audio with ffmpeg (16 kHz mono; per-participant files kept separate).
+2. Who spoke when: with per-participant files each file is one speaker, named from its file name, and diarization is skipped; otherwise a diarization model labels turns Speaker 1, 2, ….
+3. Transcribe with word timestamps; assign each word to the turn it falls in.
+4. Name speakers: the language model proposes names from the conversation ("Thanks, Sarah"); the person confirms or edits them in a short form before the job goes on (the job waits for that answer).
+5. Correct the transcript: the language model fixes misheard words, names and jargon in overlapping chunks, with an optional word list (names, product terms) from the upload form. It may only change wording, never add or drop content; the raw transcript is kept and a check refuses a chunk whose length or speaker turns change beyond a small margin.
+6. Extract: a bullet-point summary; action items (task, owner, due date when one is said, timestamp); decisions (what, who, timestamp). The model answers in a fixed JSON schema that the host validates, with one retry on invalid output.
+
+**Outputs, all downloadable:** transcript (Markdown with speakers and timestamps, plus SRT/VTT), raw transcript, `summary.md` (summary, actions and decisions, readable), `actions.csv` and `decisions.csv`, and `meeting.json` with everything.
+
+**Models.** Speech-to-text and diarization are small and run first, then free the card. Candidates to measure (2026-11 sources): speech-to-text NVIDIA Nemotron 3.5 Transcribe and Qwen3-ASR-1.7B (Apache 2.0; both near 5.3-5.4% average WER on the Open ASR Leaderboard), with Whisper large-v3 as the fallback for tooling; diarization pyannote Community-1 and DiariZen (Sortformer is fast but limited to four speakers); Microsoft VibeVoice-ASR as a single model that transcribes and diarizes up to an hour in one pass. Choose by word error and diarization error on an AMI meeting-corpus sample and on one real Zoom recording. Steps 4-6 use Qwen3.8 Flash-Next by default (an hour is about 13K tokens, inside its context; fast, near DeepSeek on the indexes), DeepSeek V4.1 Flash as the careful option; Inkling is too weak for correction.
+
+**App work.** A workflow job type that runs steps across models: it starts the models it needs through the normal admission checks, frees each when done, and can wait for the person (step 4); progress per step; cancel at any step; outputs in the results library like other jobs. The chat's `find_results` and `show_results` see the outputs, so the chat can answer questions about a meeting afterwards.
+
+**Acceptance.** A 45-60 minute recording with 3-6 speakers finishes without manual model management; speakers correct after naming; the corrected transcript changes no meaning (spot-checked against the raw one); every action item and decision cites a timestamp that holds it; outputs download and open (CSV in a spreadsheet).
+
 ## Validation and operational recovery
 
 - Unit tests: capacity boundaries, headroom, per-device accounting, missing/stale samples, profile mismatches.

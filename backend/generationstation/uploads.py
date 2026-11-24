@@ -17,7 +17,8 @@ KINDS = {
     "video": {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".m4v": "video/mp4"},
     "audio": {".wav": "audio/wav", ".mp3": "audio/mpeg", ".flac": "audio/flac", ".m4a": "audio/mp4", ".ogg": "audio/ogg"},
 }
-MAX_BYTES = {"image": 25 * 1024**2, "video": 300 * 1024**2, "audio": 60 * 1024**2}
+# Video and audio allow an hour-long meeting recording (a Zoom MP4 of an hour is often 300-800 MB).
+MAX_BYTES = {"image": 25 * 1024**2, "video": 2048 * 1024**2, "audio": 600 * 1024**2}
 UPLOAD_ID = re.compile(r"^[0-9a-f]{32}$")
 KEEP_SECONDS = 24 * 3600
 

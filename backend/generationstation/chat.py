@@ -30,6 +30,10 @@ TOOL_NAME = re.compile(r"[^A-Za-z0-9_]+")
 THUMBNAIL = "thumbnail.jpg"
 WORDS = {"image": "picture", "video": "video clip", "audio": "sound recording"}
 
+ASSISTANT_TITLE = "Assistant"
+GUIDE = (Path(__file__).with_name("assistant_guide.md")).read_text(encoding="utf-8").strip()
+GROUPS = {"text": "Text", "speech": "Speech", "image": "Pictures", "video": "Video", "music": "Music"}
+
 SYSTEM = """You are the assistant inside Generation Station, which runs AI models on the user's own desktop.
 Reply in Markdown. Be direct and helpful.
 
@@ -68,7 +72,7 @@ def _iso(value):
 
 
 def serialize_conversation(row, busy=False):
-    return {"id": row["id"], "title": row["title"], "model_id": row["model_id"],
+    return {"id": row["id"], "title": row["title"], "model_id": row["model_id"], "kind": row.get("kind") or "chat",
             "created_at": _iso(row["created_at"]), "updated_at": _iso(row["updated_at"]), "busy": busy}
 
 
@@ -133,17 +137,40 @@ class ChatManager:
         return {"conversations": [serialize_conversation(row, self._busy(row["id"]))
                                   for row in self.store.list_conversations()]}
 
-    def create(self, model_id=None):
+    def assistant_model(self):
+        """The model the help assistant runs on: the one marked `assistant` in the runtimes file, else (for a
+        host without one) a running chat model, else the first. None when the host has no chat model."""
+        models = self.chat_models()
+        marked = [m for m in models if getattr(self.catalog.runtimes[m], "assistant", False)]
+        if marked:
+            return marked[0]
+        states = self.store.runtime_states()
+        return next((m for m in models if states.get(m, {}).get("state") == "ready"), models[0] if models else None)
+
+    def create(self, model_id=None, kind="chat"):
         models = self.chat_models()
         if not models:
             raise LifecycleError("NO_CHAT_MODEL", "This host has no text model to chat with.", 422)
+        if model_id is None and kind == "assistant":
+            model_id = self.assistant_model()
         if model_id is None:
             states = self.store.runtime_states()
             model_id = next((m for m in models if states.get(m, {}).get("state") == "ready"), models[0])
         elif model_id not in models:
             raise LifecycleError("NO_CHAT_MODEL", "That model does not chat.", 422)
-        row = self.store.create_conversation(conversation_id=str(uuid.uuid4()), title=NEW_TITLE, model_id=model_id)
+        row = self.store.create_conversation(conversation_id=str(uuid.uuid4()),
+                                             title=ASSISTANT_TITLE if kind == "assistant" else NEW_TITLE,
+                                             model_id=model_id, kind=kind)
         return serialize_conversation(row)
+
+    def assistant(self, fresh=False):
+        """The help assistant's ongoing conversation (created when there is none, or a new one when `fresh`)."""
+        row = None if fresh else self.store.latest_conversation("assistant")
+        conversation_id = row["id"] if row else self.create(kind="assistant")["id"]
+        model_id = self.assistant_model()
+        if row and model_id and row["model_id"] != model_id and not self._busy(conversation_id):
+            self.store.update_conversation(conversation_id, model_id=model_id)  # the assistant model changed
+        return self.get(conversation_id)
 
     def get(self, conversation_id):
         row = self._conversation(conversation_id)
@@ -171,7 +198,7 @@ class ChatManager:
 
     # ----- a turn ------------------------------------------------------------------------------
 
-    def start(self, conversation_id, text, attachments, thinking=True):
+    def start(self, conversation_id, text, attachments, thinking=True, where=None):
         """Check and save the user's message, then answer it in a thread. Returns the turn to follow."""
         conversation = self._conversation(conversation_id)
         text = (text or "").strip()
@@ -187,21 +214,23 @@ class ChatManager:
             raise LifecycleError("MODEL_NOT_FOUND", "This conversation's model is no longer configured.", 404)
         if self.store.runtime_states().get(model_id, {}).get("state") != "ready":
             raise LifecycleError("MODEL_NOT_READY", f"Start {runtime.name} on the Models page first.", 409)
+        effort = self._effort(model_id, runtime, thinking)
         attached = [self._attachment(item) for item in attachments]
         with self.lock:
             if conversation_id in self.turns:
                 raise LifecycleError("CONVERSATION_BUSY", "Wait for the answer, or stop it.", 409)
             turn = self.turns[conversation_id] = Turn()
+            turn.where = " ".join(str(where or "").split())[:200] or None
         try:
             user = self.store.add_message(conversation_id, role="user", content=text, attachments=attached)
-            if conversation["title"] == NEW_TITLE:
+            if conversation["title"] in (NEW_TITLE, ASSISTANT_TITLE) and conversation.get("kind") != "assistant":
                 title = " ".join(text.split())[:60] or "Attached results"
                 self.store.update_conversation(conversation_id, title=title + ("…" if len(text) > 60 else ""))
         except BaseException:
             self.turns.pop(conversation_id, None)
             raise
         turn.emit("message", serialize_message(user))
-        thread = threading.Thread(target=self._run, args=(conversation_id, turn, thinking), daemon=True,
+        thread = threading.Thread(target=self._run, args=(conversation_id, turn, effort), daemon=True,
                                   name=f"chat-{conversation_id[:8]}")
         thread.start()
         return turn
@@ -220,7 +249,7 @@ class ChatManager:
             runtime = self.catalog.runtimes[conversation["model_id"]]
             for _ in range(MAX_ROUNDS):
                 tools, handlers = self._tools()
-                messages = self._context(conversation, handlers)
+                messages = self._context(conversation, handlers, getattr(turn, "where", None))
                 message = self._answer(runtime, conversation_id, messages, tools, thinking, turn)
                 if message is None or not message["tool_calls"] or message["status"] != "done":
                     break
@@ -247,9 +276,11 @@ class ChatManager:
         body.update(self._sampling(conversation_id))
         if tools:
             body["tools"] = tools
-        if not thinking:  # both forms: some models still think briefly at effort "none"
+        if thinking == "off":  # both forms: some models still think briefly at effort "none"
             body["enable_thinking"] = False
             body["reasoning_effort"] = "none"
+        elif thinking:
+            body["reasoning_effort"] = thinking
         request = urllib.request.Request(f"http://127.0.0.1:{runtime.port}/v1/chat/completions",
                                          data=json.dumps(body).encode(), method="POST",
                                          headers={"Content-Type": "application/json", "Accept": "text/event-stream"})
@@ -310,6 +341,33 @@ class ChatManager:
         turn.emit("message", serialize_message(saved))
         return serialize_message(saved)
 
+    def thinking_for(self, model_id):
+        """The running model's thinking levels (see RuntimePlugin.chat_thinking), or None."""
+        runtime = self.catalog.runtimes.get(model_id)
+        launch = (self.store.latest_launches().get(model_id) or {}).get("launch") or {}
+        preset = runtime.presets.get(launch.get("preset")) if runtime else None
+        if preset is None:
+            return None
+        return self.catalog.plugin(model_id).chat_thinking(preset, launch.get("gpus") or preset.gpus)
+
+    def _effort(self, model_id, runtime, thinking):
+        """The request's thinking as sent to the model: "off", a level the model accepts here, or None (its own
+        default). True asks for the model's default level and False for off; a level it does not take is refused."""
+        options = self.thinking_for(model_id)
+        if options is None or not options["levels"]:  # no levels known: on (its default) or off, as before levels
+            if thinking in (True, False, None, "off"):
+                return "off" if thinking in (False, "off") else None
+            raise LifecycleError("THINKING_LEVEL_INVALID", f"{runtime.name} has no thinking levels here.", 422)
+        if thinking is True or thinking is None:
+            return options["default"]
+        if thinking is False or thinking == "off":
+            return "off" if options["off"] else options["levels"][0]
+        if thinking in options["levels"]:
+            return thinking
+        choices = (["off"] if options["off"] else []) + options["levels"]
+        raise LifecycleError("THINKING_LEVEL_INVALID",
+                             f"{runtime.name} takes the thinking levels {', '.join(choices)} here.", 422)
+
     def _sampling(self, conversation_id):
         """The model's own sampling for chat where its server would otherwise decode greedily."""
         model_id = self._conversation(conversation_id)["model_id"]
@@ -368,13 +426,17 @@ class ChatManager:
             return None
         return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(data).decode()}"}}
 
-    def _context(self, conversation, handlers):
+    def _context(self, conversation, handlers, where=None):
         rows = self.store.list_messages(conversation["id"])
         vision = self._vision(conversation)
         running = sorted({h["runtime"].name for h in handlers.values() if "runtime" in h})
         stopped = sorted(r.name for m, r in self.catalog.runtimes.items()
                          if self.catalog.plugin(m).generates and r.name not in running)
         system = SYSTEM + f"\nRunning now: {', '.join(running) or 'none'}. Not running: {', '.join(stopped) or 'none'}."
+        if conversation.get("kind") == "assistant":
+            system = f"{GUIDE}\n\n{self._model_guide()}\n\n# Your tools\n\n{system}"
+            if where:
+                system += f"\nThe person is looking at: {where}."
         if not vision:
             system += "\nPicture reading is off, so you see results only as their descriptions."
         jobs = {}
@@ -466,6 +528,27 @@ class ChatManager:
         """Whether a made result is first shown with the latest user message (none came between)."""
         index = next(n for n, row in enumerate(rows) if row["id"] == tool_row_id)
         return not any(row["role"] == "user" for row in rows[index + 1:last_user])
+
+    def _model_guide(self):
+        """Each model as the person sees it: name, menu group, what it does, its tabs and main fields."""
+        states = self.store.runtime_states()
+        lines = ["# The models on this desktop", ""]
+        for model_id, runtime in self.catalog.runtimes.items():
+            plugin = self.catalog.plugin(model_id)
+            state = (states.get(model_id) or {}).get("state", "unloaded")
+            word = "running" if state == "ready" else "stopped"
+            group = GROUPS.get(runtime.workload, runtime.workload or "Other")
+            about = runtime.description or plugin.description or ""
+            lines.append(f"- **{runtime.name}** (menu: {group}; now {word}; id {model_id}): {about}")
+            modes = list(plugin.modes.items()) or ([(None, None)] if plugin.generates else [])
+            for key, mode in modes:
+                specs = mode.inputs if mode else plugin.inputs
+                fields = [spec.label for spec in specs.values() if not spec.advanced and spec.kind not in {"crop", "seed"}]
+                if mode:
+                    lines.append(f"  - Tab **{mode.label}**: {mode.help} Fields: {', '.join(fields)}.")
+                elif fields:
+                    lines.append(f"  - Fields: {', '.join(fields)}.")
+        return "\n".join(lines)
 
     def _tool_now(self, row):
         """A tool result as the model should see it now: the job's current state, not only "started"."""

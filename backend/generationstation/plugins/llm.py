@@ -14,6 +14,7 @@ from typing import ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .base import BasePreset, BaseRuntime, Estimate, LaunchSpec, RuntimePlugin, SettingSpec
+from .worker import WORKERS_DIR
 
 
 class CardSetup(BaseModel):
@@ -39,8 +40,16 @@ class CardSetup(BaseModel):
     arch: str | None = None
     model_name: str | None = None
     drafter: str | None = None
+    # Run Strata's server through workers/strata_inkling_thinking.py, which lets Inkling 2 Mini's thinking levels
+    # through (Strata itself forces thinking off and drops the model's thinking text).
+    inkling_thinking: bool = False
     # Sampling the chat sends when the person sets none (Strata decodes greedily without it).
     sampling: dict[str, float | int] = Field(default_factory=dict)
+    # The thinking levels the engine accepts for this model here, lowest first, as the request's reasoning_effort
+    # names them; only these are offered in the chat. Empty: the model does not think here.
+    thinking_levels: list[str] = Field(default_factory=list)
+    thinking_default: str | None = None
+    thinking_off: bool = True  # whether a request can turn thinking off
 
     @model_validator(mode="after")
     def complete(self):
@@ -49,6 +58,12 @@ class CardSetup(BaseModel):
         missing = [name for name in need if not getattr(self, name)]
         if missing:
             raise ValueError(f"{self.engine} card setup needs {', '.join(missing)}.")
+        if len(set(self.thinking_levels)) != len(self.thinking_levels) or "off" in self.thinking_levels:
+            raise ValueError("thinking_levels must be distinct level names, without \"off\".")
+        if self.thinking_default is not None and self.thinking_default not in self.thinking_levels:
+            raise ValueError(f"thinking_default {self.thinking_default!r} is not one of thinking_levels.")
+        if self.inkling_thinking and self.engine != "strata":
+            raise ValueError("inkling_thinking only applies to Strata.")
         return self
 
 
@@ -165,6 +180,14 @@ class LLMPlugin(RuntimePlugin):
         setup = preset.cards.get(card_key(gpus))
         return dict(setup.sampling) if setup else {}
 
+    def chat_thinking(self, preset, gpus):
+        setup = preset.cards.get(card_key(gpus))
+        if setup is None:
+            return None
+        levels = list(setup.thinking_levels)
+        default = setup.thinking_default or (levels[-1] if levels else None)
+        return {"levels": levels, "default": default, "off": setup.thinking_off and bool(levels)}
+
     # ----- launch -----------------------------------------------------------------------
 
     def launch(self, runtime, preset, values, gpus, base_env, launch_dir: Path):
@@ -181,7 +204,9 @@ class LLMPlugin(RuntimePlugin):
                               files={"basalt-config.json": json.dumps(config, indent=2)})
         config = self.strata_config(runtime, setup, values, gpus, Path(launch_dir))
         path = Path(launch_dir) / "strata-config.json"
-        argv = [setup.python, str(Path(setup.server_dir) / "serve" / "server.py"), "--engine", "strata",
+        server = [str(WORKERS_DIR / "strata_inkling_thinking.py"), setup.server_dir] if setup.inkling_thinking \
+            else [str(Path(setup.server_dir) / "serve" / "server.py")]
+        argv = [setup.python, *server, "--engine", "strata",
                 "--config", str(path), "--port", str(runtime.port), "--host", "127.0.0.1",
                 "--gpu", card_key(gpus), "--parallel", "1", "--no-api-key", "--tokenizer", setup.tokenizer]
         return LaunchSpec(argv=argv, env=env, cwd=setup.server_dir,

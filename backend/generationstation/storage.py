@@ -118,6 +118,7 @@ conversations = Table(
     Column("model_id", String(64), ForeignKey("models.id", ondelete="CASCADE"), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
+    Column("kind", String(20), nullable=False, server_default="chat"),
 )
 chat_messages = Table(
     "chat_messages", metadata,
@@ -660,12 +661,21 @@ class Store:
         with self.engine.connect() as conn:
             return [dict(row) for row in conn.execute(query).mappings()]
 
-    def create_conversation(self, *, conversation_id, title, model_id):
+    def create_conversation(self, *, conversation_id, title, model_id, kind="chat"):
         now = self._now()
-        row = {"id": conversation_id, "title": title, "model_id": model_id, "created_at": now, "updated_at": now}
+        row = {"id": conversation_id, "title": title, "model_id": model_id, "created_at": now, "updated_at": now,
+               "kind": kind}
         with self.engine.begin() as conn:
             conn.execute(insert(conversations).values(**row))
         return row
+
+    def latest_conversation(self, kind):
+        """The most recently created conversation of a kind (the assistant's ongoing thread), or None."""
+        query = (select(conversations).where(conversations.c.kind == kind)
+                 .order_by(conversations.c.created_at.desc()).limit(1))
+        with self.engine.connect() as conn:
+            row = conn.execute(query).mappings().first()
+            return dict(row) if row else None
 
     def get_conversation(self, conversation_id):
         with self.engine.connect() as conn:

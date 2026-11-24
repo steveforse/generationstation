@@ -97,3 +97,28 @@ def test_a_card_setup_must_name_its_files():
             "kind": "llm", "name": "X", "workload": "text", "port": 8165, "default_preset": "main",
             "presets": {"main": {"name": "X", "gpus": [1], "estimate": {"ram_gib": 1, "gpu_min_free_gib": {"1": 1}},
                                  "cards": {"1": broken}}}}}})
+
+
+def test_inkling_on_strata_can_run_through_the_thinking_wrapper(tmp_path):
+    card = dict(STRATA, inkling_thinking=True, thinking_levels=["low", "high"], thinking_default="low")
+    runtime = parse_catalog({"runtimes": {"ink": {
+        "kind": "llm", "name": "Inkling", "workload": "text", "port": 8161, "default_preset": "main",
+        "presets": {"main": {"name": "Inkling", "gpus": [1], "settings": {}, "cards": {"1": card},
+                             "estimate": {"ram_gib": 6, "gpu_min_free_gib": {"1": 12.5}}}}}}}).runtimes["ink"]
+    preset = runtime.presets["main"]
+    spec = LLM.launch(runtime, preset, {}, [1], {}, tmp_path)
+    assert spec.argv[1].replace("\\", "/").endswith("workers/strata_inkling_thinking.py")
+    assert spec.argv[2] == "C:/strata" and spec.argv[3:5] == ["--engine", "strata"]
+    assert LLM.chat_thinking(preset, [1]) == {"levels": ["low", "high"], "default": "low", "off": True}
+
+
+def test_thinking_levels_are_checked_and_a_card_without_them_offers_none():
+    _, preset = setup()
+    assert LLM.chat_thinking(preset, [0]) == {"levels": [], "default": None, "off": False}
+    for bad in ({"thinking_levels": ["low", "low"]}, {"thinking_levels": ["off", "low"]},
+                {"thinking_levels": ["low"], "thinking_default": "high"}):
+        with pytest.raises(Exception, match="thinking"):
+            parse_catalog({"runtimes": {"x": {
+                "kind": "llm", "name": "X", "workload": "text", "port": 8165, "default_preset": "main",
+                "presets": {"main": {"name": "X", "gpus": [0], "settings": {}, "cards": {"0": dict(BASALT, **bad)},
+                                     "estimate": {"ram_gib": 6, "gpu_min_free_gib": {"0": 24}}}}}}})

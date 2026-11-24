@@ -64,7 +64,7 @@ def test_monitor_publishes_per_model_memory_without_failing_host_telemetry():
         def __init__(self):
             self.fail = False
 
-        def sample(self, owned, gpus):
+        def sample(self, owned, gpus, helpers=None):
             if self.fail:
                 raise RuntimeError("boom")
             return {model_id: {"ram_bytes": 1, "gpus": {gpus[0]["id"]: 2}, "error": None} for model_id in owned}
@@ -78,3 +78,17 @@ def test_monitor_publishes_per_model_memory_without_failing_host_telemetry():
     monitor.collect_once()
     snapshot = monitor.snapshot()
     assert snapshot["model_memory"] == {} and snapshot["gpus"] == [GPU_A]
+
+
+def test_a_model_running_in_wsl_is_credited_with_the_vm_process_memory():
+    """Drama 3 runs inside WSL; Windows reports that GPU memory under vmwp, which counts for the model (not its RAM)."""
+    vm = ME + 424_242
+    usage = ProcessMemoryCollector(platform="win32", nvml_bus=lambda index: {0: 1, 1: 2}[index],
+                                   luid_buses=lambda: {"luid_0x0_0x1": 1, "luid_0x0_0x2": 2},
+                                   process_vram=lambda: {(vm, "luid_0x0_0x1"): 24 * 2**30, (ME, "luid_0x0_0x1"): 2**20},
+                                   pids_named=lambda names: {vm} if "vmwp" in names else set())
+    result = usage.sample({"fish_drama3": (ME, ME_CREATED), "other": (ME, ME_CREATED)}, [GPU_A, GPU_B],
+                          {"fish_drama3": ("vmwp",), "stopped_model": ("vmwp",)})
+    assert result["fish_drama3"]["gpus"] == {"GPU-a": 24 * 2**30 + 2**20}
+    assert result["other"]["gpus"] == {"GPU-a": 2**20}  # only the model that declares the helper
+    assert "stopped_model" not in result

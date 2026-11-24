@@ -83,6 +83,7 @@ class Monitor:
         self.process_collector = process_collector or ProcessMemoryCollector()
         # Returns {model_id: (pid, create_time)} for the model processes this service owns.
         self.owned_processes = dict
+        self.helper_processes = dict
         self.clock = clock
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
@@ -106,7 +107,8 @@ class Monitor:
                     "gpu_error": "Host telemetry failed."}
         # Display only; admission never reads these per-model figures.
         try:
-            model_memory = self.process_collector.sample(self.owned_processes(), data.get("gpus") or [])
+            model_memory = self.process_collector.sample(self.owned_processes(), data.get("gpus") or [],
+                                                         self.helper_processes())
         except Exception:  # noqa: BLE001 - per-model usage failing must not break host telemetry.
             model_memory = {}
         data = {**data, "model_memory": model_memory}
@@ -132,8 +134,10 @@ class Monitor:
             "loading_reason": "Model loading will be available after capacity checks and a runtime are verified.",
         }
 
-    def watch_processes(self, owned_processes):
+    def watch_processes(self, owned_processes, helper_processes=None):
         self.owned_processes = owned_processes
+        if helper_processes is not None:
+            self.helper_processes = helper_processes
 
     def start(self):
         def run():

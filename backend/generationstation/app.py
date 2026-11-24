@@ -10,14 +10,14 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .chat import ChatManager
@@ -31,6 +31,7 @@ from .process_worker import ProcessSupervisor
 from .runtimes import load_catalog
 from .storage import Store
 from .telemetry import Monitor
+from .text_models import TextModelBroker
 from .uploads import UploadError, UploadStore
 
 
@@ -197,7 +198,9 @@ class ChatMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: StrictStr = Field(default="", max_length=20_000)
     attachments: list[ChatAttachment] = Field(default_factory=list, max_length=6)
-    thinking: bool = True
+    thinking: StrictBool | Annotated[StrictStr, Field(max_length=20)] = True  # a level the model takes, "off", or true/false
+    # The page the person is on, for the help assistant ("MiniMax H3 videos & pictures, tab A picture").
+    where: StrictStr | None = Field(default=None, max_length=200)
 
 
 class SettingsUpdate(BaseModel):
@@ -234,16 +237,18 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     lifecycle = LifecycleManager(store, settings, worker=worker, catalog=catalog,
                                  runtime_adapter=runtime_adapter)
     if hasattr(monitor, "watch_processes"):
-        monitor.watch_processes(lifecycle.owned_processes)
+        monitor.watch_processes(lifecycle.owned_processes, lifecycle.helper_processes)
     uploads = UploadStore(settings.runtime_dir)
     generation = GenerationManager(store, catalog, uploads)
     host_settings = HostSettings(store, settings.searxng_url)
     web_tools = WebTools(host_settings.searxng_url)
     host_settings.web = web_tools
     logs = LogStore(settings.runtime_dir, store)
-    chat = ChatManager(store, catalog, generation, uploads,
-                       host_tools=HostTools(store, catalog, lifecycle, lambda: snapshot()), web_tools=web_tools,
+    host_tools = HostTools(store, catalog, lifecycle, lambda: snapshot())
+    chat = ChatManager(store, catalog, generation, uploads, host_tools=host_tools, web_tools=web_tools,
                        job_tools=JobTools(store, catalog, generation, logs))
+    # Text models for worker jobs that ask for one (meeting notes); polls only plugins that declare text_model_jobs.
+    broker = TextModelBroker(store, catalog, host_tools, chat)
     access_logger = _access_logger()
     instance_id = None
 
@@ -259,8 +264,11 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
             if hasattr(store, "reconcile_restart"):
                 await asyncio.to_thread(store.reconcile_restart, keep)
             monitor.start()
+            if any(getattr(catalog.plugin(m), "text_model_jobs", False) for m in catalog.runtimes):
+                broker.start()
             yield
         finally:
+            broker.close()
             try:
                 lifecycle.shutdown()
             finally:
@@ -398,6 +406,16 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         path, mime = generation.output_path(job_id, name)
         return FileResponse(path, media_type=mime, filename=name)
 
+    @api.get("/assistant")
+    def assistant():
+        """The help assistant's ongoing conversation, created when there is none."""
+        return chat.assistant()
+
+    @api.post("/assistant/new")
+    def assistant_new():
+        """Start the help assistant over: a new conversation (the old one stays on the Chat page)."""
+        return chat.assistant(fresh=True)
+
     @api.get("/conversations")
     def conversations():
         return chat.list()
@@ -427,7 +445,7 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         """Answer a message as server-sent events: message (each saved message), start, delta, error, done.
         The answer finishes and is saved even if the browser disconnects."""
         turn = chat.start(conversation_id, payload.text, [a.model_dump() for a in payload.attachments],
-                          payload.thinking)
+                          payload.thinking, payload.where)
 
         async def stream():
             while True:

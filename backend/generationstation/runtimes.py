@@ -170,7 +170,8 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
     return {"id": model_id, "kind": runtime.kind, "plugin": plugin.title, "name": runtime.name,
             "description": runtime.description or plugin.description or None,
             "workload": runtime.workload, "port": runtime.port, "default_preset": runtime.default_preset,
-            "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation, "chat": plugin.chats}
+            "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation, "chat": plugin.chats,
+            "assistant": bool(runtime.assistant and plugin.chats)}
 
 
 def _valid_crop(value: str) -> bool:

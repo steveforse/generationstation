@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Download, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Download, FileText, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
 import { formatBytes } from '../api'
 import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeSetting, SettingValue, UploadRecord } from '../types'
 import { FilePicker, type FileItem } from './FilePicker'
@@ -8,6 +8,7 @@ import { estimateFit } from './Resources'
 import { WorkloadIcon } from './WorkloadIcon'
 import { RefusalDetails } from './Refusal'
 import { StatePill } from './StatePill'
+import { Markdown } from './Markdown'
 import type { VoiceTarget } from '../voiceSample'
 
 /**
@@ -308,7 +309,7 @@ export function ResultThumb({ job, kind, fileUrl }: { job: Job; kind: string; fi
     // Fetch each result's preview once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.id, source?.name])
-  const Icon = job.status === 'cancelled' ? Ban : kind === 'audio' ? Music : kind === 'image' ? ImageIcon : Film
+  const Icon = job.status === 'cancelled' ? Ban : kind === 'audio' ? Music : kind === 'image' ? ImageIcon : kind === 'document' ? FileText : Film
   return <span className={`result-thumb ${url ? '' : 'result-thumb-empty'} thumb-${job.status}`} aria-hidden="true">
     {url ? <img src={url} alt="" /> : job.status === 'running' ? <Loader2 size={24} className="spin" /> : job.status === 'queued' ? <Hourglass size={22} /> : <Icon size={22} />}
     {job.status === 'done' && kind === 'video' && url && <span className="result-thumb-play" />}
@@ -397,6 +398,20 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
   const files = job.outputs.filter((output) => !isThumbnail(job, output))
   const media = files.filter((output) => /^(audio|image|video)\//.test(output.mime))
   const others = files.filter((output) => !media.includes(output))
+  // Documents shown on the page as well as offered for download: the notes open, the transcript folded away.
+  const shown = ['notes.md', 'transcript.md'].filter((name) => others.some((output) => output.name === name))
+  const [docs, setDocs] = useState<Record<string, string>>({})
+  useEffect(() => {
+    setDocs({})
+    let cancelled = false
+    shown.forEach((name) => {
+      const url = urls[name]
+      if (url) fetch(url).then((response) => response.text()).then((text) => { if (!cancelled) setDocs((current) => ({ ...current, [name]: text })) }).catch(() => undefined)
+    })
+    return () => { cancelled = true }
+    // Read each shown document once its file link is ready.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.id, urls['notes.md'], urls['transcript.md']])
   useEffect(() => {
     setConfirming(false); setError('')
     if (job.status !== 'done') return
@@ -446,6 +461,8 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
         : output.mime.startsWith('image/') ? <img src={urls[output.name]} alt={title} />
           : <video controls src={urls[output.name]} aria-label={`Play ${title}`} />) : <div className="job-media-loading"><small>Loading…</small></div>}
     </div>)}
+    {docs['notes.md'] && <section className="job-section job-document" aria-label="Notes"><Markdown text={docs['notes.md']} /></section>}
+    {docs['transcript.md'] && <details className="job-section job-document disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Transcript</summary><Markdown text={docs['transcript.md']} /></details>}
     <div className="job-actions">
       <button type="button" className="button button-secondary" onClick={() => void onReuse(job)}><RotateCcw size={16} />Use these settings</button>
       {job.status === 'done' && onUseVoice && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).flatMap((output) => voiceTargets.map((target) =>

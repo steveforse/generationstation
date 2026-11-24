@@ -1,7 +1,9 @@
 """Model plugin registry. Add a plugin by writing a module here and listing it below."""
 from .basalt import BasaltPlugin
 from .base import RuntimePlugin
+from .fish_drama3 import FishDrama3Plugin
 from .llm import LLMPlugin
+from .meeting_notes import MeetingNotesPlugin
 from .minimax_h3 import MiniMaxH3Plugin
 from .omnivoice import OmniVoicePlugin
 from .qwen3_tts import Qwen3TTSPlugin
@@ -16,6 +18,8 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     MiniMaxH3Plugin(),
     OmniVoicePlugin(),
     Qwen3TTSPlugin(),
+    FishDrama3Plugin(),
+    MeetingNotesPlugin(),
 )}
 
 
