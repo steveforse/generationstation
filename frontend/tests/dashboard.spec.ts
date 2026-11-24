@@ -80,6 +80,7 @@ function llmRuntimeFixture() {
     key, label, kind, default: value, minimum: null, maximum: null, unit: null, help: `${label} help`, options: null, advanced: false, ...extra,
   })
   return {
+    assistant: true,
     id: 'inkling2', kind: 'llm', plugin: 'Text model', name: 'Inkling 2 Mini', description: 'A small, fast model that reads pictures.', workload: 'text', port: 8161,
     default_preset: 'main', last_launch: null, chat: true, max_gpus: null,
     presets: { main: { name: 'Inkling 2 Mini', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }],
@@ -137,7 +138,20 @@ function songRuntimeFixture() {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; llm?: boolean } = {}) {
+function meetingRuntimeFixture() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const inputs = [field('recording', 'Recording', 'files', { required: true, accept: ['audio', 'video'], max_count: 1 }),
+    field('notes', 'Make', 'choice', { options: ['notes', 'transcript'], default: 'notes', option_labels: { notes: 'Transcript and notes', transcript: 'Transcript only' } })]
+  return {
+    id: 'meeting_notes', kind: 'meeting_notes', plugin: 'Meeting notes', name: 'Meeting notes', description: 'Turns a meeting recording into notes.', workload: 'text', port: 8230, default_preset: 'qwen', last_launch: null, max_gpus: 1,
+    presets: { qwen: { name: 'Fast', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 4, gpu_min_free_gib: { 0: 1, 1: 1 } }, settings: [] } },
+    generation: { output_kind: 'document', inputs, modes: [{ key: 'notes', label: 'From a recording', help: 'Add a recording.', inputs }], make_label: 'Make notes', result_noun: 'meeting', timings: [] },
+  }
+}
+
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; meeting?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -147,11 +161,12 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [runtimeFixture()] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.llm ? [llmRuntimeFixture()] : [])] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : [])] } }))
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/estimate', (route) => {
     const body = route.request().postDataJSON() as { preset: string; settings: Record<string, unknown>; gpus: number[] }
-    const runtime = route.request().url().includes('/runtimes/basalt/') ? runtimeFixture() : songRuntimeFixture()
+    const url = route.request().url()
+    const runtime = url.includes('/runtimes/basalt/') ? runtimeFixture() : url.includes('/runtimes/inkling2/') ? llmRuntimeFixture() : songRuntimeFixture()
     const preset = (runtime.presets as Record<string, { estimate: { ram_gib: number; gpu_min_free_gib: Record<number, number> } }>)[body.preset]
     const budget = typeof body.settings.resident_budget_gib === 'number' ? body.settings.resident_budget_gib : 0
     const ids = [gpuUuid, 'GPU-second']
@@ -172,6 +187,18 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   })
   if (options.songs) models.push({ id: 'yue2', name: 'YuE2 songs', workload: 'music', state: options.songState ?? 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   const jobs: Array<Record<string, unknown>> = []
+  if (options.meeting) {
+    models.push({ id: 'meeting_notes', name: 'Meeting notes', workload: 'text', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+    jobs.push({ id: 'job-00000077', model_id: 'meeting_notes', status: 'done', progress: 'Writing the summary, action items and decisions', error_message: null,
+      inputs: { mode: 'notes', recording: [{ name: '01-call.m4a', kind: 'audio', mime: 'audio/mp4', original: 'call.m4a' }], notes: 'notes', text_model: 'auto', correct: 'yes' },
+      outputs: ['transcript.md', 'transcript.srt', 'notes.md', 'actions.csv', 'decisions.csv', 'meeting.json'].map((name) => ({ name, mime: name.endsWith('.md') ? 'text/markdown' : name.endsWith('.csv') ? 'text/csv' : 'application/json', bytes: 100 })),
+      created_at: '2026-11-23T10:00:00Z', finished_at: '2026-11-23T10:02:00Z', details: { seconds: 120, audio_seconds: 1500, speakers: 4 }, launch: { preset: 'qwen', settings: {}, gpus: [1] } })
+  }
+  await page.route('**/api/jobs/*/files/notes.md', (route) => route.fulfill({ status: 200, contentType: 'text/markdown', body: '# Meeting notes\n\n## Action items\n\n- [ ] Send the plan — Ben (00:20)\n' }))
+  await page.route('**/api/jobs/*/files/transcript.md', (route) => route.fulfill({ status: 200, contentType: 'text/markdown', body: '# Transcript\n\n**[00:00] Speaker 1 (Anna):** Hello, everyone.\n' }))
+  await page.route('**/api/jobs/*/files/*.csv', (route) => route.fulfill({ status: 200, contentType: 'text/csv', body: 'Task,Owner\n' }))
+  await page.route('**/api/jobs/*/files/*.srt', (route) => route.fulfill({ status: 200, contentType: 'application/x-subrip', body: '1\n' }))
+  await page.route('**/api/jobs/*/files/meeting.json', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
   if (options.voiceClip) jobs.push({ id: 'job-00000099', model_id: 'minimax_h3', status: 'done', progress: 'Done in 39 s, seed 5', error_message: null,
     inputs: { mode: 'text', prompt: 'A woman with a soft Welsh accent sits in a kitchen. She says: "Come in and get warm."', quality: 'quick' },
     outputs: [{ name: 'video-1.mp4', mime: 'video/mp4', bytes: 24044 }], created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:00:39Z',
@@ -362,7 +389,7 @@ async function signIn(page: Page, value = token, address?: string) {
   await page.getByRole('button', { name: 'Save and connect' }).click()
 }
 
-async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; llm?: boolean } = {}) {
+async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; meeting?: boolean } = {}) {
   await installSseMock(page)
   const api = await installM2Api(page, options)
   const host = fixtureHost(label, stale)
@@ -828,6 +855,15 @@ test('keeps a stopped song service free of load controls and points to the Model
   await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeVisible()
 })
 
+test('leaves a model\'s error out of the sidebar', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { songs: true, songState: 'error' })
+  await go(page, '#/hosts/local/overview')
+  const link = page.getByRole('navigation').getByRole('link', { name: 'YuE2 songs' })
+  await expect(link).toBeVisible()
+  await expect(link).toHaveAttribute('title', 'YuE2 songs')
+  await expect(link.getByText('Error')).toHaveCount(0)
+})
+
 test('shows each running model\'s share of RAM and VRAM in the bars and on its card', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { songs: true })
   const withUsage = { ...fixtureHost(), sequence: 2, model_memory: { yue2: { ram_bytes: 6 * 1024 ** 3, gpus: { [gpuUuid]: 3 * 1024 ** 3 }, error: null } } }
@@ -1029,6 +1065,7 @@ test('chats with the text model, which starts a song; conversations can be attac
   await page.getByLabel('Message').press('Enter')
   await expect(page).toHaveURL(/#\/hosts\/local\/chat\/conv-1$/)
   expect(sent).toEqual({ text: 'Write me a short song', attachments: [{ job_id: 'job-00000099', name: 'video-1.mp4' }], thinking: true })
+  await expect(page.getByLabel('Thinking')).toHaveCount(0) // a model without known levels offers none
   const thread = page.locator('.chat-thread')
   await expect(thread.getByText('Write me a short song')).toBeVisible()
   await expect(thread.getByRole('button', { name: /Video · job-0000/ })).toBeVisible()
@@ -1060,6 +1097,46 @@ test('chats with the text model, which starts a song; conversations can be attac
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: 'test-results/screenshots/chat-phone.png', fullPage: true })
+})
+
+test('offers only the thinking levels the running model takes, sends the chosen one and remembers it', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, chatReady: true, thinking: { levels: ['low', 'high', 'max'], default: 'high', off: true } })
+  const conversation = { id: 'conv-1', title: 'New conversation', model_id: 'basalt', created_at: '2026-11-22T10:00:00Z', updated_at: '2026-11-22T10:00:00Z', busy: false }
+  let sent: Record<string, unknown> | null = null
+  await page.route('**/api/conversations', (route) => route.request().method() === 'POST' ? route.fulfill({ status: 201, json: conversation }) : route.fulfill({ json: { conversations: [conversation] } }))
+  await page.route('**/api/conversations/conv-1', (route) => route.fulfill({ json: { conversation, messages: [] } }))
+  await page.route('**/api/conversations/conv-1/messages', async (route) => {
+    sent = route.request().postDataJSON() as Record<string, unknown>
+    await route.fulfill({ status: 200, contentType: 'text/event-stream', body: chatStream([['done', {}]]) })
+  })
+  await go(page, '#/hosts/local/chat')
+  const picker = page.getByLabel('Thinking')
+  await expect(picker).toHaveValue('high')
+  expect(await picker.locator('option').allTextContents()).toEqual(['Off', 'Low', 'High (default)', 'Max'])
+  await expect(page.getByRole('button', { name: 'Think first' })).toHaveCount(0)
+  await picker.selectOption('max')
+  await page.getByLabel('Message').fill('Hard question')
+  await page.getByLabel('Message').press('Enter')
+  await expect.poll(() => sent).toEqual({ text: 'Hard question', attachments: [], thinking: 'max' })
+  await go(page, '#/hosts/local/models')
+  await go(page, '#/hosts/local/chat')
+  await expect(page.getByLabel('Thinking')).toHaveValue('max')
+})
+
+test('a meeting\'s notes show on the page, the transcript folds out, and every file downloads', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
+  await go(page, '#/hosts/local/services/meeting_notes')
+  await expect(page.getByRole('navigation').getByRole('group', { name: 'Text' }).getByRole('link', { name: /Meeting notes/ })).toBeVisible()
+  await page.getByRole('button', { name: /call\.m4a|meeting|job-0000/i }).first().click()
+  const notes = page.getByRole('region', { name: 'Notes' })
+  await expect(notes.getByRole('heading', { name: 'Action items' })).toBeVisible()
+  await expect(notes.getByText('Send the plan — Ben (00:20)')).toBeVisible()
+  await expect(page.getByText('Hello, everyone.')).toBeHidden()
+  await page.getByText('Transcript', { exact: true }).click()
+  await expect(page.getByText('Hello, everyone.')).toBeVisible()
+  for (const name of ['notes.md', 'transcript.md', 'transcript.srt', 'actions.csv', 'decisions.csv', 'meeting.json']) {
+    await expect(page.getByRole('link', { name })).toHaveAttribute('download', name)
+  }
 })
 
 test('a service restart that adds a model shows it after the stream reconnects, without reloading the page', async ({ page }) => {
@@ -1195,4 +1272,56 @@ test('a model that also paints pictures labels each tab and result by what it ma
   await expect(panel.getByRole('button', { name: /^Make a picture/ })).toBeVisible()
   await expect(panel.getByLabel(/^size/i)).toHaveValue('4 MP')
   await expect(page.getByRole('heading', { name: 'Your results' })).toBeVisible()
+})
+
+test('the assistant bubble opens on every page but Chat, offers to start its model, and keeps one thread', async ({ page }) => {
+  // Two text models: the bubble uses the one marked as the assistant (Inkling), not the first in the list.
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, songs: true })
+  const thread = (id: string) => ({ conversation: { id, title: 'Assistant', kind: 'assistant', model_id: 'inkling2', created_at: '2026-11-23T10:00:00Z', updated_at: '2026-11-23T10:00:00Z', busy: false }, messages: [] })
+  await page.route('**/api/assistant', (route) => route.fulfill({ json: thread('help-1') }))
+  await go(page, '#/overview')
+  await page.getByRole('button', { name: 'Open the assistant' }).click()
+  const panel = page.getByRole('region', { name: 'Assistant' })
+  await expect(panel.getByText('The assistant runs on Inkling 2 Mini')).toBeVisible()
+  await expect(panel.getByLabel('Ask the assistant')).toBeDisabled()
+  const start = page.waitForRequest((request) => request.url().includes('/api/runtimes/inkling2/start') && request.method() === 'POST')
+  await panel.getByRole('button', { name: 'Start Inkling 2 Mini' }).click()
+  await start
+  await panel.getByRole('button', { name: 'Close the assistant' }).click()
+  await expect(panel).toHaveCount(0)
+  await go(page, '#/hosts/local/chat')
+  await expect(page.getByRole('button', { name: 'Open the assistant' })).toHaveCount(0)
+})
+
+test('the assistant answers with the page in mind and can start over', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, chatReady: true, songs: true })
+  await keepFresh(page)
+  const conversation = (id: string) => ({ id, title: 'Assistant', kind: 'assistant', model_id: 'basalt', created_at: '2026-11-23T10:00:00Z', updated_at: '2026-11-23T10:00:00Z', busy: false })
+  const messages: Array<Record<string, unknown>> = []
+  let sent: Record<string, unknown> | null = null
+  await page.route('**/api/assistant', (route) => route.fulfill({ json: { conversation: conversation('help-1'), messages } }))
+  await page.route('**/api/assistant/new', (route) => route.fulfill({ json: { conversation: conversation('help-2'), messages: [] } }))
+  await page.route('**/api/conversations/help-1', (route) => route.fulfill({ json: { conversation: conversation('help-1'), messages } }))
+  await page.route('**/api/conversations/help-1/messages', async (route) => {
+    sent = route.request().postDataJSON() as Record<string, unknown>
+    const user = chatMessage('a1', 1, 'user', { content: 'How do I make a song?' })
+    const reply = chatMessage('a2', 2, 'assistant', { content: 'On this page:\n\n1. Write the lyrics.\n2. Press **Make a song**.' })
+    messages.push(user, reply)
+    await route.fulfill({ status: 200, contentType: 'text/event-stream', body: chatStream([['message', user], ['start', {}], ['delta', { content: 'On this page:' }], ['message', reply], ['done', {}]]) })
+  })
+  await go(page, '#/hosts/local/services/yue2')
+  await page.getByRole('button', { name: 'Open the assistant' }).click()
+  const panel = page.getByRole('region', { name: 'Assistant' })
+  await expect(panel.getByText('Hi! I can explain how Generation Station works')).toBeVisible()
+  await panel.getByRole('button', { name: 'How do I make a song?' }).click()
+  await expect(panel.getByRole('listitem').filter({ hasText: 'Make a song' })).toBeVisible()
+  expect(sent).toEqual({ text: 'How do I make a song?', attachments: [], thinking: false, where: 'the YuE2 songs page' })
+  await expect(panel.getByRole('link', { name: 'Open in Chat' })).toHaveAttribute('href', '#/hosts/local/chat/help-1')
+  await page.screenshot({ path: 'test-results/screenshots/assistant.png' })
+  await panel.getByRole('button', { name: 'Start over' }).click()
+  await expect(panel.getByText('Hi! I can explain how Generation Station works')).toBeVisible()
+  await expect(panel.getByRole('link', { name: 'Open in Chat' })).toHaveAttribute('href', '#/hosts/local/chat/help-2')
+  // The panel stays open across pages and reloads on this device.
+  await page.reload()
+  await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
 })

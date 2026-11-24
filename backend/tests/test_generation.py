@@ -115,6 +115,39 @@ def test_worker_protocol_end_to_end(tmp_path):
         supervisor.wait_exited(handle, 10)
 
 
+def test_a_job_can_ask_the_host_for_something_and_wait(tmp_path):
+    """job.need(): the request shows in the job's details until the host answers it; a cancel ends the wait."""
+    from generationstation.plugins.worker import _request
+    port = free_port()
+    runtime = yue2_catalog(port, tmp_path / "out").runtimes["yue2"]
+    preset = runtime.presets["songs"]
+    values, gpus = resolve_settings(YUE2, preset, {}, None)
+    supervisor = ProcessSupervisor(tmp_path / "runtime", poll_seconds=0.1)
+    handle = supervisor.spawn("op-1", runtime, preset, values, gpus)
+    try:
+        assert supervisor.wait_ready(handle, runtime, 20)
+        YUE2.submit(runtime, "job-00000011", {"style": "needs", "lyrics": "x"})
+        asking = wait(lambda: (r := YUE2.job_status(runtime, "job-00000011")) and (r["details"].get("needs") or {}).get("text_model") and r)
+        assert asking["status"] == "running" and asking["details"]["needs"]["text_model"] == {"model": "auto", "gpu": 1}
+        assert _request("POST", f"http://127.0.0.1:{port}/jobs/job-00000011/provide", {"name": "other", "value": 1})[0] == 409
+        status, _ = _request("POST", f"http://127.0.0.1:{port}/jobs/job-00000011/provide",
+                             {"name": "text_model", "value": {"base_url": "http://127.0.0.1:8162", "model": "fn"}})
+        assert status == 200
+        done = wait(lambda: (r := YUE2.job_status(runtime, "job-00000011")) and r["status"] in {"done", "failed"} and r)
+        assert done["status"] == "done" and done["details"]["given"] == {"base_url": "http://127.0.0.1:8162", "model": "fn"}
+        assert "needs" not in done["details"]
+        assert _request("POST", f"http://127.0.0.1:{port}/jobs/job-missing9/provide", {"name": "text_model"})[0] == 404
+
+        YUE2.submit(runtime, "job-00000012", {"style": "needs", "lyrics": "x"})
+        wait(lambda: (r := YUE2.job_status(runtime, "job-00000012")) and r["details"].get("needs") and r)
+        YUE2.cancel(runtime, "job-00000012")
+        cancelled = wait(lambda: (r := YUE2.job_status(runtime, "job-00000012")) and r["status"] != "running" and r)
+        assert cancelled["status"] == "cancelled" and "needs" not in cancelled["details"]
+    finally:
+        supervisor.stop(handle)
+        supervisor.wait_exited(handle, 10)
+
+
 def test_a_failed_load_is_reported(tmp_path):
     from generationstation.process_worker import WorkerFailed
     port = free_port()

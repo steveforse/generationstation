@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, AlertCircle, FileText, Loader2, Menu, MessagesSquare, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Activity, FileText, Loader2, Menu, MessagesSquare, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { AssistantBubble } from './components/Assistant'
 import { hostName, StatusDot, stateText } from './components/HostBits'
 import { groupByWorkload, WorkloadIcon } from './components/WorkloadIcon'
 import type { SavedHost } from './hosts'
@@ -83,7 +84,17 @@ export default function App() {
         {route.page !== 'chat' && <footer className="page-footer"><span>Generation Station <b>·</b> Host-first model management</span><span><span className="footer-dot" /> Measurements are reported by each connected service</span></footer>}
       </div>
     </main>
+    {route.page !== 'chat' && <AssistantSlot route={route} host={routeHost ?? hosts[0]} />}
   </div>
+}
+
+/** The help bubble for the host being looked at, told which page is open (it is the Chat page's own model). */
+function AssistantSlot({ route, host }: { route: Route; host?: SavedHost }) {
+  const state = useSession(host ? store.session(host.id) : undefined)
+  const page = route.page === 'service' ? `the ${state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId} page`
+    : route.page === 'models' ? 'the Models page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
+      : route.page === 'settings' ? 'the Host settings page' : route.page === 'connections' ? 'the Connections page' : 'a page'
+  return <AssistantBubble store={store} host={host} where={page} />
 }
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
@@ -104,12 +115,17 @@ function NavLink({ route, current, icon, label, badge, title }: { route: Route; 
   return <a className={`nav-item ${active ? 'active' : ''}`} href={href(route)} aria-current={active ? 'page' : undefined} title={title ?? label}>{icon}<span className="nav-item-label">{label}</span>{badge}</a>
 }
 
-/** Running state beside a nav item: never colour alone (a dot and the word "On", or an icon with hidden text). */
+/** Running state beside a nav item: never colour alone (a dot and the word "On", or an icon with hidden text).
+ * Errors are left to the model's own page and the Models page; the sidebar shows only on and busy. */
 function NavState({ state }: { state?: string }) {
   if (state === 'ready') return <span className="nav-state"><span className="nav-state-dot" aria-hidden="true" /><span className="nav-state-text">On</span></span>
   if (state === 'loading' || state === 'unloading') return <span className="nav-busy"><Loader2 size={14} className="spin" aria-hidden="true" /><span className="sr-only">{state === 'loading' ? 'Starting' : 'Stopping'}</span></span>
-  if (state === 'error' || state === 'cleanup_failed') return <span className="nav-error"><AlertCircle size={14} aria-hidden="true" /><span className="sr-only">Error</span></span>
   return null
+}
+
+/** The state named in a nav item's tooltip, without errors (see NavState). */
+function navStatus(state?: string) {
+  return state === 'error' || state === 'cleanup_failed' ? undefined : stateText[state ?? '']
 }
 
 
@@ -132,7 +148,7 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
     {chatRuntime && <div className="nav-group" role="group" aria-labelledby={chatId}>
       <div className="nav-group-label" id={chatId}><WorkloadIcon workload="text" size={18} /><span>Text</span></div>
       <NavLink route={{ page: 'chat', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><MessagesSquare size={20} /></span>} label="Chat"
-        title={stateText[chatState ?? ''] ? `Chat: ${chatRuntime.name} ${stateText[chatState ?? ''].toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} />
+        title={navStatus(chatState) ? `Chat: ${chatRuntime.name} ${navStatus(chatState)?.toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} />
     </div>}
     {groups.filter((group) => group.key !== 'text' || !chatRuntime).map((group) => {
       const id = `nav-${host.id}-${group.key}`
@@ -140,7 +156,7 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
         <div className="nav-group-label" id={id}><WorkloadIcon workload={group.key} size={18} /><span>{group.label}</span></div>
         {group.items.map((runtime) => {
           const model = state.models?.find((item) => item.id === runtime.id)
-          const status = stateText[model?.state ?? '']
+          const status = navStatus(model?.state)
           return <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
             icon={<span className="nav-rail-icon"><WorkloadIcon workload={runtime.workload} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
             badge={<NavState state={model?.state} />} />

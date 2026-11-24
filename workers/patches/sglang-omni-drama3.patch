@@ -1,0 +1,47 @@
+diff --git a/sglang_omni/models/fishaudio_drama3/sglang_model.py b/sglang_omni/models/fishaudio_drama3/sglang_model.py
+index 78a86c524..bf4876d82 100644
+--- a/sglang_omni/models/fishaudio_drama3/sglang_model.py
++++ b/sglang_omni/models/fishaudio_drama3/sglang_model.py
+@@ -376,9 +376,12 @@ class Drama3ForCausalLM(nn.Module):
+             input_ids, hidden_states, self.lm_head, forward_batch
+         )
+         # Tensor parallelism pads the candidate columns to a multiple of the ranks.
+-        logits_output.next_token_logits = logits_output.next_token_logits[
+-            :, : self.lm_head.org_vocab_size
+-        ]
++        # Generation Station patch: SGLang's MoE autotune pass (FlashInfer CUTLASS backend) skips the LM
++        # head and returns no logits; there is nothing to trim then.
++        if logits_output.next_token_logits is not None:
++            logits_output.next_token_logits = logits_output.next_token_logits[
++                :, : self.lm_head.org_vocab_size
++            ]
+         return hidden_states, logits_output
+ 
+     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> None:
+diff --git a/sglang_omni/models/fishaudio_drama3/speech_request.py b/sglang_omni/models/fishaudio_drama3/speech_request.py
+index 4d9110999..048307751 100644
+--- a/sglang_omni/models/fishaudio_drama3/speech_request.py
++++ b/sglang_omni/models/fishaudio_drama3/speech_request.py
+@@ -232,19 +232,9 @@ class Drama3SpeechPreprocessor:
+             else:
+                 transcripts.append(transcript)
+         # Malformed tags, an unbounded run of digits included, are left to the builder.
+-        other_speaker_ids = {
+-            int(speaker_tag.group(1))
+-            for speech_text in [text, *transcripts]
+-            for speaker_tag in SPEAKER_TAG_PATTERN.finditer(speech_text)
+-            if speaker_tag.group(1) in SPEAKER_IDS - {"0"}
+-        }
+-        if other_speaker_ids:
+-            raise ValueError(
+-                f"{REQUEST_ERROR_PREFIX} only speaker 0 is supported; got speaker "
+-                f"tags {sorted(other_speaker_ids)}"
+-            )
+-        else:
+-            pass
++        # Generation Station patch: speaker tags 0..15 pass through, as in Fish Audio's own
++        # build_drama3_prompt (a reference's leading tag names its speaker; build_prompt_rows
++        # already keeps it). Upstream rejected every speaker but 0.
+         references = [
+             ReferencePart(
+                 transcript=with_speaker_tag(transcript, 0),

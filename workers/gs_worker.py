@@ -10,6 +10,8 @@ Protocol (127.0.0.1 only):
 
     GET  /health          {"status": "loading" | "loaded" | "failed", "error": str | null}
     POST /generate        {"job_id": str, "inputs": {...}}  -> 202 {"job_id", "status": "queued"}
+    POST /jobs/{job_id}/provide {"name": str, "value": ...}  -> 200 the job; answers a request the job made with
+                          job.need(name, request): while it waits, its details carry "needs": {name: request}
     POST /jobs/{job_id}/cancel  -> 200 the job; a queued job is cancelled at once, a running one
                           stops at its next progress report (job.report), then shows "cancelled"; its partial
                           results are removed, the files it was given are kept
@@ -62,6 +64,8 @@ class Job:
         self.details = {}
         self.cancel_requested = False
         self.created = time.time()
+        self.provided = {}
+        self.answered = threading.Condition()
 
     def report(self, text):
         """Short human-readable progress, for example 'Writing the melody'.
@@ -70,6 +74,38 @@ class Job:
         if self.cancel_requested:
             raise JobCancelled()
         self.progress = str(text)[:200]
+
+    def need(self, name, request, timeout=1800):
+        """Ask the host for something this job cannot get itself (for example a running text model) and wait for
+        the answer. While waiting, details["needs"][name] holds the request; a cancel ends the wait. Returns the value
+        the host provided."""
+        with self.answered:
+            self.provided.pop(name, None)
+            self.details.setdefault("needs", {})[name] = request
+        deadline = time.time() + timeout
+        try:
+            with self.answered:
+                while name not in self.provided:
+                    if self.cancel_requested:
+                        raise JobCancelled()
+                    if time.time() > deadline:
+                        raise TimeoutError(f"no answer from the host for {name} within {timeout} s")
+                    self.answered.wait(2)
+                return self.provided.pop(name)
+        finally:
+            with self.answered:
+                needs = self.details.get("needs") or {}
+                needs.pop(name, None)
+                if not needs:
+                    self.details.pop("needs", None)
+
+    def provide(self, name, value):
+        with self.answered:
+            if name not in (self.details.get("needs") or {}):
+                return False
+            self.provided[name] = value
+            self.answered.notify_all()
+            return True
 
     def detail(self, **values):
         """Record what was actually used (seed, steps, size, full prompt), shown with the result."""
@@ -186,6 +222,29 @@ def serve(load, generate, argv=None, cleanup=None):
             self.send_json(200, job.as_dict())
 
         def do_POST(self):
+            provide = re.fullmatch(r"/jobs/([A-Za-z0-9-]{8,64})/provide", self.path)
+            if provide:
+                job = jobs.get(provide.group(1))
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length > 1_000_000:
+                        raise ValueError("request too large")
+                    payload = json.loads(self.rfile.read(length))
+                    name = payload["name"]
+                    if not isinstance(name, str):
+                        raise TypeError("name is required")
+                except (ValueError, KeyError, TypeError) as exc:
+                    self.send_json(400, {"error": str(exc)})
+                    return
+                if job is None:
+                    self.send_json(404, {"error": "job not found"})
+                    return
+                if not job.provide(name, payload.get("value")):
+                    self.send_json(409, {"error": f"the job is not waiting for {name}"})
+                    return
+                log(f"job {job.job_id} was given {name}")
+                self.send_json(200, job.as_dict())
+                return
             cancel = re.fullmatch(r"/jobs/([A-Za-z0-9-]{8,64})/cancel", self.path)
             if cancel:
                 with lock:

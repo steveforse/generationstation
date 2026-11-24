@@ -45,6 +45,9 @@ def generate(model, inputs, job):
     if inputs.get("style") == "fail":
         raise ValueError("lyrics could not be planned")
     job.report("Writing the melody")
+    if inputs.get("style") == "needs":  # asks the host for a text model and records what it was given
+        given = job.need("text_model", {"model": "auto", "gpu": 1}, timeout=float(inputs.get("wait", 30)))
+        job.detail(given=given)
     if inputs.get("style") == "slow":  # 3 s in steps, so a cancel takes effect at the next one
         job.output("partial.wav", "audio/wav").write_bytes(b"RIFF")
         (job.dir / "inputs").mkdir(exist_ok=True)

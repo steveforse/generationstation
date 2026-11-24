@@ -137,17 +137,21 @@ def windows_process_vram():
 class ProcessMemoryCollector:
     """Per-model usage for {model_id: (pid, create_time)}; gpus are the telemetry sample's GPUs."""
 
-    def __init__(self, platform=sys.platform, luid_buses=None, process_vram=None, nvml_bus=None, nvml_processes=None):
+    def __init__(self, platform=sys.platform, luid_buses=None, process_vram=None, nvml_bus=None, nvml_processes=None,
+                 pids_named=None):
         self.platform = platform
+        self.pids_named = pids_named or _pids_named
         self.luid_buses = luid_buses or windows_luid_buses
         self.process_vram = process_vram or windows_process_vram
         self.nvml_bus = nvml_bus or _nvml_bus
         self.nvml_processes = nvml_processes or _nvml_processes
 
-    def sample(self, owned, gpus):
+    def sample(self, owned, gpus, helpers=None):
+        """`helpers`: {model_id: process names} whose GPU memory also counts for that model (not their RAM)."""
         if not owned:
             return {}
         trees = {model_id: process_tree(pid, created) for model_id, (pid, created) in owned.items()}
+        borrowed = {model_id: self.pids_named(names) for model_id, names in (helpers or {}).items() if model_id in owned}
         result = {model_id: {"ram_bytes": tree_ram_bytes(procs) if procs else None, "gpus": {}, "error": None}
                   for model_id, procs in trees.items()}
         try:
@@ -158,7 +162,7 @@ class ProcessMemoryCollector:
             if vram is None:
                 result[model_id]["error"] = VRAM_UNAVAILABLE
                 continue
-            pids = {proc.pid for proc in procs}
+            pids = {proc.pid for proc in procs} | borrowed.get(model_id, set())
             for (pid, gpu_id), used in vram.items():
                 if pid in pids:
                     result[model_id]["gpus"][gpu_id] = result[model_id]["gpus"].get(gpu_id, 0) + used
@@ -186,6 +190,17 @@ class ProcessMemoryCollector:
                 key = (pid, gpu_by_luid[luid])
                 usage[key] = usage.get(key, 0) + used
         return usage
+
+
+def _pids_named(names):
+    """PIDs of running processes with one of these names (case-insensitive, with or without .exe)."""
+    wanted = {name.lower().removesuffix(".exe") for name in names}
+    pids = set()
+    for proc in psutil.process_iter(["name"]):
+        name = (proc.info.get("name") or "").lower().removesuffix(".exe")
+        if name in wanted:
+            pids.add(proc.pid)
+    return pids
 
 
 def _nvml_bus(index):

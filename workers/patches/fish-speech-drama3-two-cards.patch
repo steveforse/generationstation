@@ -1,0 +1,262 @@
+diff --git a/fish_speech/models/text2semantic/fish_omni/backbone.py b/fish_speech/models/text2semantic/fish_omni/backbone.py
+index 0afa276..949fd26 100644
+--- a/fish_speech/models/text2semantic/fish_omni/backbone.py
++++ b/fish_speech/models/text2semantic/fish_omni/backbone.py
+@@ -1,3 +1,4 @@
++import os
+ import re
+ from collections import defaultdict
+ from collections.abc import Iterable, Sequence
+@@ -135,7 +136,14 @@ class FishOmniBackbone(nn.Module):
+         layer_bytes = [module_bytes(layer) for layer in self.model.layers]
+         head = module_bytes(self.model.embed_tokens)
+         tail = module_bytes(self.lm_head) + module_bytes(self.model.norm)
+-        per_device = (head + sum(layer_bytes) + tail) / len(devices)
++        total = head + sum(layer_bytes) + tail
++        # Local test patch: FISH_DRAMA3_DEVICE_WEIGHTS="0.76,0.24" gives each device that share of the
++        # backbone (cards of different sizes); without it the split is even.
++        weights = [float(w) for w in os.environ.get("FISH_DRAMA3_DEVICE_WEIGHTS", "").split(",") if w.strip()]
++        if len(weights) != len(devices):
++            weights = [1.0] * len(devices)
++        bounds = [total * sum(weights[: i + 1]) / sum(weights) for i in range(len(devices))]
++        per_device = total / len(devices)
+         self.model.embed_tokens.to_empty(device=devices[0])
+         self.model.norm.to_empty(device=devices[-1])
+         self.lm_head.to_empty(device=devices[-1])
+@@ -143,7 +151,7 @@ class FishOmniBackbone(nn.Module):
+         cumulative = head
+         for index, (layer, size) in enumerate(zip(self.model.layers, layer_bytes)):
+             middle = cumulative + size / 2
+-            device = devices[min(int(middle // per_device), len(devices) - 1)]
++            device = devices[next((i for i, bound in enumerate(bounds) if middle < bound), len(devices) - 1)]
+             layer.to_empty(device=device)
+             placement[str(device)].append(index)
+             cumulative += size
+@@ -253,6 +261,46 @@ class FishOmniBackbone(nn.Module):
+         norm = self.model.norm
+         return norm(hidden.to(norm.weight.device)).to(self.dtype)
+ 
++    def layer_segments(self) -> list[tuple[torch.device, list[int]]]:
++        """Contiguous runs of layers on one device, in order: [(device, layer indices)]."""
++        segments: list[tuple[torch.device, list[int]]] = []
++        for index, layer in enumerate(self.model.layers):
++            device = layer.input_layernorm.weight.device
++            if segments and segments[-1][0] == device:
++                segments[-1][1].append(index)
++            else:
++                segments.append((device, [index]))
++        return segments
++
++    def run_segment(
++        self,
++        hidden: Tensor,
++        positions: Tensor,
++        indices: Sequence[int],
++        *,
++        kv_len: int,
++        final_norm: bool,
++    ) -> Tensor:
++        """One decode row through the layers `indices` (all on one device), as run_layers does for those
++        layers with cached state; the final norm when this is the last segment. Local patch: lets the
++        decoder capture one CUDA graph per device when the backbone spans several."""
++        device = self.model.layers[indices[0]].input_layernorm.weight.device
++        frequencies = self.inverse_frequencies.get(device)
++        if frequencies is None:
++            rotary_dim = self.config.rotary_dim
++            exponents = torch.arange(0, rotary_dim, 2, dtype=torch.float32, device=device)
++            frequencies = 1.0 / (self.config.rope_theta ** (exponents / rotary_dim))
++            self.inverse_frequencies[device] = frequencies
++        angles = positions.float()[:, None] * frequencies[None, :]
++        angles = torch.cat((angles, angles), dim=-1)
++        context = LayerContext(input_pos=positions, cos=angles.cos(), sin=angles.sin(), kv_len=kv_len,
++                               continue_state=True, use_cache=True)
++        for index in indices:
++            hidden = self.model.layers[index](hidden, context)
++        if final_norm:
++            return self.model.norm(hidden).to(self.dtype)
++        return hidden
++
+     def compute_logits(self, hidden: Tensor) -> Tensor:
+         return self.lm_head(hidden.to(self.lm_head.weight.device))
+ 
+diff --git a/fish_speech/models/text2semantic/fish_omni/generate.py b/fish_speech/models/text2semantic/fish_omni/generate.py
+index d153918..04a443c 100644
+--- a/fish_speech/models/text2semantic/fish_omni/generate.py
++++ b/fish_speech/models/text2semantic/fish_omni/generate.py
+@@ -1,3 +1,4 @@
++import math
+ import os
+ import re
+ import time
+@@ -387,7 +388,12 @@ class Drama3DecodeGraphs:
+             return None
+         devices = {p.device for p in model.backbone.parameters()}
+         devices.add(model.audio_decoder.device)
+-        if len(devices) != 1 or next(iter(devices)).type != "cuda":
++        if any(device.type != "cuda" for device in devices):
++            return None
++        if len(devices) != 1 and cls is not Drama3SplitDecodeGraphs:
++            # Local patch: a backbone over two cards decodes with one graph per card.
++            if Drama3SplitDecodeGraphs.supports(model):
++                return Drama3SplitDecodeGraphs.for_model(model, capacity)
+             return None
+         graphs = model.decode_graphs
+         if (
+@@ -504,6 +510,147 @@ class Drama3DecodeGraphs:
+         return sampled, main
+ 
+ 
++class Drama3SplitDecodeGraphs(Drama3DecodeGraphs):
++    """Decode graphs for a backbone over two cards, the tower on the second (local patch).
++
++    One CUDA graph cannot span devices, so each step replays three: on the tower card, lm_head ->
++    tower (sample a frame) -> the codebook part of the next input; on the first card, the token
++    embedding and its layers; on the tower card, its layers and the final norm. Between them two tiny
++    tensors are copied. Without graphs the split decode runs eagerly and is launch-bound.
++    FISH_DRAMA3_SPLIT_GRAPH=0 disables.
++    """
++
++    @staticmethod
++    def supports(model: FishOmniModel) -> bool:
++        if os.environ.get("FISH_DRAMA3_SPLIT_GRAPH", "1") == "0":
++            return False
++        segments = model.backbone.layer_segments()
++        embed = model.backbone.model.embed_tokens.weight.device
++        tower = model.audio_decoder.device
++        return (len(segments) == 2 and segments[0][0] == embed and segments[1][0] == tower
++                and model.backbone.lm_head.weight.device == tower
++                and model.backbone.model.norm.weight.device == tower)
++
++    def __init__(self, model: FishOmniModel) -> None:
++        super().__init__(model)
++        backbone, tower = model.backbone, model.audio_decoder
++        (self.first_device, self.first_layers), (_, self.last_layers) = backbone.layer_segments()
++        hidden_size = model.config.text.hidden_size
++        count = tower.config.vq_backbone_codebooks
++        self.count = count
++        self.extra = torch.zeros((1, tower.config.dim), dtype=tower.codebook_embeddings.weight.dtype, device=tower.device)
++        self.semantic = torch.zeros(1, dtype=torch.bool, device=tower.device)
++        dev = self.first_device
++        self.main_first = torch.zeros(1, dtype=torch.long, device=dev)
++        self.extra_first = torch.zeros_like(self.extra, device=dev)
++        self.semantic_first = torch.zeros(1, dtype=torch.bool, device=dev)
++        self.position_first = torch.zeros(1, dtype=torch.long, device=dev)
++        self.middle_first = torch.zeros((1, 1, hidden_size), dtype=backbone.residual_dtype, device=dev)
++        self.middle = torch.zeros((1, 1, hidden_size), dtype=backbone.residual_dtype, device=tower.device)
++        self.pool_first = torch.cuda.graph_pool_handle()
++        # torch.cuda.graph's default capture stream is created once, on whichever device captures first;
++        # each card needs its own.
++        self.stream_tower = torch.cuda.Stream(device=tower.device)
++        self.stream_first = torch.cuda.Stream(device=dev)
++        self.split_graphs: dict[int, tuple[torch.cuda.CUDAGraph, ...]] = {}
++
++    def part_tower(self, kv_len: int) -> None:
++        backbone, tower = self.model.backbone, self.model.audio_decoder
++        logits = backbone.compute_logits(self.hidden)
++        self.finite.copy_(torch.isfinite(logits).all())
++        sampled = tower.decode_step(logits, self.hidden, self.position, self.frame, self.history,
++                                    temperature=self.temperature, top_k=self.top_k, top_p=self.top_p,
++                                    epsilon_cutoff=self.epsilon_cutoff, check_finite=False)
++        self.sampled.copy_(sampled)
++        self.extra.copy_(tower.embedding_sum(sampled, 1, 1 + self.count))
++        self.semantic.copy_(tower.is_semantic(sampled[:, 0]))
++
++    def part_first(self, kv_len: int) -> None:
++        backbone = self.model.backbone
++        text = backbone.model.embed_tokens(self.main_first)
++        mixed = (text + self.extra_first.to(text.dtype)) / math.sqrt(1 + self.count)
++        embeddings = torch.where(self.semantic_first[:, None], mixed, text)
++        hidden = embeddings[None].to(backbone.residual_dtype)
++        out = backbone.run_segment(hidden, self.position_first + 1, self.first_layers, kv_len=kv_len, final_norm=False)
++        self.middle_first.copy_(out)
++
++    def part_last(self, kv_len: int) -> None:
++        out = self.model.backbone.run_segment(self.middle, self.position + 1, self.last_layers, kv_len=kv_len,
++                                              final_norm=True)
++        self.next_hidden.copy_(out[0])
++
++    def hand_over(self) -> None:
++        self.main_first.copy_(self.sampled[:, 0])
++        self.extra_first.copy_(self.extra)
++        self.semantic_first.copy_(self.semantic)
++
++    def run(self, kv_len: int) -> None:  # eager, for warm-up
++        self.part_tower(kv_len)
++        self.hand_over()
++        with torch.cuda.device(self.first_device):
++            self.part_first(kv_len)
++        self.middle.copy_(self.middle_first)
++        self.part_last(kv_len)
++
++    def capture(self, kv_len: int) -> None:
++        for attention in self.tower_attentions():
++            attention.static_kv_len = kv_len
++        try:
++            for _ in range(2):
++                self.run(kv_len)
++            torch.cuda.synchronize(self.first_device)
++            torch.cuda.synchronize(self.model.audio_decoder.device)
++            tower_graph, first_graph, last_graph = (torch.cuda.CUDAGraph() for _ in range(3))
++            with torch.cuda.graph(tower_graph, pool=self.pool, stream=self.stream_tower):
++                self.part_tower(kv_len)
++            with torch.cuda.device(self.first_device):
++                with torch.cuda.graph(first_graph, pool=self.pool_first, stream=self.stream_first):
++                    self.part_first(kv_len)
++            with torch.cuda.graph(last_graph, pool=self.pool, stream=self.stream_tower):
++                self.part_last(kv_len)
++            self.split_graphs[kv_len] = (tower_graph, first_graph, last_graph)
++            self.graphs[kv_len] = tower_graph  # for the bucket bookkeeping of the base class
++        finally:
++            for attention in self.tower_attentions():
++                attention.static_kv_len = None
++
++    def start(self, hidden, position, prompt_frames, temperature, top_k, top_p, epsilon_cutoff=0.0) -> None:
++        super().start(hidden, position, prompt_frames, temperature, top_k, top_p, epsilon_cutoff)
++        self.position_first.fill_(position)
++
++    def step(self, position: int) -> tuple[torch.Tensor, int]:
++        kv_len = next(b for b in self.buckets if b >= position + 2)
++        tower_graph, first_graph, last_graph = self.split_graphs[kv_len]
++        if os.environ.get("FISH_DRAMA3_SPLIT_EAGER") == "1":  # debugging: the same steps without graphs
++            for attention in self.tower_attentions():
++                attention.static_kv_len = kv_len
++            try:
++                self.run(kv_len)
++            finally:
++                for attention in self.tower_attentions():
++                    attention.static_kv_len = None
++        else:
++            with torch.cuda.device(self.model.audio_decoder.device):
++                tower_graph.replay()
++            self.hand_over()
++            with torch.cuda.device(self.first_device):
++                first_graph.replay()
++            self.middle.copy_(self.middle_first)
++            with torch.cuda.device(self.model.audio_decoder.device):
++                last_graph.replay()
++        sampled = self.sampled.clone()
++        status = torch.stack((sampled[0, 0], self.finite.long()))
++        self.hidden.copy_(self.next_hidden)
++        self.frame.copy_(sampled)
++        self.history.copy_(torch.cat((self.history[1:], sampled[0, :1])))
++        self.position.add_(1)
++        self.position_first.add_(1)
++        main, finite = status.tolist()
++        if not finite:
++            raise FloatingPointError("non-finite logits; refusing to sample invalid audio")
++        return sampled, main
++
++
+ def resolve_drama3_devices(device: str) -> tuple[list[str], str]:
+     """Split "cuda:0,cuda:1,..." into backbone devices and the tower (+ codec) device.
+ 
+@@ -526,7 +673,8 @@ def resolve_drama3_devices(device: str) -> tuple[list[str], str]:
+             or parsed.index >= torch.cuda.device_count()
+         ):
+             raise ValueError(f"Drama 3 needs available cuda:N devices; got {spec!r}")
+-    if len(set(specs)) != len(specs):
++    # Local test patch: the tower may share the last backbone device ("cuda:0,cuda:1,cuda:1").
++    if len(set(specs)) != len(specs) and not (len(specs) >= 3 and specs[-1] == specs[-2] and len(set(specs[:-1])) == len(specs) - 1):
+         raise ValueError(f"duplicate devices in {device!r}")
+     if len(specs) == 1:
+         return specs, specs[0]

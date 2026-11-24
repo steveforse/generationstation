@@ -19,6 +19,8 @@ A plugin supplies only what is specific to its model server:
 | `launch()` | Returns a `LaunchSpec`: the command line, environment, working folder, and any files (written into the start's own folder before the process starts). |
 | `probe()` | Asks the running server whether its model is `loaded`, `loading`, or `failed`; `None` means it is not answering yet. |
 
+A chat plugin's `runtimes.json` entry may set `"assistant": true` (one at most): the help assistant bubble on every page runs on that model (Inkling 2 Mini on the desktop).
+
 The browser can only choose a preset, choose GPUs from the preset's `allowed_gpus`, and change the preset's exposed settings within the plugin's bounds. Every value is validated again on the server. A plugin must never turn a browser value into a path or an unvalidated command-line argument.
 
 GPU indices are NVML/`nvidia-smi` order. Plugins that start CUDA programs should set `CUDA_DEVICE_ORDER=PCI_BUS_ID` so the indices match (Basalt does).
@@ -60,6 +62,7 @@ A generation plugin subclasses `WorkerPlugin` (`plugins/worker.py`) and sets:
 - `chats`: true for a server with an OpenAI-style `/v1/chat/completions` (the `llm` plugin). The dashboard then offers it on the Chat page, where it can call every running generator's tabs as tools (`backend/generationstation/chat.py`); a generator needs nothing extra for that, but clear `help` text on its fields is what the chat model reads.
 - `advanced` on a `SettingSpec`: shown under "Advanced settings" on the Models card; the others are shown with the card choice. A plugin that marks none keeps all its settings folded, as before.
 - `gpu_limit(preset)`, `check_gpus(preset, gpus)` and `chat_sampling(preset, gpus)`: per-preset card rules and chat sampling. The `llm` plugin uses them so that one model entry can run on different engines depending on the card chosen.
+- `chat_thinking(preset, gpus)`: the thinking levels a chat may ask for there (`{"levels", "default", "off"}`, or None). The `llm` plugin reads them from each card setup's `thinking_levels`, `thinking_default` and `thinking_off`; the chat offers only these and the host refuses others.
 
 The worker sees only the chosen card(s) (`CUDA_VISIBLE_DEVICES`, in `nvidia-smi` order), so it always uses `cuda:0`. Preset `options` (model folders, and so on) are owner-set and passed through to `load()`; start settings come from the plugin's `settings`.
 

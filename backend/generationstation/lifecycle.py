@@ -5,6 +5,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 
+from .plugins import get_plugin
 from .process_worker import WorkerFailed, port_in_use
 from .runtimes import Catalog, SettingsError, describe_runtime, estimate_requirements, resolve_settings
 
@@ -105,8 +106,16 @@ class LifecycleManager:
         for model_id, runtime in self.catalog.runtimes.items():
             entry = describe_runtime(model_id, runtime, gpus)
             entry["last_launch"] = (launches.get(model_id) or {}).get("launch")
+            entry["thinking"] = self._thinking(model_id, runtime, entry["last_launch"])
             result.append(entry)
         return result
+
+    def _thinking(self, model_id, runtime, launch):
+        """The thinking levels the chat may offer for the model's latest launch (what runs while it is ready)."""
+        preset = runtime.presets.get((launch or {}).get("preset")) or runtime.presets.get(runtime.default_preset)
+        if preset is None:
+            return None
+        return self.catalog.plugin(model_id).chat_thinking(preset, (launch or {}).get("gpus") or preset.gpus)
 
     def sync_catalog(self):
         if self.catalog.runtimes and hasattr(self.store, "sync_runtime_models"):
@@ -145,6 +154,18 @@ class LifecycleManager:
         with self.lock:
             return {model_id: (handle.pid, getattr(handle, "create_time", 0.0))
                     for model_id, handle in self.runtime_handles.items() if isinstance(getattr(handle, "pid", None), int)}
+
+    def helper_processes(self):
+        """{model_id: process names} for running models whose GPU memory partly sits in other programs."""
+        with self.lock:
+            running = list(self.runtime_handles)
+        helpers = {}
+        for model_id in running:
+            runtime = self.catalog.runtimes.get(model_id) if self.catalog else None
+            plugin = get_plugin(runtime.kind) if runtime else None
+            if plugin is not None and plugin.gpu_helpers:
+                helpers[model_id] = tuple(plugin.gpu_helpers)
+        return helpers
 
     def refresh_runtime_health(self):
         """Mark a ready runtime failed if its process has exited (crash or external stop)."""

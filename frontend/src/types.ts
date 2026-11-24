@@ -24,15 +24,16 @@ export type RuntimePreset = { name: string; description?: string | null; gpus: n
   max_gpus?: number | null; card_notes?: Record<string, string> }
 export type InputField = { key: string; label: string; kind: 'text' | 'textarea' | 'int' | 'choice' | 'seed' | 'files' | 'crop'; required: boolean; default: string | number | null; minimum: number | null; maximum: number | null; max_length: number | null; options: string[]; placeholder: string | null; help: string; advanced: boolean; accept?: ('image' | 'video' | 'audio')[]; max_count?: number | null; target?: string | null; shape_field?: string | null; show_when?: Record<string, string>; option_labels?: Record<string, string>; ratio_partner?: string | null; ratio_role?: 'width' | 'height' | null; guide?: string[] }
 /** A way of making something, shown as a tab with its own form. */
-export type GenerationMode = { key: string; label: string; help: string; inputs: InputField[]; output_kind?: 'audio' | 'image' | 'video' }
+export type GenerationMode = { key: string; label: string; help: string; inputs: InputField[]; output_kind?: 'audio' | 'image' | 'video' | 'document' }
 /** A file uploaded for a request, before a job uses it. */
 export type UploadRecord = { id: string; name: string; kind: 'image' | 'video' | 'audio'; mime: string; bytes: number }
 /** A job's own copy of a file it was given (a reference picture, video or audio). */
 export type JobFile = { name: string; kind: string; mime: string; original: string }
 /** A measured time for one result; the first whose conditions all match applies. */
 export type Timing = { seconds: number; first_seconds: number | null; when: Record<string, string>; preset: string | null; gpu: number | null; note: string | null }
-export type Generation = { output_kind: 'audio' | 'image' | 'video'; inputs: InputField[]; modes?: GenerationMode[]; timings?: Timing[]; make_label?: string | null; result_noun?: string | null }
-export type Runtime = { id: string; kind: string; name: string; description?: string | null; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null; max_gpus?: number | null; generation?: Generation | null; chat?: boolean }
+export type Generation = { output_kind: 'audio' | 'image' | 'video' | 'document'; inputs: InputField[]; modes?: GenerationMode[]; timings?: Timing[]; make_label?: string | null; result_noun?: string | null }
+export type Runtime = { id: string; kind: string; name: string; description?: string | null; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null; max_gpus?: number | null; generation?: Generation | null; chat?: boolean; /** The help assistant runs on this model. */ assistant?: boolean; /** Thinking levels the chat may ask for where the model last started (lowest first). */ thinking?: Thinking | null }
+export type Thinking = { levels: string[]; default: string | null; off: boolean }
 export type JobOutput = { name: string; mime: string; bytes: number }
 /** `details` is what the worker actually used (seed, steps, size, full prompt) and `seconds` taken; `launch` the model settings it ran with. */
 export type Job = { id: string; model_id: string; inputs: Record<string, string | number | JobFile[]>; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'; progress: string | null; outputs: JobOutput[]; error_message: string | null; created_at: string; finished_at: string | null; details?: Record<string, unknown> | null; launch?: Launch | null }
@@ -51,7 +52,8 @@ export type RuntimeEstimate = {
   reserved_ram_bytes: number; reserved_gpu_vram_bytes_by_id: Record<string, number>
 }
 /** A conversation with a text model; `busy` while an answer is being written. */
-export type Conversation = { id: string; title: string; model_id: string; created_at: string; updated_at: string; busy: boolean }
+/** `kind` is 'assistant' for the help bubble's thread, else 'chat'. */
+export type Conversation = { id: string; title: string; model_id: string; kind?: 'chat' | 'assistant'; created_at: string; updated_at: string; busy: boolean }
 /** A result attached to a chat message. */
 export type ChatAttachment = { job_id: string; name: string; mime?: string | null; model_id?: string }
 export type ToolCall = { id: string; name: string; arguments: string }

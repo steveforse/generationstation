@@ -35,7 +35,7 @@ def test_plugin_contract(kind):
     for method in ("launch", "probe"):
         assert getattr(type(plugin), method) is not getattr(RuntimePlugin, method), f"{kind} must implement {method}"
     if plugin.generates:
-        assert plugin.output_kind in {"audio", "image", "video"}
+        assert plugin.output_kind in {"audio", "image", "video", "document"}
     for timing in plugin.timings:  # timings may only name modes and form choices that exist
         if plugin.modes and "mode" not in timing.when:  # applies to every tab: check against all of them
             specs = {key: spec for mode in plugin.modes.values() for key, spec in mode.inputs.items()}
