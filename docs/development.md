@@ -42,7 +42,7 @@ The fake worker is an in-memory lifecycle fixture, not an external process: it a
 
 If Docker reports that the database is unhealthy, inspect `docker compose logs db` and `docker compose ps`. Do not delete the named volume to troubleshoot; it contains persistent application data.
 
-## Real runtimes (Basalt)
+## Real runtimes (Basalt and vLLM)
 
 Real model servers are listed in a local, machine-specific catalog. Copy the example and adjust paths:
 
@@ -52,7 +52,7 @@ Copy-Item runtimes.example.json runtimes.json
 
 `runtimes.json` is ignored by Git. Set `GS_RUNTIMES_FILE` to use another path; without a file, only simulation profiles are available. A broken file stops the API from starting, so mistakes are not silently ignored. Each runtime defines its executable, port, extra `PATH` entries and environment, and one or more presets. Each preset names its model file, default GPUs (NVML/`nvidia-smi` index order; the service starts Basalt with `CUDA_DEVICE_ORDER=PCI_BUS_ID` so the indices match), Basalt keys that are always written (`fixed`), the user-adjustable `settings` with defaults, and a start `estimate`. The browser can only choose a preset, choose among `allowed_gpus`, and change the preset's listed settings within fixed bounds; it never supplies paths, commands, or other flags.
 
-Estimates are conservative start requirements: free VRAM per GPU index and RAM (plus `resident_budget_gib` when set). They are guesses until measured; edit them in `runtimes.json` as you measure real loads. Admission compares them with live telemetry minus headroom, exactly as for simulation profiles. Basalt itself fills each card except its reserve, so the estimates guard the start, not the steady state.
+Estimates are conservative start requirements: free VRAM per GPU index and RAM (plus `resident_budget_gib` when set). They are guesses until measured; edit them in `runtimes.json` as you measure real loads. Admission compares them with live telemetry minus headroom, exactly as for simulation profiles. Basalt itself fills each card except its reserve, so the estimates guard the start, not the steady state. An `llm` card setup may instead use `engine: "vllm"` with `executable`, `working_dir`, `model_path` and `fixed_args`; the service runs `vllm serve` on the chosen cards, and readiness comes from a statusless `/v1/models` list (see [plugins.md](plugins.md)).
 
 - `GET /api/runtimes` lists runtimes, presets, setting definitions and the last start's choices (no paths or environment).
 - `POST /api/runtimes/{id}/start` with `{"preset": "ds41", "settings": {...}, "gpus": [0, 1]}` and an `Idempotency-Key` header starts a load. Invalid settings return 422 `SETTINGS_INVALID`; a server already listening on the runtime's port (for example Basalt started with `basalt-start`) returns 409 `PORT_IN_USE`; capacity refusals return 409 as above.

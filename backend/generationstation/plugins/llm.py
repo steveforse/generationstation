@@ -1,9 +1,10 @@
 """Text models: one entry per model, whatever program runs it.
 
 A preset lists, per card choice ("0", "1" or "0,1"), the engine that runs the model there and its files: Basalt
-(`basalt.exe serve --config FILE`) or Strata (its Python server in front of its engine). The person only picks the
-model's card and plain settings; which engine runs is decided here and never shown. Both engines answer OpenAI-style
-chat on the runtime's port, so the chat page and the readiness probe treat them alike.
+(`basalt.exe serve --config FILE`), Strata (its Python server in front of its engine) or vLLM
+(`vllm serve MODEL`). The person only picks the model's card and plain settings; which engine runs is decided here
+and never shown. All three answer OpenAI-style chat on the runtime's port, so the chat page treats them alike;
+the readiness probe reads Basalt's status fields and vLLM's model list.
 """
 import json
 import urllib.error
@@ -19,7 +20,7 @@ from .base import BasePreset, BaseRuntime, Estimate, LaunchSpec, RuntimePlugin, 
 class CardSetup(BaseModel):
     """How the model runs on one card choice."""
     model_config = ConfigDict(extra="forbid")
-    engine: Literal["basalt", "strata"]
+    engine: Literal["basalt", "strata", "vllm"]
     estimate: Estimate
     env: dict[str, str] = Field(default_factory=dict)
     # Basalt
@@ -29,6 +30,7 @@ class CardSetup(BaseModel):
     alias: str | None = None
     model_path: str | None = None
     fixed: dict[str, str | int | bool] = Field(default_factory=dict, description="Engine keys always written.")
+    fixed_args: list[str] = Field(default_factory=list, description="vLLM flags always written.")
     # Strata
     python: str | None = None
     server_dir: str | None = None
@@ -44,8 +46,12 @@ class CardSetup(BaseModel):
 
     @model_validator(mode="after")
     def complete(self):
-        need = ("executable", "alias", "model_path") if self.engine == "basalt" else \
-            ("python", "server_dir", "component", "pack", "tokenizer", "arch", "model_name")
+        if self.engine == "basalt":
+            need = ("executable", "alias", "model_path")
+        elif self.engine == "vllm":
+            need = ("executable", "model_path")
+        else:
+            need = ("python", "server_dir", "component", "pack", "tokenizer", "arch", "model_name")
         missing = [name for name in need if not getattr(self, name)]
         if missing:
             raise ValueError(f"{self.engine} card setup needs {', '.join(missing)}.")
@@ -165,6 +171,13 @@ class LLMPlugin(RuntimePlugin):
         setup = preset.cards.get(card_key(gpus))
         return dict(setup.sampling) if setup else {}
 
+    def chat_thinking(self, preset, gpus, thinking: bool) -> dict:
+        setup = preset.cards.get(card_key(gpus))
+        if setup and setup.engine == "vllm":
+            # vLLM reads the model's chat-template flag, not a top-level `enable_thinking`.
+            return {"chat_template_kwargs": {"enable_thinking": thinking}}
+        return super().chat_thinking(preset, gpus, thinking)
+
     # ----- launch -----------------------------------------------------------------------
 
     def launch(self, runtime, preset, values, gpus, base_env, launch_dir: Path):
@@ -179,6 +192,19 @@ class LLMPlugin(RuntimePlugin):
             path = Path(launch_dir) / "basalt-config.json"
             return LaunchSpec(argv=[setup.executable, "serve", "--config", str(path)], env=env, cwd=setup.working_dir,
                               files={"basalt-config.json": json.dumps(config, indent=2)})
+        if setup.engine == "vllm":
+            env["CUDA_VISIBLE_DEVICES"] = ",".join(str(index) for index in sorted(gpus))
+            env["VLLM_ENGINE_READY_TIMEOUT_S"] = "3600"
+            argv = [setup.executable, "serve", setup.model_path,
+                    "--host", "127.0.0.1", "--port", str(runtime.port),
+                    "--data-parallel-size", str(len(gpus)),
+                    "--enable-expert-parallel"]
+            if values.get("max_context"):
+                argv += ["--max-model-len", str(values["max_context"])]
+            if values.get("kv"):
+                argv += ["--kv-cache-dtype", str(values["kv"])]
+            argv += setup.fixed_args
+            return LaunchSpec(argv=argv, env=env, cwd=setup.working_dir)
         config = self.strata_config(runtime, setup, values, gpus, Path(launch_dir))
         path = Path(launch_dir) / "strata-config.json"
         argv = [setup.python, str(Path(setup.server_dir) / "serve" / "server.py"), "--engine", "strata",
@@ -235,8 +261,9 @@ class LLMPlugin(RuntimePlugin):
                 payload = json.loads(response.read().decode("utf-8", errors="replace"))
         except (urllib.error.URLError, OSError, ValueError):
             return None
+        data = payload.get("data", []) if isinstance(payload, dict) else []
         statuses = set()
-        for item in payload.get("data", []) if isinstance(payload, dict) else []:
+        for item in data:
             for key in ("status", "state"):
                 value = item.get(key) if isinstance(item, dict) else None
                 if isinstance(value, dict):
@@ -247,4 +274,6 @@ class LLMPlugin(RuntimePlugin):
             return "loaded"
         if "failed" in statuses:
             return "failed"
+        if data and not statuses:  # vLLM lists the model only once the server is ready
+            return "loaded"
         return "loading"

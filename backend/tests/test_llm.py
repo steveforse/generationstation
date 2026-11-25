@@ -1,10 +1,14 @@
 """Text models: one entry per model; the card chosen decides which engine runs it, and nothing else shows that."""
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
 import pytest
 
 from generationstation.plugins import get_plugin
 from generationstation.runtimes import SettingsError, describe_runtime, parse_catalog, resolve_settings
+from tests.runtime_fixtures import free_port
 
 LLM = get_plugin("llm")
 STRATA = {"engine": "strata", "python": "C:/strata/python/python.exe", "server_dir": "C:/strata",
@@ -97,3 +101,86 @@ def test_a_card_setup_must_name_its_files():
             "kind": "llm", "name": "X", "workload": "text", "port": 8165, "default_preset": "main",
             "presets": {"main": {"name": "X", "gpus": [1], "estimate": {"ram_gib": 1, "gpu_min_free_gib": {"1": 1}},
                                  "cards": {"1": broken}}}}}})
+
+
+ROOT = Path(__file__).resolve().parents[2]
+VLLM = {"engine": "vllm", "executable": "C:/vllm/vllm.exe", "working_dir": "C:/vllm",
+        "model_path": "D:/ernie", "fixed_args": ["--trust-remote-code", "--reasoning-parser", "ernie5",
+                                                 "--tool-call-parser", "ernie5", "--enable-auto-tool-choice"],
+        "estimate": {"ram_gib": 16, "gpu_min_free_gib": {"0": 160, "1": 160}},
+        "sampling": {"temperature": 1.0, "top_p": 0.95}}
+
+
+def vllm_catalog(port):
+    return parse_catalog({"runtimes": {"ernie55": {
+        "kind": "llm", "name": "ERNIE 5.5", "workload": "text", "port": port, "default_preset": "preview",
+        "presets": {"preview": {
+            "name": "ERNIE 5.5 Preview", "gpus": [0, 1], "allowed_gpus": [0, 1],
+            "kv_options": ["fp8", "auto"], "vision_options": ["off"],
+            "settings": {"max_context": 131072, "kv": "fp8", "vision": "off"},
+            "estimate": {"ram_gib": 16, "gpu_min_free_gib": {"0": 160, "1": 160}},
+            "cards": {"0,1": VLLM}}}}}})
+
+
+def test_the_example_ernie55_entry_runs_on_vllm_and_refuses_this_desktop(tmp_path):
+    runtime = parse_catalog(json.loads((ROOT / "runtimes.example.json").read_text())).runtimes["ernie55"]
+    preset = runtime.presets["preview"]
+    assert runtime.port == 8163 and preset.cards["0,1"].engine == "vllm"
+    values, gpus = resolve_settings(LLM, preset, {}, [0, 1])
+    assert LLM.estimate(runtime, preset, values, gpus) == (16, {0: 160, 1: 160})
+    assert LLM.chat_sampling(preset, gpus) == {"temperature": 1.0, "top_p": 0.95}
+    assert LLM.chat_thinking(preset, gpus, False) == {"chat_template_kwargs": {"enable_thinking": False}}
+    assert LLM.chat_thinking(preset, gpus, True) == {"chat_template_kwargs": {"enable_thinking": True}}
+    spec = LLM.launch(runtime, preset, values, gpus, {"PATH": "P"}, tmp_path)
+    assert spec.argv[:3] == [
+        "C:\\ai\\envs\\ernie55\\Scripts\\vllm.exe", "serve",
+        "D:\\ai\\models\\ernie-5.5\\ERNIE-5.5-Flash-Preview-FP8",
+    ]
+    assert spec.argv[spec.argv.index("--data-parallel-size") + 1] == "2"
+    assert spec.argv[spec.argv.index("--max-model-len") + 1] == "131072"
+    assert spec.argv[spec.argv.index("--kv-cache-dtype") + 1] == "fp8"
+    assert "--reasoning-parser" in spec.argv and "--tool-call-parser" in spec.argv
+    assert spec.env["CUDA_VISIBLE_DEVICES"] == "0,1"
+    assert spec.env["VLLM_ENGINE_READY_TIMEOUT_S"] == "3600"
+    assert spec.cwd == "C:\\ai\\envs\\ernie55"
+
+
+def test_one_vllm_card_setup_needs_both_cards(tmp_path):
+    runtime = vllm_catalog(8163).runtimes["ernie55"]
+    preset = runtime.presets["preview"]
+    with pytest.raises(SettingsError, match="runs on GPU 0,1"):
+        resolve_settings(LLM, preset, {}, [0])
+    values, gpus = resolve_settings(LLM, preset, {}, [0, 1])
+    spec = LLM.launch(runtime, preset, values, gpus, {}, tmp_path)
+    assert spec.argv[0] == "C:/vllm/vllm.exe" and spec.argv[1:3] == ["serve", "D:/ernie"]
+    assert spec.env["CUDA_VISIBLE_DEVICES"] == "0,1"
+
+
+def test_vllm_model_list_is_loaded_without_a_status_field():
+    port = free_port()
+    runtime = vllm_catalog(port).runtimes["ernie55"]
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/v1/models":
+                body = json.dumps({"object": "list", "data": [{"id": "ERNIE-5.5-Flash-Preview"}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", port), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        assert LLM.probe(runtime) == "loaded"
+    finally:
+        server.shutdown()
+        server.server_close()

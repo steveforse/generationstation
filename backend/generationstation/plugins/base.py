@@ -227,6 +227,13 @@ class RuntimePlugin:
         """Sampling the chat sends when the person sets none (for servers whose own default is greedy)."""
         return {}
 
+    def chat_thinking(self, preset: BasePreset, gpus: list[int], thinking: bool) -> dict:
+        """Chat body fields that turn the model's thinking on or off. Override for servers that
+        read a nested chat-template flag instead."""
+        if not thinking:
+            return {"enable_thinking": False, "reasoning_effort": "none"}
+        return {}
+
     # ----- capacity ----------------------------------------------------------------------
 
     def estimate(self, runtime: BaseRuntime, preset: BasePreset, values: dict, gpus: list[int]):

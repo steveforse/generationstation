@@ -493,6 +493,81 @@
           }
         }
       }
+    },
+    "ernie55": {
+      "kind": "llm",
+      "name": "ERNIE 5.5 Flash Preview",
+      "description": "Baidu's 280B-parameter mixture-of-experts model with a 1M-token context. It needs two 288 GB Blackwell GPUs and does not fit this desktop.",
+      "workload": "text",
+      "port": 8163,
+      "ready_timeout_seconds": 3600,
+      "stop_timeout_seconds": 30,
+      "default_preset": "preview",
+      "presets": {
+        "preview": {
+          "name": "ERNIE 5.5 Flash Preview FP8",
+          "description": "The FP8 checkpoint (about 280 GB) with DSpark speculative decoding and tool calling.",
+          "gpus": [
+            0,
+            1
+          ],
+          "allowed_gpus": [
+            0,
+            1
+          ],
+          "kv_options": [
+            "fp8",
+            "auto"
+          ],
+          "vision_options": [
+            "off"
+          ],
+          "settings": {
+            "max_context": 131072,
+            "kv": "fp8",
+            "vision": "off"
+          },
+          "estimate": {
+            "ram_gib": 16,
+            "gpu_min_free_gib": {
+              "0": 160,
+              "1": 160
+            }
+          },
+          "cards": {
+            "0,1": {
+              "engine": "vllm",
+              "executable": "C:\\ai\\envs\\ernie55\\Scripts\\vllm.exe",
+              "working_dir": "C:\\ai\\envs\\ernie55",
+              "path_prepend": [
+                "C:\\ai\\envs\\ernie55\\Scripts"
+              ],
+              "model_path": "D:\\ai\\models\\ernie-5.5\\ERNIE-5.5-Flash-Preview-FP8",
+              "fixed_args": [
+                "--trust-remote-code",
+                "--reasoning-parser",
+                "ernie5",
+                "--tool-call-parser",
+                "ernie5",
+                "--enable-auto-tool-choice",
+                "--speculative-config",
+                "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"draft_sample_method\":\"probabilistic\"}"
+              ],
+              "estimate": {
+                "ram_gib": 16,
+                "gpu_min_free_gib": {
+                  "0": 160,
+                  "1": 160
+                }
+              },
+              "sampling": {
+                "temperature": 1.0,
+                "top_p": 0.95
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

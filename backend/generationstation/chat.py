@@ -247,9 +247,7 @@ class ChatManager:
         body.update(self._sampling(conversation_id))
         if tools:
             body["tools"] = tools
-        if not thinking:  # both forms: some models still think briefly at effort "none"
-            body["enable_thinking"] = False
-            body["reasoning_effort"] = "none"
+        body.update(self._thinking_body(conversation_id, thinking))
         request = urllib.request.Request(f"http://127.0.0.1:{runtime.port}/v1/chat/completions",
                                          data=json.dumps(body).encode(), method="POST",
                                          headers={"Content-Type": "application/json", "Accept": "text/event-stream"})
@@ -309,6 +307,16 @@ class ChatManager:
                                        error_message=error)
         turn.emit("message", serialize_message(saved))
         return serialize_message(saved)
+
+    def _thinking_body(self, conversation_id, thinking):
+        """The chat field that turns this model's thinking on or off."""
+        model_id = self._conversation(conversation_id)["model_id"]
+        runtime = self.catalog.runtimes.get(model_id)
+        launch = (self.store.latest_launches().get(model_id) or {}).get("launch") or {}
+        preset = runtime.presets.get(launch.get("preset")) if runtime else None
+        if preset is None:
+            return {"enable_thinking": False, "reasoning_effort": "none"} if not thinking else {}
+        return self.catalog.plugin(model_id).chat_thinking(preset, launch.get("gpus") or preset.gpus, thinking)
 
     def _sampling(self, conversation_id):
         """The model's own sampling for chat where its server would otherwise decode greedily."""
