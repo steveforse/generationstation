@@ -63,7 +63,7 @@ def test_quality_scores_in_a_kind_of_model_share_one_metric_and_cite_a_source():
                 by_kind.setdefault(entry.workload, set()).add(score.metric)
     # One metric per kind, so each chart has one axis; text has none until a score covers it.
     assert all(len(metrics) == 1 for metrics in by_kind.values()), by_kind
-    assert set(by_kind) == {"text", "speech", "image", "video"}
+    assert set(by_kind) == {"text", "speech", "image", "video", "music"}
 
 
 def test_scores_for_quantised_builds_are_marked_as_estimates():

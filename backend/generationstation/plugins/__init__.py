@@ -9,6 +9,7 @@ from .h3_video import H3VideoPlugin
 from .llm import LLMPlugin
 from .meeting_notes import MeetingNotesPlugin
 from .minimax_h3 import MiniMaxH3Plugin
+from .minimax_music import MiniMaxMusicPlugin
 from .omnivoice import OmniVoicePlugin
 from .qwen3_tts import Qwen3TTSPlugin
 from .qwen_image import QwenImagePlugin
@@ -20,6 +21,7 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     LLMPlugin(),
     YuE2Plugin(),
     AceStepPlugin(),
+    MiniMaxMusicPlugin(),
     QwenImagePlugin(),
     MiniMaxH3Plugin(),
     H3VideoPlugin(),

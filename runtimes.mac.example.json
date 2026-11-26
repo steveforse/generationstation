@@ -474,6 +474,14 @@
         "code": "mlx-Yue: Apache-2.0",
         "note": "Non-commercial use only.",
         "url": "https://huggingface.co/m-a-p/YuE2-3B"
+      },
+      "quality": {
+        "metric": "SongBench average (WildSongBench)",
+        "score": 6.73,
+        "estimated": false,
+        "source": "https://huggingface.co/m-a-p/YuE2-3B",
+        "as_of": "2026-11-26",
+        "note": "Scored by the YuE2 authors on their WildSongBench, so it is vendor-run. Automatic metric (a model judges the song), not listener votes. Best-of-8 sampling scores 6.96."
       }
     },
     "qwen3_tts": {
@@ -946,6 +954,61 @@
         "code": "ACE-Step: MIT",
         "note": "MIT code and weights, no territory or revenue clause found; the card says the music may be used commercially. The training-data claim (licensed, royalty-free and synthetic data) is the vendor's own and unverified, so legal review of the data is still advisable.",
         "url": "https://huggingface.co/ACE-Step/Ace-Step1.5"
+      },
+      "quality": {
+        "metric": "SongBench average (WildSongBench)",
+        "score": 6.01,
+        "estimated": false,
+        "source": "https://huggingface.co/m-a-p/YuE2-3B",
+        "as_of": "2026-11-26",
+        "note": "Scored by the YuE2 authors on WildSongBench, not by ACE-Step's makers. Phoneme error 7.5%. The Artificial Analysis arena leader 'ACE Music v1' is not documented as this model."
+      }
+    },
+    "minimax_music": {
+      "kind": "minimax_music",
+      "name": "MiniMax Music 3",
+      "workload": "music",
+      "description": "Songs with vocals, or instrumentals, from a style and lyrics. Check its licence terms before company use.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/minimax-music",
+      "port": 8290,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "MiniMax Music 3 (MLX, 8-bit)",
+          "description": "The mxfp8 build, 13 GB. About 14 GiB resident for a 30 s song.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/music/MiniMax-Music3-mxfp8"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 20,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "conditions",
+        "weights": "MiniMax-Music3 Community License (MIT-style with commercial terms)",
+        "code": "mlx-audio: MIT",
+        "note": "Free to use. A commercial product or service using it must display \"MiniMax-Music3\" on its interface, and the yearly revenue those products and services generate above US$20 million needs MiniMax's written authorisation (the test is the product's revenue, not the company's, so an internal tool is probably outside it, but have legal confirm). Offering generation to third parties requires safeguards against misuse, and you indemnify MiniMax for breaches. No territory exclusion.",
+        "url": "https://huggingface.co/MiniMaxAI/MiniMax-Music3/blob/main/LICENSE"
+      },
+      "quality": {
+        "metric": "SongBench average (WildSongBench)",
+        "score": 6.28,
+        "estimated": false,
+        "source": "https://huggingface.co/m-a-p/YuE2-3B",
+        "as_of": "2026-11-26",
+        "note": "Scored by the YuE2 authors on WildSongBench, not by MiniMax. Best lyric accuracy of the three (phoneme error 6.3% against 7.5% ACE-Step and 8.4% YuE2). MiniMax rewrites the style prompt before generating."
       }
     }
   }
