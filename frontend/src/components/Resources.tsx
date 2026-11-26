@@ -11,6 +11,12 @@ export type Segment = { id: string; label: string; bytes: number; color: string 
 const segmentColors = ['#e08a3c', '#2d9c8a', '#d4528c', '#5b6fd6', '#a2b33a', '#9b59c9']
 
 /** A stable color per model, in catalog order, shared by the bars and the model cards. */
+/** An Apple-silicon host: the GPU shares RAM, so there is one pool and "VRAM" would only repeat it. */
+export function isUnified(host: Host | undefined) {
+  const gpus = host?.gpus ?? []
+  return gpus.length > 0 && gpus.every((gpu) => gpu.unified_memory === true)
+}
+
 export function modelColor(runtimes: Runtime[] | null | undefined, modelId: string) {
   const index = (runtimes ?? []).findIndex((runtime) => runtime.id === modelId)
   return segmentColors[(index < 0 ? 0 : index) % segmentColors.length]
@@ -52,7 +58,7 @@ export function estimateFit(host: Host | undefined, estimate: RuntimeEstimate, f
   const free = (available: number | undefined, headroom: number, reserved: number) =>
     fresh && available != null ? Math.max(0, available - headroom - reserved) : null
   const ramFree = free(host?.ram?.available_bytes, estimate.ram_headroom_bytes, estimate.reserved_ram_bytes)
-  const fits: Fit[] = [{ key: 'ram', label: 'RAM', need: estimate.ram_bytes, free: ramFree, headroom: estimate.ram_headroom_bytes, fits: ramFree == null ? null : estimate.ram_bytes <= ramFree }]
+  const fits: Fit[] = [{ key: 'ram', label: isUnified(host) ? 'Memory' : 'RAM', need: estimate.ram_bytes, free: ramFree, headroom: estimate.ram_headroom_bytes, fits: ramFree == null ? null : estimate.ram_bytes <= ramFree }]
   for (const [id, need] of Object.entries(estimate.gpu_vram_bytes_by_id)) {
     const gpu = host?.gpus.find((item) => item.id === id)
     const gpuFree = free(gpu?.memory?.available_bytes, estimate.gpu_headroom_bytes, estimate.reserved_gpu_vram_bytes_by_id[id] ?? 0)
@@ -96,8 +102,8 @@ function UsageBar({ label, used, total, fillClass, segments = [], preview, legen
   </>
 }
 
-export function ResourceCard({ title, icon, iconClass, memory, age, isCurrent, error, kind, stale, segments, preview, legend }: {
-  title: string; icon: ReactNode; iconClass: string; memory?: Memory | null
+export function ResourceCard({ title, icon, iconClass, memory, age, isCurrent, error, kind, stale, segments, preview, legend, unified }: {
+  unified?: boolean; title: string; icon: ReactNode; iconClass: string; memory?: Memory | null
   age: number | null; isCurrent: boolean; error?: string; kind: string; stale: boolean; segments?: Segment[]; preview?: Preview; legend?: boolean
 }) {
   const known = !!memory && isCurrent
@@ -106,7 +112,7 @@ export function ResourceCard({ title, icon, iconClass, memory, age, isCurrent, e
   const available = known ? memory.available_bytes : null
   const percent = total && used != null ? Math.min(100, Math.max(0, used / total * 100)) : 0
   return <article className={`resource-card ${stale && known ? 'resource-stale' : ''}`}>
-    <div className="resource-card-top"><div className="resource-title"><span className={`resource-icon ${iconClass}`}>{icon}</span><div><h3>{title}</h3><span>{kind === 'RAM' ? 'Physical RAM' : 'NVIDIA · NVML'}</span></div></div><span className="icon-help" title={`${title} measurements are supplied by host telemetry.`} aria-label={`${title} information`}><CircleHelp size={18} /></span></div>
+    <div className="resource-card-top"><div className="resource-title"><span className={`resource-icon ${iconClass}`}>{icon}</span><div><h3>{title}</h3><span>{kind === 'RAM' ? (unified ? 'Unified memory · shared with the GPU' : 'Physical RAM') : 'NVIDIA · NVML'}</span></div></div><span className="icon-help" title={`${title} measurements are supplied by host telemetry.`} aria-label={`${title} information`}><CircleHelp size={18} /></span></div>
     <div className="resource-value-row"><strong>{formatBytes(used)}</strong><span>of {formatBytes(total)}</span></div>
     <UsageBar label={title} used={used} total={total} fillClass={iconClass} segments={known ? segments : []} preview={known ? preview : undefined} legend={legend} />
     <div className="resource-stats"><span><span className="stats-dot used-dot" />Used <b>{known ? `${percent.toFixed(0)}%` : '—'}</b></span><span><span className="stats-dot available-dot" />Available <b>{formatBytes(available)}</b></span></div>
@@ -115,6 +121,7 @@ export function ResourceCard({ title, icon, iconClass, memory, age, isCurrent, e
 }
 
 export function GpuCard({ host, age, stale, isCurrent, runtimes, previews, legend }: { host?: Host; age: number | null; stale: boolean; isCurrent: boolean; runtimes?: Runtime[] | null; previews?: Record<string, Preview>; legend?: boolean }) {
+  if (isUnified(host)) return null // one pool, shown on the memory card
   const gpus = host?.gpus ?? []
   const availableDevices = gpus.filter((gpu) => gpu.memory !== null).length
   if (!isCurrent || !host) return <ResourceCard title="Graphics memory" icon={<Cpu size={20} />} iconClass="icon-blue" memory={null} age={age} isCurrent={false} kind="VRAM" stale={stale} />

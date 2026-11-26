@@ -1,7 +1,7 @@
 import { ArrowUpRight, MemoryStick, Monitor, Plus } from 'lucide-react'
 import { humanAge } from '../api'
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
-import { GpuCard, modelColor, ramSegments, ResourceCard } from '../components/Resources'
+import { GpuCard, isUnified, modelColor, ramSegments, ResourceCard } from '../components/Resources'
 import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
 import { StatePill } from '../components/StatePill'
 import { jobTitle, ResultThumb, jobKind, when } from '../components/Runtime'
@@ -33,7 +33,7 @@ function HostOverview({ store, host }: { store: HostStore; host: SavedHost }) {
     </section>
     {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} />{state.connection !== 'connecting' && state.connection !== 'reconnecting' && <a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={16} /></a>}</div>}
     {current && <section className="resource-grid" aria-label={`${name} resource usage`}>
-      <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent={current} error={view.host?.ram_error ?? undefined} kind="RAM" stale={view.stale} segments={ramSegments(view.host, state.runtimes)} />
+      <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent={current} error={view.host?.ram_error ?? undefined} kind="RAM" unified={isUnified(view.host)} stale={view.stale} segments={ramSegments(view.host, state.runtimes)} />
       <GpuCard host={view.host} age={view.age} stale={view.stale} isCurrent={current} runtimes={state.runtimes} />
     </section>}
     {services.length > 0 && <div className="overview-services" aria-label={`${name} services`}>

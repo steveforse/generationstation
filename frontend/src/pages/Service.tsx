@@ -3,7 +3,7 @@ import { Activity, ArrowUpRight, ChevronDown, MemoryStick } from 'lucide-react'
 import { StatePill } from '../components/StatePill'
 import { groupByWorkload } from '../components/WorkloadIcon'
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
-import { estimateFit, GpuCard, modelColor, modelUsage, type Preview, ramSegments, ResourceCard } from '../components/Resources'
+import { estimateFit, GpuCard, isUnified, modelColor, modelUsage, type Preview, ramSegments, ResourceCard } from '../components/Resources'
 import { fieldsFor, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
 import type { FileItem } from '../components/FilePicker'
 import type { SavedHost } from '../hosts'
@@ -66,7 +66,7 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     })}
     </div>
     {!!state.snapshot && state.connection !== 'idle' && <aside className="models-rail"><section className="resource-grid models-resources" aria-label={`${hostName(host, state)} resource usage`}>
-      <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent error={view.host?.ram_error ?? undefined} kind="RAM" stale={view.stale} segments={ramSegments(view.host, state.runtimes)} preview={ramPreview} legend />
+      <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent error={view.host?.ram_error ?? undefined} kind="RAM" unified={isUnified(view.host)} stale={view.stale} segments={ramSegments(view.host, state.runtimes)} preview={ramPreview} legend />
       <GpuCard host={view.host} age={view.age} stale={view.stale} isCurrent runtimes={state.runtimes} previews={gpuPreviews} legend />
     </section></aside>}
     </div>
@@ -129,6 +129,7 @@ export function ServicePage({ store, host, modelId }: { store: HostStore; host?:
         }}
         onDelete={async (job) => { const problem = await session.deleteJob(job); if (!problem) setSelectedId(null); return problem }}
         onCancel={(job) => session.cancelJob(job)}
+        onEditTranscript={(job, edit) => session.editTranscript(job, edit)}
         voiceTargets={voiceTargets(state.runtimes, state.models).filter((target) => target.runtime.id !== modelId)}
         onUseVoice={async (job, url, target) => {
           try {

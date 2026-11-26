@@ -1,10 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Download, FileText, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Download, FileText, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, Pencil, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
 import { formatBytes } from '../api'
 import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeSetting, SettingValue, UploadRecord } from '../types'
 import { FilePicker, type FileItem } from './FilePicker'
 import { CropEditor, shapeAspect } from './CropEditor'
-import { estimateFit } from './Resources'
+import { estimateFit, isUnified } from './Resources'
 import { WorkloadIcon } from './WorkloadIcon'
 import { RefusalDetails } from './Refusal'
 import { StatePill } from './StatePill'
@@ -121,11 +121,11 @@ export function GenerateForm({ runtime, generation, onGenerate, error, initial, 
   if (!modes.length) return <ModeForm runtime={runtime} generation={generation} fields={generation.inputs} onGenerate={onGenerate} error={error} initial={initial} ahead={ahead} upload={upload} label={label} />
   const current = modes.find((item) => item.key === mode) ?? modes[0]
   return <div className="generate-modes">
-    <div className="mode-tabs" role="tablist" aria-label="How to make it">
+    {modes.length > 1 && <div className="mode-tabs" role="tablist" aria-label="How to make it">
       {modes.map((item) => <button key={item.key} type="button" role="tab" id={`${runtime.id}-tab-${item.key}`} aria-selected={item.key === current.key}
         aria-controls={`${runtime.id}-panel-${item.key}`} className={`mode-tab ${item.key === current.key ? 'mode-tab-on' : ''}`} onClick={() => setMode(item.key)}>{item.label}</button>)}
-    </div>
-    {modes.map((item) => <div key={item.key} role="tabpanel" id={`${runtime.id}-panel-${item.key}`} aria-labelledby={`${runtime.id}-tab-${item.key}`} hidden={item.key !== current.key}>
+    </div>}
+    {modes.map((item) => <div key={item.key} role="tabpanel" id={`${runtime.id}-panel-${item.key}`} aria-labelledby={modes.length > 1 ? `${runtime.id}-tab-${item.key}` : undefined} hidden={item.key !== current.key}>
       <p className="mode-help">{item.help}</p>
       <ModeForm runtime={runtime} generation={generation} fields={item.inputs} mode={item.key} onGenerate={onGenerate} error={item.key === current.key ? error : undefined}
         initial={initial?.mode === item.key || (!initial?.mode && item.key === modes[0].key) ? initial : undefined} ahead={ahead} upload={upload} label={labelOf(generation, item.output_kind ?? generation.output_kind)} />
@@ -270,7 +270,9 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
 
 export function jobTitle(job: Job) {
   const text = typeof job.inputs.prompt === 'string' ? job.inputs.prompt : typeof job.inputs.style === 'string' ? job.inputs.style : ''
-  return text.trim() || 'Untitled'
+  // A meeting has no prompt: it is named after the recording it was made from.
+  const recording = Array.isArray(job.inputs.recording) ? job.inputs.recording[0]?.original : undefined
+  return text.trim() || recording?.trim() || 'Untitled'
 }
 
 /** Seconds the worker took, or the wall-clock time from request to finish for results made before it reported that. */
@@ -367,6 +369,50 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 /** One result: the file, how it was made (everything typed, what the model actually used, the model settings), and its actions. */
+/** A frame of the video worth showing: the first of several samples (a tenth of the way in, then onward) that is not
+ * nearly black or flat. Recordings often open on black, and a first-frame thumbnail then says nothing. */
+function VideoThumb({ src, label }: { src: string; label: string }) {
+  const [frame, setFrame] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    const video = document.createElement('video')
+    video.muted = true; video.preload = 'auto'; video.src = src
+    const canvas = document.createElement('canvas')
+    const seek = (at: number) => new Promise<void>((resolve) => {
+      const done = () => { video.removeEventListener('seeked', done); video.removeEventListener('error', done); resolve() }
+      video.addEventListener('seeked', done); video.addEventListener('error', done)
+      video.currentTime = at
+    })
+    const run = async () => {
+      await new Promise<void>((resolve) => { video.addEventListener('loadeddata', () => resolve(), { once: true }); video.addEventListener('error', () => resolve(), { once: true }) })
+      const length = Number.isFinite(video.duration) ? video.duration : 0
+      if (!length || !video.videoWidth) return
+      canvas.width = 320; canvas.height = Math.max(1, Math.round(320 * video.videoHeight / video.videoWidth))
+      const context = canvas.getContext('2d', { willReadFrequently: true })
+      if (!context) return
+      let best = { score: -1, url: '' }
+      for (const share of [0.1, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8, 0.02]) {
+        if (cancelled) return
+        await seek(length * share)
+        context.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+        let sum = 0, square = 0
+        const pixels = data.length / 4
+        for (let i = 0; i < data.length; i += 4) { const y = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]; sum += y; square += y * y }
+        const mean = sum / pixels
+        const spread = Math.sqrt(Math.max(0, square / pixels - mean * mean))
+        const score = Math.min(mean, 80) + Math.min(spread, 40) // bright enough and with something in it
+        if (score > best.score) best = { score, url: canvas.toDataURL('image/jpeg', 0.8) }
+        if (mean > 25 && spread > 12) { best = { score, url: canvas.toDataURL('image/jpeg', 0.8) }; break }
+      }
+      if (!cancelled && best.url) setFrame(best.url)
+    }
+    void run().catch(() => undefined)
+    return () => { cancelled = true; video.removeAttribute('src'); video.load() }
+  }, [src])
+  return frame ? <img src={frame} alt={label} /> : <span className="file-icon"><Film size={22} /></span>
+}
+
 /** A job's reference file, fetched with the access token. */
 function InputThumb({ job, file, inputUrl }: { job: Job; file: JobFile; inputUrl: GenerateHandlers['inputUrl'] }) {
   const [url, setUrl] = useState('')
@@ -378,15 +424,126 @@ function InputThumb({ job, file, inputUrl }: { job: Job; file: JobFile; inputUrl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.id, file.name])
   return <a className="input-thumb" href={url || undefined} download={file.original} title={file.original}>
-    {file.kind === 'image' && url ? <img src={url} alt={file.original} /> : file.kind === 'video' && url ? <video src={url} muted preload="metadata" aria-label={file.original} />
-      : <span className="file-icon">{file.kind === 'audio' ? <Music size={22} /> : <Film size={22} />}</span>}
+    {file.kind === 'image' && url ? <img src={url} alt={file.original} /> : file.kind === 'video' && url ? <VideoThumb src={url} label={file.original} />
+      : <span className="file-icon">{file.kind === 'audio' ? <Music size={22} /> : file.kind === 'transcript' ? <FileText size={22} /> : <Film size={22} />}</span>}
     <small>{file.original}</small>
   </a>
 }
 
-export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, voiceTargets = [], onUseVoice }: {
+/** Files a result offers as one menu per kind, so six or eight downloads are two buttons. Others keep their own button. */
+const DOWNLOAD_GROUPS: { label: string; files: Record<string, string> }[] = [
+  { label: 'Download transcript', files: { 'transcript.md': 'Readable text (.md)', 'transcript.srt': 'Captions (.srt)', 'transcript.vtt': 'Captions for the web (.vtt)', 'transcript-raw.json': 'Before correction (.json)' } },
+  { label: 'Download notes', files: { 'notes.md': 'Notes (.md)', 'actions.csv': 'Action items, for a spreadsheet (.csv)', 'decisions.csv': 'Decisions, for a spreadsheet (.csv)', 'meeting.json': 'Everything, for programs (.json)' } },
+]
+
+function DownloadMenu({ label, items }: { label: string; items: { name: string; label: string; url: string }[] }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) setOpen(false) }
+    // Escape closes the menu first, not the dialog around it.
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false) } }
+    document.addEventListener('mousedown', away)
+    window.addEventListener('keydown', escape, true)
+    return () => { document.removeEventListener('mousedown', away); window.removeEventListener('keydown', escape, true) }
+  }, [open])
+  return <div className="download-menu" ref={box}>
+    <button type="button" className="button button-secondary" aria-expanded={open} disabled={!items.length} onClick={() => setOpen(!open)}>
+      <Download size={16} />{label}<ChevronDown size={16} aria-hidden="true" /></button>
+    {open && <ul className="download-list" aria-label={label}>{items.map((item) => <li key={item.name}>
+      <a href={item.url} download={item.name} onClick={() => setOpen(false)}>{item.label}</a></li>)}</ul>}
+  </div>
+}
+
+type TranscriptSegment = { speaker: string; start: number | null; end: number | null; text: string }
+type TranscriptEditRequest = { revision: number; segments: { index: number; speaker?: string; text?: string }[]; rename: Record<string, string> }
+
+/** Fix a finished meeting's transcript: rename a speaker everywhere, or change one segment's speaker and words. */
+function TranscriptEditor({ url, onSave, onClose }: { url: string; onSave: (edit: TranscriptEditRequest) => Promise<string>; onClose: (saved: boolean) => void }) {
+  const [loaded, setLoaded] = useState<{ segments: TranscriptSegment[]; revision: number; guesses: Record<string, string> } | null>(null)
+  const [loadError, setLoadError] = useState('')
+  const [rename, setRename] = useState<Record<string, string>>({})
+  const [speaker, setSpeaker] = useState<Record<number, string>>({})
+  const [text, setText] = useState<Record<number, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const listId = useId()
+  useEffect(() => {
+    let cancelled = false
+    fetch(url).then((response) => response.json()).then((record) => {
+      if (!cancelled) setLoaded({ segments: record.segments ?? [], revision: record.revision ?? 1, guesses: record.speakers ?? {} })
+    }).catch(() => { if (!cancelled) setLoadError('The transcript could not be loaded.') })
+    return () => { cancelled = true }
+  }, [url])
+  if (loadError) return <small className="operation-error" role="alert">{loadError}</small>
+  if (!loaded) return <small>Loading the transcript…</small>
+  const { segments, revision, guesses } = loaded
+  const original = segments.map((segment) => segment.speaker)
+  const labels = [...new Set(original)]
+  const effective = (index: number) => speaker[index] ?? ((rename[original[index]] ?? '').trim() || original[index])
+  const words = (index: number) => text[index] ?? segments[index].text
+  const changed = segments.map((_, index) => effective(index) !== original[index] || words(index).trim() !== segments[index].text)
+  const count = changed.filter(Boolean).length
+  const current = [...new Set(segments.map((_, index) => effective(index)))]
+  const save = async () => {
+    // A speaker renamed to a name nobody has yet, on all of their segments, is one rename; anything else is per segment.
+    const whole: Record<string, string> = {}
+    for (const label of labels) {
+      const target = (rename[label] ?? '').trim()
+      const mine = segments.map((_, index) => index).filter((index) => original[index] === label)
+      if (target && target !== label && !labels.includes(target) && mine.every((index) => speaker[index] === undefined)) whole[label] = target
+    }
+    const edits = segments.flatMap((_, index) => {
+      if (!changed[index]) return []
+      const edit: { index: number; speaker?: string; text?: string } = { index }
+      if (effective(index) !== original[index] && whole[original[index]] !== effective(index)) edit.speaker = effective(index)
+      if (words(index).trim() !== segments[index].text) edit.text = words(index).trim()
+      return edit.speaker === undefined && edit.text === undefined ? [] : [edit]
+    })
+    setSaving(true); setError('')
+    const problem = await onSave({ revision, segments: edits, rename: whole })
+    setSaving(false)
+    if (problem) setError(problem); else onClose(true)
+  }
+  return <section className="job-section transcript-editor" aria-label="Edit transcript">
+    <div className="transcript-editor-bar">
+      <strong>Edit transcript</strong>
+      <span className="transcript-editor-actions">
+        {count > 0 && <small>{count} {count === 1 ? 'segment' : 'segments'} changed</small>}
+        <button type="button" className="button button-primary" disabled={!count || saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button>
+        <button type="button" className="button button-secondary" disabled={saving} onClick={() => onClose(false)}>Cancel</button>
+      </span>
+    </div>
+    {error && <small className="operation-error" role="alert">{error}</small>}
+    <fieldset className="transcript-speakers"><legend>Speakers: renaming one changes all of their segments</legend>
+      {labels.map((label) => <label key={label} className="transcript-speaker">
+        <span>{label}{guesses[label] ? ` (the notes guessed ${guesses[label]})` : ''} · {original.filter((other) => other === label).length}</span>
+        <input type="text" maxLength={80} value={rename[label] ?? label} aria-label={`Name for ${label}`}
+          onChange={(event) => setRename((previous) => ({ ...previous, [label]: event.target.value }))} /></label>)}
+    </fieldset>
+    <datalist id={listId}>{current.map((label) => <option key={label} value={label} />)}</datalist>
+    <ol className="transcript-segments">{segments.map((segment, index) => <li key={index} className={changed[index] ? 'transcript-segment transcript-segment-changed' : 'transcript-segment'}>
+      <span className="transcript-time">{segment.start == null ? index + 1 : formatClock(segment.start)}</span>
+      <input type="text" list={listId} maxLength={80} className="transcript-speaker-input" value={effective(index)} aria-label={`Speaker of segment ${index + 1}`}
+        onChange={(event) => setSpeaker((previous) => ({ ...previous, [index]: event.target.value }))} />
+      <textarea rows={Math.max(2, Math.ceil(words(index).length / 90))} value={words(index)} aria-label={`Words of segment ${index + 1}`}
+        onChange={(event) => setText((previous) => ({ ...previous, [index]: event.target.value }))} />
+    </li>)}</ol>
+  </section>
+}
+
+const formatClock = (seconds: number) => {
+  const whole = Math.floor(seconds)
+  return whole >= 3600 ? `${Math.floor(whole / 3600)}:${String(Math.floor(whole / 60) % 60).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`
+    : `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`
+}
+
+export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, voiceTargets = [], onUseVoice }: {
   job: Job; runtime: Runtime; generation: Generation; fileUrl: GenerateHandlers['fileUrl']; inputUrl: GenerateHandlers['inputUrl']
   onReuse: (job: Job) => void | Promise<void>; onDelete: (job: Job) => Promise<string>; onCancel: (job: Job) => Promise<string>
+  /** Save corrections to a transcript; returns an error message or ''. Only meeting results offer it. */
+  onEditTranscript?: (job: Job, edit: TranscriptEditRequest) => Promise<string>
   /** Speech models that can clone a voice; a finished clip's soundtrack can be sent to one as its voice sample. */
   voiceTargets?: VoiceTarget[]; onUseVoice?: (job: Job, url: string, target: VoiceTarget) => Promise<string>
 }) {
@@ -395,6 +552,8 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
   const [error, setError] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [revision, setRevision] = useState(0) // bumped after an edit is saved, so the files are read again
   const files = job.outputs.filter((output) => !isThumbnail(job, output))
   const media = files.filter((output) => /^(audio|image|video)\//.test(output.mime))
   const others = files.filter((output) => !media.includes(output))
@@ -412,6 +571,8 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     // Read each shown document once its file link is ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.id, urls['notes.md'], urls['transcript.md']])
+
+  useEffect(() => { setEditing(false) }, [job.id])
   useEffect(() => {
     setConfirming(false); setError('')
     if (job.status !== 'done') return
@@ -425,7 +586,10 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     return () => { cancelled = true; made.forEach((url) => URL.revokeObjectURL(url)); setUrls({}) }
     // Load each finished job's files once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job.id, job.status])
+  }, [job.id, job.status, revision])
+  const groups = DOWNLOAD_GROUPS.map((group) => ({ label: group.label, items: Object.entries(group.files).filter(([name]) => others.some((output) => output.name === name) && urls[name]).map(([name, label]) => ({ name, label, url: urls[name] })) }))
+    .filter((group) => group.items.length)
+  const grouped = new Set(DOWNLOAD_GROUPS.flatMap((group) => Object.keys(group.files)))
   const title = jobTitle(job)
   const details = job.details ?? {}
   const seconds = jobSeconds(job)
@@ -452,8 +616,15 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     if (problem) { setError(problem); setConfirming(false) }
   }
   return <article className="job-detail" aria-label={`${nounOf(generation)}: ${title}`}>
-    <div className="job-head"><StatePill state={job.status}>{statusLabel(job)}</StatePill>
-      <small>{when(job.created_at)}{job.status === 'done' && seconds != null ? ` · took ${formatSeconds(seconds)}` : ''}</small></div>
+    <div className="job-head"><span className="job-head-status">{job.status !== 'done' && <StatePill state={job.status}>{statusLabel(job)}</StatePill>}
+      <small>{when(job.created_at)}{job.status === 'done' && seconds != null ? ` · took ${formatSeconds(seconds)}` : ''}</small></span>
+      {!active(job)
+        ? confirming ? <span className="job-confirm"><span>Delete this {nounOf(generation)} and its files?</span>
+            <button type="button" className="button button-danger" disabled={deleting} onClick={() => void remove()}><Trash2 size={16} />{deleting ? 'Deleting…' : 'Delete'}</button>
+            <button type="button" className="button button-secondary" disabled={deleting} onClick={() => setConfirming(false)}>Keep</button></span>
+          : <button type="button" className="button button-secondary button-danger-outline" onClick={() => setConfirming(true)}><Trash2 size={16} />Delete</button>
+        : null}
+    </div>
     {job.status === 'failed' && job.error_message && <small className="operation-error">{job.error_message}</small>}
     {error && <small className="operation-error" role="alert">{error}</small>}
     {media.map((output) => <div className="job-media" key={output.name}>
@@ -462,29 +633,29 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
           : <video controls src={urls[output.name]} aria-label={`Play ${title}`} />) : <div className="job-media-loading"><small>Loading…</small></div>}
     </div>)}
     {docs['notes.md'] && <section className="job-section job-document" aria-label="Notes"><Markdown text={docs['notes.md']} /></section>}
-    {docs['transcript.md'] && <details className="job-section job-document disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Transcript</summary><Markdown text={docs['transcript.md']} /></details>}
+    {docs['transcript.md'] && (editing && urls['meeting.json'] && onEditTranscript
+      ? <TranscriptEditor url={urls['meeting.json']} onSave={(edit) => onEditTranscript(job, edit)} onClose={(saved) => { setEditing(false); if (saved) setRevision((count) => count + 1) }} />
+      : <details className="job-section job-document disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Transcript</summary><Markdown text={docs['transcript.md'].replace(/^# .*\n+/, '')} /></details>)}
     <div className="job-actions">
       <button type="button" className="button button-secondary" onClick={() => void onReuse(job)}><RotateCcw size={16} />Use these settings</button>
+      {onEditTranscript && !editing && job.status === 'done' && urls['meeting.json'] && docs['transcript.md'] &&
+        <button type="button" className="button button-secondary" onClick={() => setEditing(true)}><Pencil size={16} />Edit transcript</button>}
       {job.status === 'done' && onUseVoice && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).flatMap((output) => voiceTargets.map((target) =>
         <button key={target.runtime.id} type="button" className="button button-secondary" disabled={!urls[output.name] || !!voiceBusy}
           title={`Send this clip's sound to ${target.runtime.name} as the voice to speak in${target.ready ? '' : ` (${target.runtime.name} is not running: start it on the Models page)`}`}
           onClick={async () => { setVoiceBusy(target.runtime.id); setError(''); const problem = await onUseVoice(job, urls[output.name], target); setVoiceBusy(''); if (problem) setError(problem) }}>
           {voiceBusy === target.runtime.id ? <Loader2 size={16} className="spin" /> : <MessageCircleMore size={16} />}Use voice in {target.runtime.name}</button>))}
-      {[...media, ...others].map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={16} />{output.name}</a>)}
+      {groups.map((group) => <DownloadMenu key={group.label} label={group.label} items={group.items} />)}
+      {[...media, ...others].filter((output) => !grouped.has(output.name)).map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={16} />{output.name}</a>)}
       {active(job) && <button type="button" className="button button-secondary job-delete" disabled={deleting || job.progress === 'Cancelling'}
         onClick={async () => { setDeleting(true); setError(await onCancel(job)); setDeleting(false) }}><X size={16} />{job.progress === 'Cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
-      {!active(job)
-        ? confirming ? <span className="job-confirm"><span>Delete this {nounOf(generation)} and its files?</span>
-            <button type="button" className="button button-danger" disabled={deleting} onClick={() => void remove()}><Trash2 size={16} />{deleting ? 'Deleting…' : 'Delete'}</button>
-            <button type="button" className="button button-secondary" disabled={deleting} onClick={() => setConfirming(false)}>Keep</button></span>
-          : <button type="button" className="button button-secondary button-danger-outline job-delete" onClick={() => setConfirming(true)}><Trash2 size={16} />Delete</button>
-        : null}
     </div>
-    {fileFields.length > 0 && <section className="job-section"><h4>Pictures and references</h4><div className="input-thumbs">
+    {fileFields.length > 0 && <section className="job-section"><h4>References</h4><div className="input-thumbs">
       {fileFields.map((field) => (job.inputs[field.key] as JobFile[]).map((file) => <div key={file.name} className="input-group"><span>{field.label}</span><InputThumb job={job} file={file} inputUrl={inputUrl} /></div>))}
     </div></section>}
     {prompt && <section className="job-section"><h4>{jobFields.find((field) => field.key === 'prompt')?.label ?? 'Description'}</h4><p className="job-prompt">{prompt}</p></section>}
-    <section className="job-section"><h4>Settings</h4><dl className="job-facts">
+    <details className="job-section disclosure job-how"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Settings and model</summary>
+    <section className="job-subsection"><h4>Settings</h4><dl className="job-facts">
       {mode && <Row label="Made">{mode.label}</Row>}
       {framed && <Row label="Framing">chosen on the preview ({framed} frame)</Row>}
       {fields.map((field) => <Row key={field.key} label={field.label}>{field.kind === 'textarea' ? <span className="job-prompt">{String(job.inputs[field.key])}</span>
@@ -496,11 +667,12 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
       {typeof details.audio_seconds === 'number' && <Row label="Length">{formatSeconds(details.audio_seconds)}</Row>}
       {seconds != null && job.status === 'done' && <Row label="Time to make">{formatSeconds(seconds)}</Row>}
     </dl></section>
-    {launch && <section className="job-section"><h4>Model</h4><dl className="job-facts">
+    {launch && <section className="job-subsection"><h4>Model</h4><dl className="job-facts">
       <Row label="Model">{preset?.name ?? launch.preset}</Row>
       {gpus && <Row label="Card">{gpus}</Row>}
       {startSettings.map(([label, value]) => <Row key={label} label={label}>{value}</Row>)}
     </dl></section>}
+    </details>
     {sentPrompt && <details className="job-section job-sent disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Full prompt sent to the model</summary><pre>{sentPrompt}</pre></details>}
   </article>
 }
@@ -602,8 +774,9 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
       : !valid ? { kind: 'no', text: 'Check settings' }
         : needError ? null
           : !need ? { kind: 'wait', text: 'Checking…' }
-            : shortFall ? { kind: 'no', text: `${shortFall.label === 'RAM' ? 'RAM' : shortName(shortFall.label)}: ${formatBytes(shortFall.need - (shortFall.free ?? 0))} short` }
+            : shortFall ? { kind: 'no', text: `${shortFall.key === 'ram' ? shortFall.label : shortName(shortFall.label)}: ${formatBytes(shortFall.need - (shortFall.free ?? 0))} short` }
               : fits.every((fit) => fit.fits === true) ? { kind: 'yes', text: 'Fits' } : { kind: 'wait', text: 'Fit unknown' }
+  const unified = isUnified(host) // one memory pool: no separate VRAM to show
   const usedVram = usage ? Object.values(usage.gpus).reduce((sum, bytes) => sum + bytes, 0) : 0
   const summary = preset && <div className="runtime-summary">
     <fieldset className="runtime-chips" disabled={!stopped || pending}>
@@ -617,14 +790,17 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
           <span>{shortName(gpu.name)}</span></label>
       })}
     </fieldset>
-    {fitWord && <span className={`runtime-fitword fitword-${fitWord.kind}`}>{fitWord.kind === 'yes' ? <Check size={14} aria-hidden="true" /> : fitWord.kind === 'no' ? <X size={14} aria-hidden="true" /> : null}{fitWord.text}</span>}
-    {running && usage && <span className="runtime-fitword">{formatBytes(usedVram)} VRAM · {formatBytes(usage.ram_bytes)} RAM</span>}
+    {/* Under the card names, with its height always reserved, so the row above never moves as these come and go. */}
+    <div className="runtime-status">
+      {!stopped && <StatePill state={pending ? 'loading' : state}>{pending ? 'Working…' : stateText}</StatePill>}
+      {fitWord && <span className={`runtime-fitword fitword-${fitWord.kind}`}>{fitWord.kind === 'yes' ? <Check size={14} aria-hidden="true" /> : fitWord.kind === 'no' ? <X size={14} aria-hidden="true" /> : null}{fitWord.text}</span>}
+      {running && usage && <span className="runtime-fitword">{unified ? `${formatBytes(usage.ram_bytes)} memory` : `${formatBytes(usedVram)} VRAM · ${formatBytes(usage.ram_bytes)} RAM`}</span>}
+    </div>
   </div>
   return <article className={`profile-card runtime-card ${open ? 'runtime-card-open' : ''}`}>
     <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={20} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload}</span></div>
       {summary}
       <div className="profile-actions runtime-head-actions">
-        {!stopped && <StatePill state={pending ? 'loading' : state}>{pending ? 'Working…' : stateText}</StatePill>}
         {stopped && <button className="button button-primary" disabled={!canStart} title={!fresh ? 'A fresh telemetry sample is required.' : !host?.loading_enabled ? host?.loading_reason : !valid ? 'Fix the highlighted settings first.' : undefined} onClick={() => void onRun(runtime, 'start', launch)}><ArrowUpRight size={16} />Start</button>}
         {running && <button className="button button-secondary" disabled={pending || !fresh} onClick={() => void onRun(runtime, 'stop')}><X size={16} />Stop</button>}
         <button type="button" className="icon-button runtime-toggle" aria-expanded={open} aria-controls={detailsId} aria-label={`${open ? 'Hide' : 'Show'} details for ${runtime.name}`} title={open ? 'Hide details' : 'Details and settings'} onClick={() => setOpen(!open)}><ChevronDown size={18} className={open ? 'chevron-open' : ''} /></button>
@@ -639,18 +815,18 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
       {preset?.description && <p className="runtime-preset-description">{preset.description}</p>}
     </fieldset>}
 
+    {Object.keys(runtime.presets).length === 1 && preset?.description && <p className="runtime-preset-description">{preset.description}</p>}
     {cardNote && <p className="runtime-preset-description">{cardNote}</p>}
 
-    {stopped && need && <div className="runtime-fit" aria-label={`${runtime.name} if started`}>
-      <span className="runtime-fit-head">If you start it</span>
+    {stopped && need && <div className="runtime-fit" aria-label={`${runtime.name} if started`} title="An estimate; checked again when you press Start.">
       {fits.map((fit) => <div className="runtime-fit-row" key={fit.key}>
-        <strong>{fit.label === 'RAM' ? 'RAM' : `${fit.label} VRAM`}</strong>
-        <span>needs {formatBytes(fit.need)}, {fit.free == null ? 'free amount unknown' : `${formatBytes(fit.free)} free after ${formatBytes(fit.headroom)} headroom`}</span>
+        <strong>{fit.key === 'ram' ? fit.label : `${fit.label} VRAM`}</strong>
+        <span title={`Available is the free memory now, less ${formatBytes(fit.headroom)} kept back for the system and anything other models have reserved.`}>{formatBytes(fit.need)} needed, {fit.free == null ? 'available amount unknown' : `${formatBytes(fit.free)} available`}</span>
         {fit.fits === true ? <span className="fit-yes"><Check size={16} />Fits</span>
           : fit.fits === false ? <span className="fit-no"><X size={16} />{formatBytes(fit.need - (fit.free ?? 0))} short</span>
             : <span className="fit-unknown"><HelpCircle size={16} />Unknown</span>}
       </div>)}
-      <p className="runtime-fit-note">These are estimates. The host checks again when you press Start.{runtime.chat ? ' A text model then uses whatever VRAM is free beyond what you leave free.' : ''}</p>
+      {runtime.chat && !unified && <p className="runtime-fit-note">A text model then uses whatever VRAM is free beyond what you leave free.</p>}
     </div>}
     {stopped && needError && <p className="runtime-fit-error" role="status"><AlertCircle size={16} />{needError}</p>}
 
@@ -671,7 +847,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
     {refusal && <RefusalDetails refusal={refusal} gpus={host?.gpus} />}
     {message && <p className="runtime-message" aria-live="polite">{message}</p>}
     </div>{aside && <div className="runtime-aside">{aside}</div>}</div>
-    <div className="profile-card-footer"><span className="worker-caption">{running && model ? 'Running. Stop it to free its RAM and VRAM.' : stopped ? 'Stopped. Nothing is using memory.' : 'Working. This can take several minutes.'}</span><div className="profile-actions">
+    <div className="profile-card-footer"><span className="worker-caption">{running && model ? (unified ? 'Running. Stop it to free its memory.' : 'Running. Stop it to free its RAM and VRAM.') : stopped ? 'Stopped. Nothing is using memory.' : 'Working. This can take several minutes.'}</span><div className="profile-actions">
       {openHref && state === 'ready' && <a className="button button-secondary" href={openHref}>Open {runtime.name}</a>}
     </div></div>
     </div>}

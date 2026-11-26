@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { AlertCircle, Film, Loader2, Music, Plus, X } from 'lucide-react'
+import { AlertCircle, Film, FileText, Loader2, Music, Plus, X } from 'lucide-react'
 import type { InputField, UploadRecord } from '../types'
 
 /** A file chosen for a request: uploading, ready (with the host's upload ID), or refused. */
@@ -9,14 +9,15 @@ const ACCEPT: Record<string, string> = {
   image: '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp',
   video: '.mp4,.mov,.webm,.m4v,video/mp4,video/quicktime,video/webm',
   audio: '.wav,.mp3,.flac,.m4a,.ogg,audio/wav,audio/mpeg,audio/flac,audio/mp4,audio/ogg',
+  transcript: '.txt,.md,.vtt,.srt,text/plain,text/markdown,text/vtt,application/x-subrip',
 }
-const NOUN: Record<string, string> = { image: 'picture', video: 'video', audio: 'audio clip' }
+const NOUN: Record<string, string> = { image: 'picture', video: 'video', audio: 'audio clip', transcript: 'transcript' }
 
 /** The kind of an accepted file, by its name's ending (the host accepts the same types and checks the contents). */
 export function kindOfFile(file: File) {
   const suffix = file.name.toLowerCase().split('.').pop() ?? ''
   return ['png', 'jpg', 'jpeg', 'webp'].includes(suffix) ? 'image' : ['mp4', 'mov', 'webm', 'm4v'].includes(suffix) ? 'video'
-    : ['wav', 'mp3', 'flac', 'm4a', 'ogg'].includes(suffix) ? 'audio' : ''
+    : ['wav', 'mp3', 'flac', 'm4a', 'ogg'].includes(suffix) ? 'audio' : ['txt', 'md', 'vtt', 'srt'].includes(suffix) ? 'transcript' : ''
 }
 
 /**
@@ -58,7 +59,7 @@ export function FilePicker({ id, field, items, onChange, upload }: {
     onDrop={(event) => { event.preventDefault(); setDragging(false); add([...event.dataTransfer.files]) }}>
     {items.map((item, index) => <figure key={item.key} className={`file-tile file-${item.status}`}>
       {item.kind === 'image' ? <img src={item.url} alt={item.name} /> : item.kind === 'video' ? <video src={item.url} muted preload="metadata" aria-label={item.name} />
-        : <span className="file-icon">{item.kind === 'audio' ? <Music size={28} /> : <Film size={28} />}</span>}
+        : <span className="file-icon">{item.kind === 'audio' ? <Music size={28} /> : item.kind === 'transcript' ? <FileText size={28} /> : <Film size={28} />}</span>}
       {max > 1 && <span className="file-index" aria-hidden="true">{index + 1}</span>}
       {item.status === 'uploading' && <span className="file-state"><Loader2 size={20} className="spin" /></span>}
       {item.status === 'error' && <span className="file-state file-state-error" title={item.error}><AlertCircle size={20} /></span>}

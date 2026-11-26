@@ -84,7 +84,8 @@ function list(lines: string[]): ReactNode {
   const children = items.map((item, n) => {
     const nested = item.rest.filter((line) => line.trim())
     const sub = nested.length ? (ITEM.test(nested[0]) ? list(nested) : blocks(nested.map((line) => line.trim()))) : null
-    return <li key={n}>{inline(item.text)}{sub}</li>
+    const task = /^\[([ xX])\]\s+(.*)$/.exec(item.text) // "- [ ] do it": an action item
+    return <li key={n} className={task ? 'task-item' : undefined}>{task && <input type="checkbox" checked={task[1] !== ' '} readOnly disabled aria-label={task[1] === ' ' ? 'To do' : 'Done'} />}{inline(task ? task[2] : item.text)}{sub}</li>
   })
   return ordered ? <ol start={start !== 1 ? start : undefined}>{children}</ol> : <ul>{children}</ul>
 }

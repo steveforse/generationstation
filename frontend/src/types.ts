@@ -1,5 +1,5 @@
 export type Memory = { total_bytes: number; available_bytes: number; used_bytes: number }
-export type Gpu = { id: string; index?: number; name: string; memory: Memory | null; error: string | null }
+export type Gpu = { id: string; index?: number; name: string; memory: Memory | null; error: string | null; unified_memory?: boolean }
 export type Host = {
   instance_id: string
   host: { hostname: string; os: string; label: string; role: string; scope: string }
@@ -22,7 +22,7 @@ export type RuntimeSetting = { key: string; label: string; kind: 'int' | 'bool' 
 export type RuntimePreset = { name: string; description?: string | null; gpus: number[]; allowed_gpus: { index: number; name: string }[]; settings: RuntimeSetting[]; estimate: { ram_gib: number; gpu_min_free_gib: Record<string, number> }
   /** GPUs one start may use (overrides the runtime's), and a note per card choice ("0", "1", "0,1") on how the model behaves there. */
   max_gpus?: number | null; card_notes?: Record<string, string> }
-export type InputField = { key: string; label: string; kind: 'text' | 'textarea' | 'int' | 'choice' | 'seed' | 'files' | 'crop'; required: boolean; default: string | number | null; minimum: number | null; maximum: number | null; max_length: number | null; options: string[]; placeholder: string | null; help: string; advanced: boolean; accept?: ('image' | 'video' | 'audio')[]; max_count?: number | null; target?: string | null; shape_field?: string | null; show_when?: Record<string, string>; option_labels?: Record<string, string>; ratio_partner?: string | null; ratio_role?: 'width' | 'height' | null; guide?: string[] }
+export type InputField = { key: string; label: string; kind: 'text' | 'textarea' | 'int' | 'choice' | 'seed' | 'files' | 'crop'; required: boolean; default: string | number | null; minimum: number | null; maximum: number | null; max_length: number | null; options: string[]; placeholder: string | null; help: string; advanced: boolean; accept?: ('image' | 'video' | 'audio' | 'transcript')[]; max_count?: number | null; target?: string | null; shape_field?: string | null; show_when?: Record<string, string>; option_labels?: Record<string, string>; ratio_partner?: string | null; ratio_role?: 'width' | 'height' | null; guide?: string[] }
 /** A way of making something, shown as a tab with its own form. */
 export type GenerationMode = { key: string; label: string; help: string; inputs: InputField[]; output_kind?: 'audio' | 'image' | 'video' | 'document' }
 /** A file uploaded for a request, before a job uses it. */
