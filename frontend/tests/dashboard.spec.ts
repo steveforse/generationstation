@@ -1476,7 +1476,11 @@ test('the Models page groups models by kind and charts their published quality s
   // One section per kind, in the sidebar's order.
   await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Text|Speech|Music)/ })).toHaveText(['Text1', 'Speech3', 'Music1'])
   const speech = page.getByRole('region', { name: 'Speech' })
+  // Folded until asked for.
   const chart = speech.getByRole('figure', { name: 'Speech arena Elo' })
+  await expect(speech.getByText('Quality ranking')).toBeVisible()
+  await expect(chart).toBeHidden()
+  await speech.getByText('Quality ranking').click()
   await expect(chart).toBeVisible()
   // Ranked high to low, with an estimate marked, and the unscored model named.
   await expect(chart.getByRole('listitem')).toHaveText([/Voice A.*1278/, /Voice B.*1104.*est\./])
@@ -1486,5 +1490,5 @@ test('the Models page groups models by kind and charts their published quality s
   await chart.getByText('Table').click()
   await expect(chart.getByRole('cell', { name: 'Estimate: Estimated from a sibling.' })).toBeVisible()
   // A kind with one scored model has no chart.
-  await expect(page.getByRole('region', { name: 'Music' }).getByRole('figure')).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Music' }).getByText('Quality ranking')).toHaveCount(0)
 })

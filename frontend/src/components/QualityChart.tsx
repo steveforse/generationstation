@@ -76,8 +76,12 @@ export function QualityChart({ runtimes }: { runtimes: Runtime[] }) {
   const charts = [...qualityBars(runtimes)].filter(([, bars]) => bars.length > 1)
   if (charts.length === 0) return null
   const unrated = runtimes.filter((runtime) => (runtime.workload !== 'text' || runtime.chat) && !runtime.quality && !Object.values(runtime.presets).some((preset) => preset.quality))
-  return <div className="quality-charts">
-    {charts.map(([metric, bars]) => <QualityBars key={metric} metric={metric} bars={bars} />)}
-    {unrated.length > 0 && <p className="quality-unrated">No score yet: {unrated.map((runtime) => runtime.name).join(', ')}.</p>}
-  </div>
+  // Folded by default: the cards are the page's subject, and the ranking is there when it is wanted.
+  return <details className="quality-charts">
+    <summary><span>Quality ranking</span><small>{charts.map(([metric]) => metric).join(' · ')}</small></summary>
+    <div className="quality-charts-body">
+      {charts.map(([metric, bars]) => <QualityBars key={metric} metric={metric} bars={bars} />)}
+      {unrated.length > 0 && <p className="quality-unrated">No score yet: {unrated.map((runtime) => runtime.name).join(', ')}.</p>}
+    </div>
+  </details>
 }
