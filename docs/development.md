@@ -91,52 +91,15 @@ $hf = "C:\ai\envs\qwen-image-worker\Scripts\hf.exe"; $m = "D:\ai\models\minimax-
 
 `h3_silu_temb_grid.safetensors` (needed by the Turbo v4 add-on) comes from the GitHub repository `Larryvrh/ComfyUI-MiniMax-H3-Turbo`; put it in `$m\turbo-v4`. The `minimax_h3` entry in `runtimes.example.json` points at these files and writes clips to `D:\ai\outputs\minimax-h3`.
 
-## Meeting notes on an Apple-silicon Mac (development)
+## Apple-silicon Mac notes (development)
 
-The desktop runs the meeting worker's speech steps in WSL on NVIDIA cards. A Mac has neither, so the worker has an `mlx` engine that runs the same steps as plain child processes (`distro: "local"`): sherpa-onnx works out who spoke when (pyannote segmentation 3.0 plus a speaker embedding, on the processor, no token needed), and Qwen3-ASR on MLX transcribes each turn. The notes use a local text model through `mlx-lm` (the `llm` plugin's `mlx` engine). The Mac reports its shared memory as one GPU (`apple-unified-memory`) with the same figures as RAM, so presets here ask admission for RAM only and the pool is counted once. Set `GS_HOST_ROLE=desktop` in the Mac's `.env`, otherwise admission refuses every start (`HOST_ROLE_UNSUPPORTED`); this is a local convenience, not a claim about the real desktop. On a Mac the RAM figures come from the kernel's page counters, not psutil's: used is application memory plus wired plus compressed (Activity Monitor's Memory Used), and files held in memory, including a running model's memory-mapped weights, count as available cache. psutil's available also counts inactive application memory, which macOS can free only by compressing or swapping, so it read the Mac as roomier than the engines did.
+Setting up and running on a Mac is covered in [setup-macos.md](setup-macos.md). This section keeps the engine details and measurements that guide leaves out.
 
-Set-up used on 2026-11-24 (an M5 Max with 64 GB; nothing here is stored in the repository):
-
-```sh
-sed "s#/Users/YOU#$HOME#g" runtimes.mac.example.json > runtimes.json   # from the repository root
-uv venv ~/ai/envs/meeting-worker --python 3.12
-uv pip install --python ~/ai/envs/meeting-worker/bin/python mlx-audio mlx-lm sherpa-onnx soundfile numpy huggingface-hub
-HF=~/ai/envs/meeting-worker/bin/hf
-$HF download mlx-community/Qwen3-ASR-1.7B-8bit --local-dir ~/ai/models/asr/Qwen3-ASR-1.7B-8bit                 # 2.3 GiB
-mkdir -p ~/ai/models/diar && cd ~/ai/models/diar
-curl -LO https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2 && tar xjf sherpa-onnx-pyannote-segmentation-3-0.tar.bz2
-curl -LO https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx
-```
-
-Inkling 2 Mini runs through [oMLX](https://github.com/jundot/omlx) (Apache-2.0; needs macOS 15+, Python 3.11-3.13). Set-up used on 2026-11-24, from source in its own environment, with the Metal toolchain installed (`xcodebuild -downloadComponent MetalToolchain`) for the native kernels:
-
-```sh
-mkdir -p ~/ai/tools && git clone --depth 1 https://github.com/jundot/omlx.git ~/ai/tools/omlx && cd ~/ai/tools/omlx
-uv venv ~/ai/envs/omlx --python 3.12
-uv pip install --python ~/ai/envs/omlx/bin/python -e .
-uv pip install --python ~/ai/envs/omlx/bin/python 'setuptools>=61.0' 'cmake>=3.27' 'nanobind==3.1.0'
-PATH=$HOME/ai/envs/omlx/bin:$PATH OMLX_WITH_CUSTOM_KERNEL=1 python setup.py build_ext --inplace --force
-mkdir -p ~/ai/models/inkling2   # one model per folder: the chat names the first model the server lists
-~/ai/envs/meeting-worker/bin/hf download mlx-community/Inkling-2-Mini-oQ4e-mtp --local-dir ~/ai/models/inkling2/Inkling-2-Mini-oQ4e-mtp
-```
-
-Use the `oQ` build: the plain `Inkling-2-Mini-4bit` checkpoint fails to load in oMLX. oMLX renames its process to `omlx-server`, so stop a hand-started one with `kill <pid>` or `omlx stop`, not `pkill -f "omlx serve"`. The pinned dependencies include GitHub commits of mlx-lm, mlx-embeddings and forks of mlx-vlm and mlx-audio.
-
-The chat's `web_search` tool needs a search address, and without one the chat is not offered the tool and falls back to scraping search pages with `read_page`, which fails (found 2026-11-24 in an Inkling chat). On the Mac, run SearXNG locally (the steps in the next section, bound to `127.0.0.1:8888`), then save `http://127.0.0.1:8888` under Host settings (gear menu), or `curl -X PUT -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"searxng_url":"http://127.0.0.1:8888"}' http://127.0.0.1:8000/api/settings`. It is stored in the host database.
-
-The notes use Qwen3.8 Flash-Next here too, as its Gyro-M quant through Strata (see the Flash-Next section below). The earlier choice, Qwen3-30B-A3B (MLX), was removed on 2026-11-25 once Flash-Next ran well. Node 24 is needed for the frontend; with asdf, `ASDF_NODEJS_VERSION=24.22.3` selects it.
+The desktop runs the meeting worker's speech steps in WSL on NVIDIA cards. A Mac has neither, so the worker has an `mlx` engine that runs the same steps as plain child processes (`distro: "local"`): sherpa-onnx works out who spoke when, and Qwen3-ASR on MLX transcribes each turn. The Mac reports its shared memory as one GPU (`apple-unified-memory`) with the same figures as RAM, so Mac presets ask admission for RAM only and the pool is counted once. `GS_HOST_ROLE=desktop` in the Mac's `.env` is a local convenience that lets starts through; it is not a claim about the real desktop.
 
 ### Qwen3.8 Flash-Next on the Mac (Strata)
 
-Strata (MIT, `Niko1221/Strata`) runs Qwen3.8 Flash-Next (125B mixture of experts, 6B active) on its own Metal engine. Gyro-S and Gyro-M are agentionai's trellis-coded quants (QTIP family); the `TQ1_0`/`TQ2_0` in the file names are only Hub size classes, not bit widths. Their model card gives KL divergence from the original of 0.331 (Gyro-S) and 0.291 (Gyro-M), against 0.311 for IQ3_XXS and 0.420 for IQ2_XS, so both sit near a 3-bit IQ quant. Set-up used on 2026-11-24, kept outside the repo:
-
-```sh
-git clone https://github.com/Niko1221/Strata ~/ai/tools/Strata && cd ~/ai/tools/Strata
-./setup.sh --family gyro --model Gyro-S --models-dir ~/ai/models/strata --data-dir ~/ai/models/strata \
-  --context 32768 --port 8090 --no-start --no-browser --vision no --yes
-```
-
-It builds the engine (about 10 minutes) and downloads the 58.5 GB Gyro-S file plus the MTP and DFlash2 drafters. For the larger quant run the same command with `--model Gyro-M` (92 GB; stop any running Strata server first, or its prep step refuses). The `flash_next` entry in `runtimes.mac.example.json` has three presets (`fast` = Gyro-S, `quality` = Gyro-M, the default, and `large` = Gyro-L) and uses the `strata_mac` engine: it takes the run config Strata wrote (`engine/strata-gyro-gyro-s.json`) and replaces only the port and log path. Gyro-L (108 GB) is not offered by Strata's Mac setup, so it was installed by hand: download `Qwen3.8-Flash-Next-Gyro-L-TQ3_0.gguf` from `agentionai/Qwen3.8-Flash-Next-Gyro-GGUF` (check its SHA-256 on the Hub), run `terminal/tools/iq_pack.py --gguf FILE --out PACK --compat-bf16`, add its pair-trellis types to `TYPE_SIZE` in `engine/metal/tools/metal_repack.py` (`147: (42, 128), 148: (50, 128), 149: (58, 128)`, a local change) so `stream_experts.py --gguf FILE --verify` can write the streaming copy, then copy `engine/strata-gyro-gyro-m.json` with the paths changed to `gyro-l`. Measured on an M5 Max (64 GB): Gyro-S decodes at 80-110 tok/s and uses about 32 GiB once loaded (declared as 34; Strata's own figure is 43 GB); Gyro-M decodes at 40-55 tok/s with the default arena and 60-70 with `STRATA_METAL_ARENA_GB=26`, streams its experts and has a 37.6 GB footprint (declared as 40); Gyro-L is about 50-55 tok/s on prose with the same arena and the same footprint, with the same results on the small checks. The API reads `runtimes.json` at start-up; restart it after editing.
+Strata (MIT, `Niko1221/Strata`) runs Qwen3.8 Flash-Next (125B mixture of experts, 6B active) on its own Metal engine. Gyro-S and Gyro-M are agentionai's trellis-coded quants (QTIP family); the `TQ1_0`/`TQ2_0` in the file names are only Hub size classes, not bit widths. Their model card gives KL divergence from the original of 0.331 (Gyro-S) and 0.291 (Gyro-M), against 0.311 for IQ3_XXS and 0.420 for IQ2_XS, so both sit near a 3-bit IQ quant. The install commands are in [setup-macos.md](setup-macos.md): the install builds the engine (about 10 minutes) and downloads the 58.5 GB Gyro-S file plus the MTP and DFlash2 drafters. For the larger quant, run the same command with `--model Gyro-M` (92 GB; stop any running Strata server first, or its prep step refuses). The `flash_next` entry in `runtimes.mac.example.json` has three presets (`fast` = Gyro-S, `quality` = Gyro-M, the default, and `large` = Gyro-L) and uses the `strata_mac` engine: it takes the run config Strata wrote (`engine/strata-gyro-gyro-s.json`) and replaces only the port and log path. Gyro-L (108 GB) is not offered by Strata's Mac setup, so it was installed by hand: download `Qwen3.8-Flash-Next-Gyro-L-TQ3_0.gguf` from `agentionai/Qwen3.8-Flash-Next-Gyro-GGUF` (check its SHA-256 on the Hub), run `terminal/tools/iq_pack.py --gguf FILE --out PACK --compat-bf16`, add its pair-trellis types to `TYPE_SIZE` in `engine/metal/tools/metal_repack.py` (`147: (42, 128), 148: (50, 128), 149: (58, 128)`, a local change) so `stream_experts.py --gguf FILE --verify` can write the streaming copy, then copy `engine/strata-gyro-gyro-m.json` with the paths changed to `gyro-l`. Measured on an M5 Max (64 GB): Gyro-S decodes at 80-110 tok/s and uses about 32 GiB once loaded (declared as 34; Strata's own figure is 43 GB); Gyro-M decodes at 40-55 tok/s with the default arena and 60-70 with `STRATA_METAL_ARENA_GB=26`, streams its experts and has a 37.6 GB footprint (declared as 40); Gyro-L is about 50-55 tok/s on prose with the same arena and the same footprint, with the same results on the small checks. The API reads `runtimes.json` at start-up; restart it after editing.
 
 ### Tencent Hy4-Flash on the Mac (Strata)
 
