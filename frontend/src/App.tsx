@@ -149,6 +149,14 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
       <div className="nav-group-label" id={chatId}><WorkloadIcon workload="text" size={18} /><span>Text</span></div>
       <NavLink route={{ page: 'chat', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><MessagesSquare size={20} /></span>} label="Chat"
         title={navStatus(chatState) ? `Chat: ${chatRuntime.name} ${navStatus(chatState)?.toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} />
+      {/* The other text tools (meeting notes) sit under Chat, in the same group. */}
+      {(groups.find((group) => group.key === 'text')?.items ?? []).map((runtime) => {
+        const model = state.models?.find((item) => item.id === runtime.id)
+        const status = navStatus(model?.state)
+        return <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
+          icon={<span className="nav-rail-icon"><FileText size={20} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
+          badge={<NavState state={model?.state} />} />
+      })}
     </div>}
     {groups.filter((group) => group.key !== 'text' || !chatRuntime).map((group) => {
       const id = `nav-${host.id}-${group.key}`

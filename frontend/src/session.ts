@@ -478,6 +478,19 @@ export class HostSession {
     return ''
   }
 
+  /** Save corrections to a finished meeting's transcript. Returns an error message, or '' when it was saved. */
+  async editTranscript(job: Job, edit: { revision: number; segments: { index: number; speaker?: string; text?: string }[]; rename: Record<string, string> }) {
+    const ctx = this.context()
+    if (!ctx) return 'Not connected to the host.'
+    try {
+      await requestApi(ctx.base, ctx.token, `/api/jobs/${encodeURIComponent(job.id)}/transcript`, { method: 'PUT', body: JSON.stringify(edit) }, ctx.signal)
+      return ''
+    } catch (error) {
+      if (this.handleAuthError(error)) return 'Not connected to the host.'
+      return error instanceof Error ? error.message : 'The transcript could not be saved.'
+    }
+  }
+
   /** Ask the host what a start with these choices would need. Display only; Start is checked again. */
   async estimateRuntime(runtime: Runtime, launch: Launch, signal?: AbortSignal): Promise<RuntimeEstimate> {
     const ctx = this.context()

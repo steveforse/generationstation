@@ -83,7 +83,7 @@ function llmRuntimeFixture() {
     assistant: true,
     id: 'inkling2', kind: 'llm', plugin: 'Text model', name: 'Inkling 2 Mini', description: 'A small, fast model that reads pictures.', workload: 'text', port: 8161,
     default_preset: 'main', last_launch: null, chat: true, max_gpus: null,
-    presets: { main: { name: 'Inkling 2 Mini', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }],
+    presets: { main: { name: 'Inkling 2 Mini', description: 'Good quality. 60-90 tok/s. About 24 GiB of memory.', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }],
       estimate: { ram_gib: 6, gpu_min_free_gib: { 0: 24, 1: 12.5 } }, max_gpus: 1,
       card_notes: { 1: 'The standard model on the second card.', 0: 'An uncensored version on the first card.' },
       settings: [
@@ -142,7 +142,7 @@ function meetingRuntimeFixture() {
   const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
     key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
   })
-  const inputs = [field('recording', 'Recording', 'files', { required: true, accept: ['audio', 'video'], max_count: 1 }),
+  const inputs = [field('recording', 'Recording', 'files', { required: true, accept: ['audio', 'video', 'transcript'], max_count: 1 }),
     field('notes', 'Make', 'choice', { options: ['notes', 'transcript'], default: 'notes', option_labels: { notes: 'Transcript and notes', transcript: 'Transcript only' } })]
   return {
     id: 'meeting_notes', kind: 'meeting_notes', plugin: 'Meeting notes', name: 'Meeting notes', description: 'Turns a meeting recording into notes.', workload: 'text', port: 8230, default_preset: 'qwen', last_launch: null, max_gpus: 1,
@@ -190,15 +190,17 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   if (options.meeting) {
     models.push({ id: 'meeting_notes', name: 'Meeting notes', workload: 'text', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
     jobs.push({ id: 'job-00000077', model_id: 'meeting_notes', status: 'done', progress: 'Writing the summary, action items and decisions', error_message: null,
-      inputs: { mode: 'notes', recording: [{ name: '01-call.m4a', kind: 'audio', mime: 'audio/mp4', original: 'call.m4a' }], notes: 'notes', text_model: 'auto', correct: 'yes' },
+      inputs: { mode: 'notes', recording: [{ name: '01-call.webm', kind: 'video', mime: 'video/webm', original: 'call.webm' }], notes: 'notes', text_model: 'auto', correct: 'yes' },
       outputs: ['transcript.md', 'transcript.srt', 'notes.md', 'actions.csv', 'decisions.csv', 'meeting.json'].map((name) => ({ name, mime: name.endsWith('.md') ? 'text/markdown' : name.endsWith('.csv') ? 'text/csv' : 'application/json', bytes: 100 })),
       created_at: '2026-11-23T10:00:00Z', finished_at: '2026-11-23T10:02:00Z', details: { seconds: 120, audio_seconds: 1500, speakers: 4 }, launch: { preset: 'qwen', settings: {}, gpus: [1] } })
   }
+  await page.route('**/api/jobs/*/inputs/*', (route) => route.fulfill({ status: 200, contentType: 'video/webm', body: readFileSync(new URL('./fixtures/black-start.webm', import.meta.url)) }))
   await page.route('**/api/jobs/*/files/notes.md', (route) => route.fulfill({ status: 200, contentType: 'text/markdown', body: '# Meeting notes\n\n## Action items\n\n- [ ] Send the plan — Ben (00:20)\n' }))
   await page.route('**/api/jobs/*/files/transcript.md', (route) => route.fulfill({ status: 200, contentType: 'text/markdown', body: '# Transcript\n\n**[00:00] Speaker 1 (Anna):** Hello, everyone.\n' }))
   await page.route('**/api/jobs/*/files/*.csv', (route) => route.fulfill({ status: 200, contentType: 'text/csv', body: 'Task,Owner\n' }))
   await page.route('**/api/jobs/*/files/*.srt', (route) => route.fulfill({ status: 200, contentType: 'application/x-subrip', body: '1\n' }))
-  await page.route('**/api/jobs/*/files/meeting.json', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }))
+  await page.route('**/api/jobs/*/files/meeting.json', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ revision: 1, speakers: { 'Speaker 1': 'Anna' }, segments: [
+    { speaker: 'Speaker 1', start: 0, end: 4, text: 'Hello, everyone.' }, { speaker: 'Ben', start: 5, end: 9, text: 'Send the plan.' }, { speaker: 'Speaker 1', start: 10, end: 14, text: 'Thanks.' }] }) }))
   if (options.voiceClip) jobs.push({ id: 'job-00000099', model_id: 'minimax_h3', status: 'done', progress: 'Done in 39 s, seed 5', error_message: null,
     inputs: { mode: 'text', prompt: 'A woman with a soft Welsh accent sits in a kitchen. She says: "Come in and get warm."', quality: 'quick' },
     outputs: [{ name: 'video-1.mp4', mime: 'video/mp4', bytes: 24044 }], created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:00:39Z',
@@ -585,8 +587,8 @@ test('starts a model server with the chosen model, GPUs and advanced settings, t
   await expect(page.getByText('Fixture note about Flash-Next.')).toBeVisible()
   await page.getByRole('checkbox', { name: 'Second GPU' }).uncheck()
   const fit = page.getByLabel('Basalt if started')
-  await expect(fit.locator('.runtime-fit-row').filter({ hasText: 'RAM' }).first()).toContainText('needs 40 GiB, 16 GiB free after 4 GiB headroom24 GiB short')
-  await expect(fit.locator('.runtime-fit-row').filter({ hasText: 'Fixture GPU VRAM' })).toContainText('needs 24 GiB, 26 GiB free after 2 GiB headroomFits')
+  await expect(fit.locator('.runtime-fit-row').filter({ hasText: 'RAM' }).first()).toContainText('40 GiB needed, 16 GiB available24 GiB short')
+  await expect(fit.locator('.runtime-fit-row').filter({ hasText: 'Fixture GPU VRAM' })).toContainText('24 GiB needed, 26 GiB availableFits')
   const ramPreview = page.getByRole('progressbar', { name: 'System memory used' }).getByLabel(/Basalt if started/)
   await expect(ramPreview).toHaveAttribute('data-tip', 'Basalt if started · needs 40 GiB · won’t fit')
   await expect(page.getByRole('progressbar', { name: 'Fixture GPU used' }).getByLabel('Basalt if started · needs 24 GiB')).toBeVisible()
@@ -686,6 +688,8 @@ test('makes a song, keeps it in the sidebar with how it was made, reuses its set
   await expect(detail.getByText('took 41 s')).toBeVisible()
   await expect(page.getByLabel('Play Upbeat indie pop, female vocals')).toBeVisible()
   await expect(detail.getByRole('link', { name: 'song.wav' })).toBeVisible()
+  await expect(detail.getByText('Sing it back to me')).toBeHidden() // the settings are folded away until asked for
+  await detail.getByText('Settings and model').click()
   await expect(detail.getByText('Sing it back to me')).toBeVisible()
   await expect(detail.getByText('YuE2 3B')).toBeVisible()
   await expect(detail.getByText('Second GPU')).toBeVisible()
@@ -1127,16 +1131,118 @@ test('a meeting\'s notes show on the page, the transcript folds out, and every f
   await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
   await go(page, '#/hosts/local/services/meeting_notes')
   await expect(page.getByRole('navigation').getByRole('group', { name: 'Text' }).getByRole('link', { name: /Meeting notes/ })).toBeVisible()
-  await page.getByRole('button', { name: /call\.m4a|meeting|job-0000/i }).first().click()
+  await page.getByRole('button', { name: /call\.webm|meeting|job-0000/i }).first().click()
   const notes = page.getByRole('region', { name: 'Notes' })
   await expect(notes.getByRole('heading', { name: 'Action items' })).toBeVisible()
   await expect(notes.getByText('Send the plan — Ben (00:20)')).toBeVisible()
   await expect(page.getByText('Hello, everyone.')).toBeHidden()
   await page.getByText('Transcript', { exact: true }).click()
   await expect(page.getByText('Hello, everyone.')).toBeVisible()
-  for (const name of ['notes.md', 'transcript.md', 'transcript.srt', 'actions.csv', 'decisions.csv', 'meeting.json']) {
-    await expect(page.getByRole('link', { name })).toHaveAttribute('download', name)
+  // Eight files are two menus; the recording is the link under References, not a button of its own.
+  await expect(page.getByRole('link', { name: 'transcript.md' })).toHaveCount(0)
+  const files: Record<string, [string, string]> = {
+    'Download transcript': ['transcript.md', 'Readable text (.md)'], 'Download notes': ['actions.csv', 'Action items, for a spreadsheet (.csv)'],
   }
+  for (const [menu, [name, label]] of Object.entries(files)) {
+    await page.getByRole('button', { name: menu }).click()
+    await expect(page.getByRole('link', { name: label })).toHaveAttribute('download', name)
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('link', { name: label })).toHaveCount(0)
+  }
+  await page.getByRole('button', { name: 'Download transcript' }).click()
+  await expect(page.getByRole('list', { name: 'Download transcript' }).getByRole('link')).toHaveCount(2) // this job has the text and the captions, no raw file
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Download notes' }).click()
+  await expect(page.getByRole('list', { name: 'Download notes' }).getByRole('link')).toHaveCount(4)
+  await expect(page.getByRole('button', { name: /^Recording/ })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'References' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'call.webm' })).toHaveAttribute('download', 'call.webm')
+  // Delete sits in the header, beside the status.
+  const head = page.locator('.job-head')
+  await expect(head.getByRole('button', { name: 'Delete' })).toBeVisible()
+})
+
+test('a recording that opens on black gets a thumbnail from a later frame', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
+  await go(page, '#/hosts/local/services/meeting_notes')
+  await page.getByRole('button', { name: /call\.webm|meeting|job-0000/i }).first().click()
+  const thumb = page.getByRole('link', { name: 'call.webm' }).getByRole('img')
+  await expect(thumb).toBeVisible()
+  const brightness = await thumb.evaluate(async (image: HTMLImageElement) => {
+    await image.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth; canvas.height = image.naturalHeight
+    const context = canvas.getContext('2d')!
+    context.drawImage(image, 0, 0)
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+    let sum = 0
+    for (let i = 0; i < data.length; i += 4) sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
+    return sum / (data.length / 4)
+  })
+  expect(brightness).toBeGreaterThan(25) // the first three seconds of this clip are black
+})
+
+test('a meeting transcript can be edited: rename a speaker everywhere, or fix one segment, and save', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
+  const saved: unknown[] = []
+  await page.route('**/api/jobs/*/transcript', async (route) => { saved.push(route.request().postDataJSON()); await route.fulfill({ status: 200, json: { revision: 2, segments: 3 } }) })
+  await go(page, '#/hosts/local/services/meeting_notes')
+  await page.getByRole('button', { name: /call\.webm|meeting|job-0000/i }).first().click()
+  await page.getByRole('button', { name: 'Edit transcript' }).click()
+  const editor = page.getByRole('region', { name: 'Edit transcript' })
+  await expect(editor.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  await editor.getByRole('textbox', { name: 'Name for Speaker 1' }).fill('Ivan Cole')
+  await expect(editor.getByRole('combobox', { name: 'Speaker of segment 1' })).toHaveValue('Ivan Cole')
+  await expect(editor.getByRole('combobox', { name: 'Speaker of segment 3' })).toHaveValue('Ivan Cole')
+  await expect(editor.getByRole('combobox', { name: 'Speaker of segment 2' })).toHaveValue('Ben')
+  await editor.getByRole('textbox', { name: 'Words of segment 2' }).fill('Send the plan by Friday.')
+  await expect(editor.getByText('3 segments changed')).toBeVisible()
+  await editor.getByRole('button', { name: 'Save changes' }).click()
+  await expect(editor).toHaveCount(0)
+  expect(saved).toEqual([{ revision: 1, rename: { 'Speaker 1': 'Ivan Cole' }, segments: [{ index: 1, text: 'Send the plan by Friday.' }] }])
+  // One segment moved to another speaker is a per-segment edit, not a rename.
+  await page.getByRole('button', { name: 'Edit transcript' }).click()
+  await editor.getByRole('combobox', { name: 'Speaker of segment 3' }).fill('Ben')
+  await editor.getByRole('button', { name: 'Save changes' }).click()
+  await expect(editor).toHaveCount(0)
+  expect(saved[1]).toEqual({ revision: 1, rename: {}, segments: [{ index: 2, speaker: 'Ben' }] })
+})
+
+test('a transcript edit the host refuses stays open with the reason', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
+  await page.route('**/api/jobs/*/transcript', (route) => route.fulfill({ status: 409, json: { detail: { code: 'TRANSCRIPT_CHANGED', message: 'The transcript changed since you opened it. Reload it and edit again.' } } }))
+  await go(page, '#/hosts/local/services/meeting_notes')
+  await page.getByRole('button', { name: /call\.webm|meeting|job-0000/i }).first().click()
+  await page.getByRole('button', { name: 'Edit transcript' }).click()
+  const editor = page.getByRole('region', { name: 'Edit transcript' })
+  await editor.getByRole('textbox', { name: 'Words of segment 1' }).fill('Hi all.')
+  await editor.getByRole('button', { name: 'Save changes' }).click()
+  await expect(editor.getByRole('alert')).toContainText('The transcript changed since you opened it')
+  await editor.getByRole('button', { name: 'Cancel' }).click()
+  await expect(editor).toHaveCount(0)
+})
+
+test('meeting notes keep their own sidebar entry when a chat model is configured, and take a transcript file', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { meeting: true, llm: true })
+  await go(page, '#/hosts/local/services/meeting_notes')
+  await expect(page.getByRole('navigation').getByRole('link', { name: /Meeting notes/ })).toBeVisible()
+  await expect(page.getByRole('navigation').getByRole('link', { name: /Meeting notes/ })).toHaveCount(1)
+  await expect(page.locator('input[type=file]').first()).toHaveAttribute('accept', /\.vtt/)
+})
+
+test('a Mac with shared memory shows one memory pool and never a separate VRAM figure', async ({ page }) => {
+  await connectFixtures(page, 'Fixture Mac', false, { runtime: true })
+  const gib = 1024 ** 3
+  const mac = { ...fixtureHost('Fixture Mac'), ram: { total_bytes: 64 * gib, available_bytes: 30 * gib, used_bytes: 34 * gib },
+    gpus: [{ id: 'apple-unified-memory', index: 0, name: 'Apple M5 Max (unified memory)', memory: { total_bytes: 64 * gib, available_bytes: 30 * gib, used_bytes: 34 * gib }, error: null, unified_memory: true }] }
+  await expect.poll(() => pushFrame(page, mac)).toBe(true)
+  await page.getByRole('link', { name: 'Overview' }).click()
+  await expect(page.getByRole('heading', { name: 'System memory' })).toBeVisible()
+  await expect(page.getByText('Unified memory · shared with the GPU')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Graphics memory' })).toHaveCount(0)
+  await go(page, '#/hosts/local/models')
+  await expect(page.getByRole('heading', { name: 'Models', level: 1 })).toBeVisible()
+  await expect(page.getByText(/\d (B|KiB|MiB|GiB) VRAM/)).toHaveCount(0) // no "0 B VRAM" beside a model's RAM
 })
 
 test('a service restart that adds a model shows it after the stream reconnects, without reloading the page', async ({ page }) => {
@@ -1163,6 +1269,7 @@ test('a text model shows its card choice and plain settings, with tuning folded 
   await expect(gpus.getByRole('radio', { name: 'Second GPU' })).toBeChecked()
   await expect(card.getByText('The standard model on the second card.')).toHaveCount(0)
   await openCard(page, 'Inkling 2 Mini')
+  await expect(card.getByText('Good quality. 60-90 tok/s. About 24 GiB of memory.')).toBeVisible() // one preset: no buttons, still the quality, speed and memory line
   await expect(card.getByRole('group', { name: 'Model' })).toHaveCount(0)
   await expect(card.getByText('The standard model on the second card.')).toBeVisible()
   await gpus.getByRole('radio', { name: 'Fixture GPU' }).check()
