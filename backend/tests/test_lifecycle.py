@@ -346,3 +346,18 @@ def test_unknown_model_returns_404_and_operation_history_survives_terminal_state
         history = client.get("/api/operations", headers=AUTH)
         assert history.status_code == 200
         assert any(item["id"] == accepted.json()["id"] for item in history.json()["operations"])
+
+
+def test_a_runtime_removed_from_the_catalog_leaves_the_model_list_but_keeps_its_history():
+    from tests.runtime_fixtures import catalog
+    store = MemoryStore()
+    for model_id in ("basalt", "removed"):  # both were synced once; only the first is still in the catalog
+        store.models[model_id] = {"name": model_id, "workload": "text"}
+        store.runtime[model_id] = {"state": "unloaded"}
+    app = create_app(settings=make_settings(), store=store, monitor=SnapshotMonitor(make_host()),
+                     worker=ControlledWorker(), catalog=catalog(18999))
+    with TestClient(app) as client:
+        create_profile(client, "simulated")
+        listed = {model["id"] for model in client.get("/api/models", headers=AUTH).json()["models"]}
+    assert listed == {"basalt", "simulated"}
+    assert "removed" in store.models  # nothing is deleted

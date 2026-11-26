@@ -20,6 +20,9 @@ from .uploads import UploadError, kind_of
 
 NEW_TITLE = "New conversation"
 MAX_ROUNDS = 8            # model answers per turn: check, start, make, reply, and a search or two
+# Sent (never saved) after the last round when the model is still calling tools, to get an answer from what it has.
+FINAL_ANSWER = ("You have used all the tool calls this turn allows. Answer now with what you found, and say plainly "
+                "what you could not find or do.")
 MAX_PICTURE_PIXELS = 1_200_000  # larger pictures reach the chat model as their thumbnail
 MAX_IMAGES = 6            # pictures sent to the model per request, from the current turn only
 MAX_ATTACHMENTS = 6
@@ -263,6 +266,12 @@ class ChatManager:
                     turn.emit("message", {**serialize_message(saved), "job": result.get("job")})
                 if turn.stop.is_set():
                     break
+            else:
+                # Every round ended in tool calls, so the last thing saved is a tool result and the page would wait
+                # for an answer that never comes. Ask once more with no tools so the turn ends with a reply.
+                messages = self._context(conversation, handlers, getattr(turn, "where", None))
+                messages.append({"role": "user", "content": FINAL_ANSWER})
+                self._answer(runtime, conversation_id, messages, [], thinking, turn)
         except Exception as exc:  # noqa: BLE001 - the turn ends with a visible error rather than silently
             turn.emit("error", {"message": str(exc) or "The answer stopped unexpectedly."})
         finally:

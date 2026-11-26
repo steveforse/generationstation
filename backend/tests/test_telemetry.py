@@ -168,6 +168,7 @@ def test_device_absence_and_nvml_unavailable_are_reported_as_unknown(monkeypatch
         def nvmlDeviceGetCount(self):
             return 0
 
+    monkeypatch.setattr(telemetry, "apple_unified_gpu", lambda ram: None)  # these tests run on Macs too
     monkeypatch.setattr(telemetry, "pynvml", NoGpuNvml())
     assert Collector().sample()["gpu_error"] == "No NVIDIA GPU was reported by NVML."
 
@@ -177,6 +178,72 @@ def test_device_absence_and_nvml_unavailable_are_reported_as_unknown(monkeypatch
 
     monkeypatch.setattr(telemetry, "pynvml", BrokenNvml())
     assert "unavailable" in Collector().sample()["gpu_error"]
+
+
+def test_an_apple_silicon_mac_reports_its_shared_memory_as_one_gpu(monkeypatch):
+    class BrokenNvml:
+        def nvmlInit(self):
+            raise RuntimeError("no NVIDIA driver")
+
+    monkeypatch.setattr(telemetry, "pynvml", BrokenNvml())
+    monkeypatch.setattr(telemetry.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(telemetry.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(telemetry, "apple_chip_name", lambda: "Apple M5 Max")
+    result = Collector().sample()
+    assert result["gpu_error"] is None and len(result["gpus"]) == 1
+    gpu = result["gpus"][0]
+    assert gpu["id"] == "apple-unified-memory" and gpu["index"] == 0 and gpu["error"] is None
+    assert gpu["name"] == "Apple M5 Max (unified memory)" and gpu["memory"] == result["ram"]
+
+
+def test_only_apple_silicon_gets_the_shared_memory_gpu(monkeypatch):
+    ram = memory_values(100, 50, 50)
+    monkeypatch.setattr(telemetry.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(telemetry.platform, "machine", lambda: "x86_64")
+    assert telemetry.apple_unified_gpu(ram) is None  # an Intel Mac has no shared-memory GPU to report
+    monkeypatch.setattr(telemetry.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(telemetry.platform, "machine", lambda: "arm64")
+    assert telemetry.apple_unified_gpu(ram) is None
+    monkeypatch.setattr(telemetry.platform, "system", lambda: "Darwin")
+    assert telemetry.apple_unified_gpu(None) is None  # no RAM reading, no device
+
+
+def test_on_a_mac_used_memory_is_everything_that_is_not_available(monkeypatch):
+    mem = SimpleNamespace(total=64 * 2**30, available=30 * 2**30, used=13 * 2**30)  # psutil's used leaves out mapped weights
+    monkeypatch.setattr(telemetry.psutil, "virtual_memory", lambda: mem)
+    monkeypatch.setattr(telemetry, "apple_unified_gpu", lambda ram: None)
+    monkeypatch.setattr(telemetry, "darwin_vm_pages", lambda: None)  # the kernel's counters are not readable here
+    monkeypatch.setattr(telemetry.platform, "system", lambda: "Darwin")
+    assert Collector().sample()["ram"]["used_bytes"] == 34 * 2**30
+    monkeypatch.setattr(telemetry.platform, "system", lambda: "Windows")
+    assert Collector().sample()["ram"]["used_bytes"] == 13 * 2**30
+
+
+def fake_pages(**gib):
+    """The kernel's counters for a Mac with 1 GiB pages, in GiB."""
+    stats = telemetry._VMStatistics64()
+    for name, value in gib.items():
+        setattr(stats, name, value)
+    return lambda: (stats, 2**30)
+
+
+def test_a_macs_cached_files_are_available_and_only_app_wired_and_compressed_memory_is_used():
+    # 10 GiB of application memory (1 of it purgeable), 4 wired, 2 compressed; 5 GiB of cached files, 7 inactive.
+    pages = fake_pages(internal=10, purgeable=1, wire=4, compressor=2, external=5, inactive=7)
+    assert telemetry.darwin_memory(64 * 2**30, pages) == (49 * 2**30, 15 * 2**30)
+
+
+def test_a_models_memory_mapped_weights_are_cache_not_used_memory():
+    # 27 GiB of a running model's mapped file is `external`: the process's own memory is the only part that is used.
+    idle = fake_pages(internal=10, wire=4, compressor=2, external=5)
+    loaded = fake_pages(internal=22, wire=4, compressor=2, external=32)
+    assert telemetry.darwin_memory(64 * 2**30, idle)[1] == 16 * 2**30
+    assert telemetry.darwin_memory(64 * 2**30, loaded)[1] == 28 * 2**30  # 12 GiB more, not 39
+
+
+def test_unreadable_or_impossible_mac_counters_fall_back():
+    assert telemetry.darwin_memory(64 * 2**30, lambda: None) is None
+    assert telemetry.darwin_memory(8 * 2**30, fake_pages(internal=10, wire=4)) is None  # more used than exists
 
 
 def test_monitor_exposes_configured_host_role_and_detected_runtime_scope(monkeypatch):

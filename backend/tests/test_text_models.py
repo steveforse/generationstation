@@ -10,7 +10,7 @@ from generationstation.text_models import TextModelBroker
 
 class Plugin:
     def __init__(self, chat=False, asks=False):
-        self.chat, self.text_model_jobs, self.records = chat, asks, {}
+        self.chats, self.text_model_jobs, self.records = chat, asks, {}
 
     def job_status(self, runtime, job_id):
         return self.records.get(job_id)

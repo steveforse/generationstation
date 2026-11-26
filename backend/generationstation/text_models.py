@@ -104,7 +104,7 @@ class TextModelBroker:
 
     def _provide(self, owner, job_id, request):
         states = self.store.runtime_states()
-        chat_models = [m for m, r in self.catalog.runtimes.items() if self.catalog.plugin(m).chat]
+        chat_models = [m for m, r in self.catalog.runtimes.items() if self.catalog.plugin(m).chats]
         wanted = request.get("model") or "auto"
         if wanted == "auto":
             running = [m for m in chat_models if (states.get(m) or {}).get("state") == "ready"]
@@ -125,7 +125,11 @@ class TextModelBroker:
         preset = runtime.presets.get(launch.get("preset")) or runtime.presets[runtime.default_preset]
         plugin = self.catalog.plugin(wanted)
         served = self.chat._served_model(runtime) if self.chat is not None else "default"
-        return {"base_url": f"http://127.0.0.1:{runtime.port}", "model": served, "model_id": wanted, "name": runtime.name,
+        chat_thinking = getattr(plugin, "chat_thinking", None)
+        thinking = (chat_thinking(preset, launch.get("gpus") or preset.gpus) if chat_thinking else None) or {}
+        # A model that always thinks (Inkling) cannot be told "no thinking"; its lowest level keeps the thinking brief.
+        lowest = thinking["levels"][0] if thinking.get("levels") and not thinking.get("off") else None
+        return {"thinking_floor": lowest, "base_url": f"http://127.0.0.1:{runtime.port}", "model": served, "model_id": wanted, "name": runtime.name,
                 "sampling": plugin.chat_sampling(preset, launch.get("gpus") or preset.gpus),
                 "can_correct": wanted not in (getattr(owner, "no_correction_models", None) or [])}
 

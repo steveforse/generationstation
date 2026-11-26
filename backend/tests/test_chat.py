@@ -201,6 +201,24 @@ def test_a_tool_call_starts_a_job_and_the_model_then_replies(setup):
     assert context[3]["content"].startswith(f"Done. [result {job['id'][:8]}: sound recording from YuE2 songs")
 
 
+def test_a_turn_that_spends_every_round_on_tools_still_ends_with_an_answer(setup):
+    """Seen 2026-11-24: eight page reads in a row left the chat on a tool result and 'thinking' for ever."""
+    store, cat, generation, uploads = setup
+    call = {"index": 0, "id": "c", "function": {"name": "read_page", "arguments": json.dumps({"url": "https://x.test/"})}}
+    server = Server(*[[({"tool_calls": [call]}, "tool_calls")] for _ in range(8)],
+                    [({"content": "I could not find a good answer."}, "stop")])
+    chat = ChatManager(store, cat, generation, uploads, opener=server)
+    conversation = chat.create()
+    events = follow(chat.start(conversation["id"], "Find me a BBQ spot", []), timeout=20)
+    assert len(server.requests) == 9
+    assert "tools" not in server.requests[8]  # the last request offers none, so it can only answer
+    assert server.requests[8]["messages"][-1]["role"] == "user" and "all the tool calls" in server.requests[8]["messages"][-1]["content"]
+    last = [m for m in store.messages if m["role"] != "tool"][-1]
+    assert last["role"] == "assistant" and last["content"] == "I could not find a good answer." and last["status"] == "done"
+    assert not any(m["content"].startswith("You have used all") for m in store.messages)  # the nudge is never saved
+    assert [e for e, _ in events][-1] == "done"
+
+
 def test_a_refused_tool_call_is_reported_to_the_model(setup):
     store, cat, generation, uploads = setup
     name = tool_name("yue2", next(iter(get_plugin("yue2").modes), None))

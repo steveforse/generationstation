@@ -1,7 +1,12 @@
 """Samples this process's host. Never substitutes the planned desktop inventory."""
 import copy
+import ctypes
+import ctypes.util
+import functools
+import os
 import platform
 import socket
+import subprocess
 import threading
 import time
 from datetime import datetime, timezone
@@ -31,6 +36,75 @@ def environment_scope() -> str:
     return "host"
 
 
+@functools.cache
+def apple_chip_name() -> str:
+    try:
+        return subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True,
+                              timeout=2, check=False).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def apple_unified_gpu(ram: dict | None) -> dict | None:
+    """The one GPU of an Apple-silicon Mac, which shares system memory.
+
+    Its memory is the same pool as RAM, so it reports RAM's figures; a runtime preset on this host asks admission for
+    RAM only (an estimate with no `gpu_min_free_gib`) and the pool is counted once. None on any other host.
+    """
+    if platform.system() != "Darwin" or platform.machine() != "arm64" or ram is None:
+        return None
+    chip = apple_chip_name()
+    return {"id": "apple-unified-memory", "index": 0, "name": f"{chip or 'Apple silicon'} (unified memory)",
+            "memory": dict(ram), "error": None, "unified_memory": True}
+
+
+class _VMStatistics64(ctypes.Structure):
+    """Mach's vm_statistics64: the kernel's own page counters (the ones Activity Monitor reads)."""
+    _fields_ = [(name, ctypes.c_uint32) for name in ("free", "active", "inactive", "wire")] + \
+        [(name, ctypes.c_uint64) for name in ("zero_fill", "reactivations", "pageins", "pageouts", "faults",
+                                              "cow_faults", "lookups", "hits", "purges")] + \
+        [("purgeable", ctypes.c_uint32), ("speculative", ctypes.c_uint32)] + \
+        [(name, ctypes.c_uint64) for name in ("decompressions", "compressions", "swapins", "swapouts")] + \
+        [(name, ctypes.c_uint32) for name in ("compressor", "throttled", "external", "internal")] + \
+        [("uncompressed_in_compressor", ctypes.c_uint64)]
+
+
+def darwin_vm_pages() -> tuple[_VMStatistics64, int] | None:
+    """The kernel's page counters and the page size, or None when they cannot be read."""
+    try:
+        lib = ctypes.CDLL(ctypes.util.find_library("System"))
+        lib.mach_host_self.restype = ctypes.c_uint32
+        lib.host_statistics64.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_void_p,
+                                          ctypes.POINTER(ctypes.c_uint32)]
+        stats = _VMStatistics64()
+        count = ctypes.c_uint32(ctypes.sizeof(stats) // 4)
+        if lib.host_statistics64(lib.mach_host_self(), 4, ctypes.byref(stats), ctypes.byref(count)) != 0:  # HOST_VM_INFO64
+            return None
+        return stats, os.sysconf("SC_PAGE_SIZE")
+    except (OSError, AttributeError, ValueError):
+        return None
+
+
+def darwin_memory(total: int, pages=None) -> tuple[int, int] | None:
+    """(available, used) bytes on a Mac, counting file cache as available.
+
+    Used is what Activity Monitor calls Memory Used: application memory (less purgeable pages) plus wired plus
+    compressed. Files held in memory (`external` pages), including the memory-mapped weights of a model that is
+    running, are cache the system gives back on demand, so they are not used. psutil's "available" instead adds every
+    inactive page, which includes inactive application memory that macOS can free only by compressing or swapping it,
+    and leaves active cache out; it read the Mac as roomier than the engines (which count what is free without
+    swapping) did.
+    """
+    read = (pages or darwin_vm_pages)()
+    if read is None:
+        return None
+    stats, page = read
+    used = (max(stats.internal - stats.purgeable, 0) + stats.wire + stats.compressor) * page
+    if not 0 <= used <= total:
+        return None
+    return total - used, used
+
+
 class Collector:
     def __init__(self):
         self.nvml_ready = False
@@ -39,7 +113,15 @@ class Collector:
         result = {"ram": None, "ram_error": None, "gpus": [], "gpu_error": None}
         try:
             ram = psutil.virtual_memory()
-            result["ram"] = memory_values(ram.total, ram.available, ram.used)
+            available, used = ram.available, ram.used
+            if platform.system() == "Darwin":
+                # psutil's "used" on macOS is active plus wired pages: it leaves out compressed and memory-mapped
+                # pages, so the chart showed a Mac as half empty while admission saw it short. Read the kernel's
+                # counters (file cache is available, compressed memory is used); failing that, count everything
+                # psutil does not call available as used.
+                counted = darwin_memory(ram.total)
+                available, used = counted if counted else (ram.available, ram.total - ram.available)
+            result["ram"] = memory_values(ram.total, available, used)
         except Exception:  # noqa: BLE001 - isolate provider failures as unknown telemetry.
             result["ram_error"] = "System memory telemetry is unavailable."
         try:
@@ -66,6 +148,10 @@ class Collector:
                 result["gpus"].append(gpu)
         except Exception:  # noqa: BLE001 - NVML errors are surfaced as unknown capacity.
             result["gpu_error"] = "NVIDIA telemetry is unavailable. Check the host driver and NVML support."
+        if result["gpu_error"] is not None and not result["gpus"]:
+            apple = apple_unified_gpu(result["ram"])
+            if apple is not None:  # an Apple-silicon Mac has no NVML, and its GPU shares RAM
+                result["gpus"], result["gpu_error"] = [apple], None
         return result
 
     def close(self):

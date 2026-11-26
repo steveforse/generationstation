@@ -1,7 +1,10 @@
 import os
+import sys
 
 import psutil
+import pytest
 
+from generationstation import process_memory
 from generationstation.process_memory import VRAM_UNAVAILABLE, ProcessMemoryCollector, process_tree
 from generationstation.telemetry import Monitor
 from tests.test_telemetry import settings
@@ -92,3 +95,22 @@ def test_a_model_running_in_wsl_is_credited_with_the_vm_process_memory():
     assert result["fish_drama3"]["gpus"] == {"GPU-a": 24 * 2**30 + 2**20}
     assert result["other"]["gpus"] == {"GPU-a": 2**20}  # only the model that declares the helper
     assert "stopped_model" not in result
+
+
+def test_a_macs_process_memory_is_its_physical_footprint_not_its_resident_size(monkeypatch):
+    class Proc:
+        pid = 4242
+
+        def memory_info(self):
+            return type("Info", (), {"rss": 600 * 2**20})()
+
+    monkeypatch.setattr(process_memory, "darwin_footprint", lambda pid: 16 * 2**30 if pid == 4242 else None)
+    assert process_memory.tree_ram_bytes([Proc()]) == 16 * 2**30
+    monkeypatch.setattr(process_memory, "darwin_footprint", lambda pid: None)  # any other host: the working set
+    assert process_memory.tree_ram_bytes([Proc()]) == 600 * 2**20
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="reads macOS's libproc")
+def test_the_footprint_of_a_live_process_is_at_least_its_resident_size():
+    footprint = process_memory.darwin_footprint(os.getpid())
+    assert footprint is not None and footprint >= psutil.Process().memory_info().rss * 0.5

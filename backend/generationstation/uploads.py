@@ -16,9 +16,11 @@ KINDS = {
     "image": {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"},
     "video": {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".m4v": "video/mp4"},
     "audio": {".wav": "audio/wav", ".mp3": "audio/mpeg", ".flac": "audio/flac", ".m4a": "audio/mp4", ".ogg": "audio/ogg"},
+    # A transcript someone already has (a Zoom .vtt or .txt, an .srt, notes): text, UTF-8.
+    "transcript": {".txt": "text/plain", ".md": "text/markdown", ".vtt": "text/vtt", ".srt": "application/x-subrip"},
 }
 # Video and audio allow an hour-long meeting recording (a Zoom MP4 of an hour is often 300-800 MB).
-MAX_BYTES = {"image": 25 * 1024**2, "video": 2048 * 1024**2, "audio": 600 * 1024**2}
+MAX_BYTES = {"image": 25 * 1024**2, "video": 2048 * 1024**2, "audio": 600 * 1024**2, "transcript": 20 * 1024**2}
 UPLOAD_ID = re.compile(r"^[0-9a-f]{32}$")
 KEEP_SECONDS = 24 * 3600
 
@@ -54,7 +56,20 @@ def _looks_like(suffix: str, head: bytes) -> bool:
         return head.startswith(b"fLaC")
     if suffix == ".ogg":
         return head.startswith(b"OggS")
+    if suffix in KINDS["transcript"]:
+        return _looks_like_text(head)
     return False
+
+
+def _looks_like_text(head: bytes) -> bool:
+    """UTF-8 text (an optional byte-order mark is fine): no NUL bytes, and no bad bytes before a cut-off last character."""
+    if b"\x00" in head:
+        return False
+    try:
+        head.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        return exc.start >= len(head) - 3 and exc.reason == "unexpected end of data"
+    return True
 
 
 def safe_name(name: str) -> str:

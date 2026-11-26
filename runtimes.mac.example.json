@@ -1,0 +1,287 @@
+{
+  "runtimes": {
+    "qwen38_27b": {
+      "kind": "llm",
+      "name": "Qwen3.8 27B",
+      "description": "Dense 27B model that can think or answer straight away.",
+      "workload": "text",
+      "port": 8164,
+      "ready_timeout_seconds": 600,
+      "stop_timeout_seconds": 30,
+      "default_preset": "main",
+      "presets": {
+        "main": {
+          "name": "Qwen3.8 27B (4-bit)",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "settings": {},
+          "estimate": {
+            "ram_gib": 20,
+            "gpu_min_free_gib": {}
+          },
+          "cards": {
+            "0": {
+              "engine": "omlx",
+              "executable": "/Users/YOU/ai/envs/omlx/bin/omlx",
+              "model_dir": "/Users/YOU/ai/models/llm27",
+              "estimate": {
+                "ram_gib": 20,
+                "gpu_min_free_gib": {}
+              }
+            }
+          },
+          "description": "Good quality. 16-29 tok/s. About 20 GiB of memory."
+        }
+      }
+    },
+    "flash_next": {
+      "kind": "llm",
+      "name": "Qwen3.8 Flash-Next",
+      "description": "Large mixture-of-experts model that stays fast for its size.",
+      "workload": "text",
+      "port": 8165,
+      "ready_timeout_seconds": 900,
+      "stop_timeout_seconds": 30,
+      "default_preset": "quality",
+      "presets": {
+        "fast": {
+          "name": "Gyro-S",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "settings": {},
+          "estimate": {
+            "ram_gib": 34,
+            "gpu_min_free_gib": {}
+          },
+          "cards": {
+            "0": {
+              "engine": "strata_mac",
+              "python": "/Users/YOU/ai/tools/Strata/terminal/.venv/bin/python",
+              "server_dir": "/Users/YOU/ai/tools/Strata/terminal",
+              "engine_config": "/Users/YOU/ai/tools/Strata/engine/strata-gyro-gyro-s.json",
+              "estimate": {
+                "ram_gib": 34,
+                "gpu_min_free_gib": {}
+              }
+            }
+          },
+          "description": "Good quality. 80-110 tok/s. About 34 GiB of memory."
+        },
+        "quality": {
+          "name": "Gyro-M",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "settings": {},
+          "estimate": {
+            "ram_gib": 38,
+            "gpu_min_free_gib": {}
+          },
+          "cards": {
+            "0": {
+              "engine": "strata_mac",
+              "python": "/Users/YOU/ai/tools/Strata/terminal/.venv/bin/python",
+              "server_dir": "/Users/YOU/ai/tools/Strata/terminal",
+              "engine_config": "/Users/YOU/ai/tools/Strata/engine/strata-gyro-gyro-m.json",
+              "estimate": {
+                "ram_gib": 38,
+                "gpu_min_free_gib": {}
+              },
+              "env": {
+                "STRATA_METAL_ARENA_GB": "26"
+              }
+            }
+          },
+          "description": "Better quality. 60-70 tok/s. About 38 GiB of memory."
+        },
+        "large": {
+          "name": "Gyro-L",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "settings": {},
+          "estimate": {
+            "ram_gib": 38,
+            "gpu_min_free_gib": {}
+          },
+          "cards": {
+            "0": {
+              "engine": "strata_mac",
+              "python": "/Users/YOU/ai/tools/Strata/terminal/.venv/bin/python",
+              "server_dir": "/Users/YOU/ai/tools/Strata/terminal",
+              "engine_config": "/Users/YOU/ai/tools/Strata/engine/strata-gyro-gyro-l.json",
+              "estimate": {
+                "ram_gib": 38,
+                "gpu_min_free_gib": {}
+              },
+              "env": {
+                "STRATA_METAL_ARENA_GB": "26"
+              }
+            }
+          },
+          "description": "Highest quality (matched M in our tests). 50-55 tok/s. About 38 GiB of memory."
+        }
+      }
+    },
+    "hy4_flash": {
+      "kind": "llm",
+      "name": "Tencent Hy4-Flash",
+      "description": "Large mixture-of-experts model from Tencent. Reads pictures.",
+      "workload": "text",
+      "port": 8169,
+      "ready_timeout_seconds": 900,
+      "stop_timeout_seconds": 30,
+      "default_preset": "main",
+      "presets": {
+        "main": {
+          "name": "SQ-64",
+          "description": "Good quality. 15-18 tok/s. About 36 GiB of memory.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "settings": {},
+          "estimate": {
+            "ram_gib": 36,
+            "gpu_min_free_gib": {}
+          },
+          "cards": {
+            "0": {
+              "engine": "strata_mac",
+              "python": "/Users/YOU/ai/tools/Strata-hy4/terminal/.venv/bin/python",
+              "server_dir": "/Users/YOU/ai/tools/Strata-hy4/terminal",
+              "engine_config": "/Users/YOU/ai/tools/Strata-hy4/strata-hy4-flash-sq-64.json",
+              "estimate": {
+                "ram_gib": 36,
+                "gpu_min_free_gib": {}
+              },
+              "env": {
+                "STRATA_CONTROL_INSTALL": "1",
+                "STRATA_INSTALL_DIR": "/Users/YOU/ai/tools/Strata-hy4",
+                "XDG_CONFIG_HOME": "/Users/YOU/ai/tools/Strata-hy4/.xdg/config",
+                "XDG_STATE_HOME": "/Users/YOU/ai/tools/Strata-hy4/.xdg/state",
+                "XDG_CACHE_HOME": "/Users/YOU/ai/tools/Strata-hy4/.xdg/cache",
+                "XDG_DATA_HOME": "/Users/YOU/ai/tools/Strata-hy4/.xdg/data",
+                "PIP_CACHE_DIR": "/Users/YOU/ai/tools/Strata-hy4/.pipcache",
+                "PYTHONNOUSERSITE": "1",
+                "STRATA_METAL_EXP_CACHE_GB": "36"
+              },
+              "sampling": {
+                "temperature": 0.9
+              },
+              "thinking_levels": [
+                "high",
+                "max"
+              ],
+              "thinking_default": "high",
+              "thinking_off": true
+            }
+          }
+        }
+      }
+    },
+    "inkling2": {
+      "kind": "llm",
+      "name": "Inkling 2 Mini",
+      "description": "Always thinks before it answers; lower effort levels shorten that on small jobs.",
+      "workload": "text",
+      "port": 8161,
+      "ready_timeout_seconds": 600,
+      "stop_timeout_seconds": 30,
+      "default_preset": "main",
+      "assistant": false,
+      "presets": {
+        "main": {
+          "name": "Inkling 2 Mini (oQ 4-bit)",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "settings": {},
+          "estimate": {
+            "ram_gib": 24,
+            "gpu_min_free_gib": {}
+          },
+          "cards": {
+            "0": {
+              "engine": "omlx",
+              "executable": "/Users/YOU/ai/envs/omlx/bin/omlx",
+              "model_dir": "/Users/YOU/ai/models/inkling2",
+              "estimate": {
+                "ram_gib": 24,
+                "gpu_min_free_gib": {}
+              },
+              "thinking_levels": [
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "max"
+              ],
+              "thinking_default": "low",
+              "thinking_off": false
+            }
+          },
+          "description": "Good quality. 60-90 tok/s. About 24 GiB of memory."
+        }
+      }
+    },
+    "meeting_notes": {
+      "kind": "meeting_notes",
+      "name": "Meeting notes",
+      "workload": "text",
+      "description": "A recording or transcript in; a transcript with speakers, a summary, action items and decisions out.",
+      "python": "/Users/YOU/workspace/generationstation/backend/.venv/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/meeting-notes",
+      "port": 8230,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 90,
+      "default_preset": "mac",
+      "default_text_model": "flash_next",
+      "presets": {
+        "mac": {
+          "name": "This Mac (MLX)",
+          "description": "Speech recognition and speaker detection run on this Mac, about 4 minutes per hour of recording.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "mlx",
+            "distro": "local",
+            "python": "/Users/YOU/ai/envs/meeting-worker/bin/python",
+            "segmentation_model": "/Users/YOU/ai/models/diar/sherpa-onnx-pyannote-segmentation-3-0/model.onnx",
+            "embedding_model": "/Users/YOU/ai/models/diar/nemo_en_titanet_small.onnx",
+            "asr_model": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit",
+            "diar_threshold": 0.9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    }
+  }
+}
