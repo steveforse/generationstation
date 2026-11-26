@@ -10,7 +10,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s | |
 | Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
 | Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
-| Songs: YuE2 through the MLX port (mlx-Yue) | |
+| Songs: YuE2 through the MLX port (mlx-Yue), and ACE-Step 1.5 (MIT, work use) | |
 | Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
 | Text models: Qwen3.8 27B, Qwen3.8 Flash-Next, Tencent Hy4-Flash, Inkling 2 Mini | The Basalt runtime and the Windows meeting engines (Nemotron, VibeVoice, DiariZen) |
 | Meeting notes: speaker detection, speech recognition, correction, notes, name reading from Zoom video, transcript editing | |
@@ -29,6 +29,7 @@ The Mac reports its shared memory as one pool (`apple-unified-memory`), counted 
 | `meeting_notes` speech steps | 6 GiB | about 3 GiB | about 4 minutes per hour of recording |
 | `qwen_image`, Qwen Image 2.1 Turbo (8-bit, through mflux) | 10 GiB, held only while a picture is made | 18 GB | 17-23 s for a 1024x1024 picture |
 | `yue2`, YuE2 3B (8-bit language model, through mlx-Yue) | 14 GiB | about 10 GB | 0.5-1.1 times the song's length |
+| `ace_step`, ACE-Step 1.5 turbo (MLX) | 22 GiB (14 GiB resident, 21 GiB peak at two minutes) | 10 GB | 30 s of music in 12 s, 2 min in 38 s |
 | `qwen_image` preset `qwen21`, the full Qwen Image 2.1 (8-bit) | 18 GiB, while a picture is made | 17 GB | about 100 s for 1024x1024 |
 | `z_image`, Z-Image Turbo (8-bit) | 9 GiB, while a picture is made | 10 GB | 16-22 s for 1024x1024 |
 | `qwen_image_2512`, Qwen-Image 2512 (8-bit) | 38 GiB, while a picture is made | 34 GB | about 3 min for 768x1152 |
@@ -46,7 +47,7 @@ A start is refused unless its estimate fits in the memory the Mac has available,
 
 ## Personal and work models
 
-The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2 and meeting notes are work use; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
+The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2, ACE-Step and meeting notes are work use; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
 
 ## Models page: sections and quality chart
 
@@ -221,6 +222,19 @@ $HF download mflux-community/qwen-image-2512-mflux-q8 --local-dir ~/ai/models/qw
 ```
 
 Qwen Image 2.1 full is the quality option next to Turbo: 15.8 GiB peak, 100 s for 1024x1024 at 30 steps. Z-Image Turbo (Tongyi-MAI, Apache-2.0) is the fast alternative: 7.5 GiB peak, 16-22 s. Qwen-Image 2512 (Apache-2.0) is a base model with a negative prompt and 20 guided steps. Even at 8 bits it peaks near 37 GiB and takes about 3 minutes for a portrait picture (4.5 minutes for 1024x1024); the 4-bit conversion still peaked near 29 GiB and was slower, so only start it with the other large models stopped.
+
+### ACE-Step 1.5 songs
+
+[ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) (MIT code and weights) makes songs with vocals, in 50+ languages, or instrumentals, from a style and lyrics. A 1.7B language model plans the song and a turbo diffusion model makes the audio, natively on MLX: 30 s of music took 12 s, 60 s took 17 s and 120 s took 38 s on an M5 Max, at about 14 GiB resident and 21 GiB peak for two minutes. In our one test the lyrics came back word for word; the research run found only some lines recovered at 30 s with different lyrics, so listen before relying on it for lyric-critical songs (the 4B planner, `acestep-5Hz-lm-4B`, is an extra download and untested). Leave the lyrics empty for an instrumental. No ranking of the open weights exists on the Artificial Analysis music arena, so the Music section has no chart.
+
+```sh
+git clone https://github.com/ace-step/ACE-Step-1.5 ~/ai/tools/ACE-Step-1.5
+uv venv ~/ai/envs/ace-step --python 3.12
+uv pip install --python ~/ai/envs/ace-step/bin/python -e ~/ai/tools/ACE-Step-1.5 soundfile pillow
+~/ai/envs/meeting-worker/bin/hf download ACE-Step/Ace-Step1.5 --local-dir ~/ai/tools/ACE-Step-1.5/checkpoints   # about 10 GB
+```
+
+Its training-data claim (licensed, royalty-free and synthetic data) is the vendor's own and unverified, so have the data reviewed before company use. HeartMuLa 3B (Apache-2.0) was also tested: its lyrics were better in a 30 s test, but it ran 3.3 times slower than real time through PyTorch and peaked at 24 GB, and its tokenizer file is Meta's Llama 3.2 one; it is not set up.
 
 ### Wan 2.2 video (mlx-video)
 

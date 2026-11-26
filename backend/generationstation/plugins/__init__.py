@@ -1,5 +1,6 @@
 """Model plugin registry. Add a plugin by writing a module here and listing it below."""
 from .basalt import BasaltPlugin
+from .ace_step import AceStepPlugin
 from .base import RuntimePlugin
 from .breeze_tts import BreezeTTSPlugin
 from .fish_drama3 import FishDrama3Plugin
@@ -18,6 +19,7 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     BasaltPlugin(),
     LLMPlugin(),
     YuE2Plugin(),
+    AceStepPlugin(),
     QwenImagePlugin(),
     MiniMaxH3Plugin(),
     H3VideoPlugin(),

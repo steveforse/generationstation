@@ -907,6 +907,46 @@
         "as_of": "2026-11-10",
         "note": "MiniMax H3, 29,257 votes. Read through the benchmarklist.com mirror of arena.ai (dated 2026-11-10). Rated on the hosted full-precision model, not the quantised build run here."
       }
+    },
+    "ace_step": {
+      "kind": "ace_step",
+      "name": "ACE-Step songs",
+      "workload": "music",
+      "description": "Songs with vocals, or instrumentals, from a style and lyrics (MIT). Fast: 30 s of music in about 10 s.",
+      "python": "/Users/YOU/ai/envs/ace-step/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/ace-step",
+      "port": 8280,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "ACE-Step 1.5 turbo (MLX)",
+          "description": "8 diffusion steps with the 1.7B planning model. About 14 GiB resident; two-minute songs peak near 21 GiB.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "repo_dir": "/Users/YOU/ai/tools/ACE-Step-1.5",
+            "steps": 8
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 22,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "MIT",
+        "code": "ACE-Step: MIT",
+        "note": "MIT code and weights, no territory or revenue clause found; the card says the music may be used commercially. The training-data claim (licensed, royalty-free and synthetic data) is the vendor's own and unverified, so legal review of the data is still advisable.",
+        "url": "https://huggingface.co/ACE-Step/Ace-Step1.5"
+      }
     }
   }
 }
