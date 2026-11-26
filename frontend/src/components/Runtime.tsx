@@ -836,9 +836,9 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
       </div></div></div>
     {open && <div className="runtime-details" id={detailsId}>
     {runtime.description && <p className="runtime-description">{runtime.description}</p>}
-    <LicenseDetails license={license} />
 
     <div className={`runtime-body ${aside ? 'runtime-body-split' : ''}`}><div className="runtime-controls">
+    <LicenseDetails license={license} />
     {Object.keys(runtime.presets).length > 1 && <fieldset className="runtime-choice" disabled={!stopped || pending}>
       <legend>Model</legend>
       {Object.entries(runtime.presets).map(([key, item]) => <label key={key} title={item.name} className={`runtime-option ${launch.preset === key ? 'runtime-option-on' : ''}`}><input type="radio" name={`${runtime.id}-preset`} checked={launch.preset === key} onChange={() => choosePreset(key)} /><span>{item.name}</span></label>)}
