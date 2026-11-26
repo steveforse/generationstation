@@ -12,6 +12,10 @@ import { href } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
 import type { JobFile, Operation, Runtime, RuntimeEstimate } from '../types'
 
+/** The Models page's licence filter: everything, what is fine for work, or what is personal use only. */
+const USE_FILTERS = [['', 'All'], ['work', 'Work use'], ['personal', 'Personal use only']] as const
+const usable = (filter: string, runtime: Runtime) => !filter || (filter === 'work' ? runtime.license?.use === 'work' || runtime.license?.use === 'conditions' : runtime.license?.use === 'personal')
+
 function Missing({ title, text }: { title: string; text: string }) {
   return <div className="empty-models"><div><strong>{title}</strong><p>{text}</p></div><a className="button button-secondary" href={href({ page: 'overview' })}>Back to Overview</a></div>
 }
@@ -36,9 +40,11 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
   const view = useHostView(state)
   const [estimates, setEstimates] = useState<Record<string, RuntimeEstimate | null>>({})
   const [focusId, setFocusId] = useState<string | null>(null)
+  const [useFilter, setUseFilter] = useState('')
   if (!host || !session) return <Missing title="Host not found" text="This host is no longer saved on this device." />
   // The sidebar's order: text models first, then speech, pictures, video and music.
-  const runtimes = groupByWorkload(state.runtimes ?? [], (runtime) => runtime.workload).flatMap((group) => group.items)
+  const allRuntimes = groupByWorkload(state.runtimes ?? [], (runtime) => runtime.workload).flatMap((group) => group.items)
+  const runtimes = allRuntimes.filter((runtime) => usable(useFilter, runtime))
   // Preview the model being worked on: the card last hovered or focused, else the first with an estimate.
   const previewId = focusId && estimates[focusId] ? focusId : runtimes.find((runtime) => estimates[runtime.id])?.id
   const previewEstimate = previewId ? estimates[previewId] : null
@@ -51,7 +57,12 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state)}</div><h1>Models</h1><p>Start and stop the model servers on {hostName(host, state)}. Each one holds RAM and VRAM while it runs.</p></div></section>
     {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={16} /></a></div>}
     <div className="models-layout"><div className="models-main">
-    {state.runtimes && runtimes.length === 0 && <div className="empty-models"><div><strong>No model servers</strong><p>This host does not list any model servers.</p></div></div>}
+    {allRuntimes.some((runtime) => runtime.license) && <div className="models-filter" role="group" aria-label="Show models by licence">
+      {USE_FILTERS.map(([key, label]) => <button key={key || 'all'} type="button" className={`button button-small ${useFilter === key ? 'button-primary' : 'button-secondary'}`} aria-pressed={useFilter === key} onClick={() => setUseFilter(key)}>{label}</button>)}
+      <span className="models-filter-note">Work use includes models with limits to check.</span>
+    </div>}
+    {state.runtimes && allRuntimes.length === 0 && <div className="empty-models"><div><strong>No model servers</strong><p>This host does not list any model servers.</p></div></div>}
+    {allRuntimes.length > 0 && runtimes.length === 0 && <div className="empty-models"><div><strong>No models match</strong><p>None of this host's models are marked for that use.</p></div></div>}
     {runtimes.map((runtime) => {
       const model = state.models?.find((item) => item.id === runtime.id)
       return <section className="model-server" key={runtime.id} aria-label={runtime.name} onMouseEnter={() => setFocusId(runtime.id)} onFocus={() => setFocusId(runtime.id)}>

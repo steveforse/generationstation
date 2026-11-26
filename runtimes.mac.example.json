@@ -36,6 +36,12 @@
           },
           "description": "Good quality. 16-29 tok/s. About 20 GiB of memory."
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "oMLX: Apache-2.0",
+        "url": "https://huggingface.co/mlx-community/Qwen3.8-27B-4bit"
       }
     },
     "flash_next": {
@@ -135,6 +141,13 @@
           },
           "description": "Highest quality (matched M in our tests). 50-55 tok/s. About 38 GiB of memory."
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Qwen Community License 1.0",
+        "code": "Strata: MIT",
+        "note": "Free to use, including commercially. A separate licence is needed only to run a Model-as-a-Service or AI work-assistant business; large products (100M monthly users or US$20M monthly revenue) must credit the model.",
+        "url": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next/blob/main/LICENSE"
       }
     },
     "hy4_flash": {
@@ -194,6 +207,13 @@
             }
           }
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Tencent Hy License 1.0 (Apache-2.0 with extra terms)",
+        "code": "Strata: MIT",
+        "note": "Apache-2.0 plus extra terms in section 10 for large Model-as-a-Service operators; ordinary internal use is not affected.",
+        "url": "https://huggingface.co/tencent/Hy4-flash/blob/main/LICENSE"
       }
     },
     "inkling2": {
@@ -242,6 +262,11 @@
           },
           "description": "Good quality. 60-90 tok/s. About 24 GiB of memory."
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "oMLX: Apache-2.0"
       }
     },
     "meeting_notes": {
@@ -281,6 +306,12 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "conditions",
+        "weights": "Qwen3-ASR: Apache-2.0",
+        "code": "sherpa-onnx and RapidOCR: Apache-2.0",
+        "note": "The speaker-detection models (pyannote segmentation, NeMo TitaNet) have their own licences, which have not been reviewed. The notes themselves come from whichever text model you pick."
       }
     },
     "qwen_image": {
@@ -336,6 +367,13 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "Qwen Research License (non-commercial)",
+        "code": "mflux: MIT",
+        "note": "Research and evaluation only; any commercial use needs a separate licence from Qwen. Use Qwen-Image 2512 or Z-Image Turbo for work.",
+        "url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE"
       }
     },
     "yue2": {
@@ -372,6 +410,13 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "CC BY-NC 4.0 (non-commercial)",
+        "code": "mlx-Yue: Apache-2.0",
+        "note": "Non-commercial use only.",
+        "url": "https://huggingface.co/m-a-p/YuE2-3B"
       }
     },
     "qwen3_tts": {
@@ -407,6 +452,12 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "mlx-audio: MIT",
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base"
       }
     },
     "omnivoice": {
@@ -440,6 +491,13 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "CC BY-NC (non-commercial); its audio tokenizer adds a 100,000-user cap",
+        "code": "mlx-audio: MIT",
+        "note": "Non-commercial use only.",
+        "url": "https://huggingface.co/k2-fsa/OmniVoice"
       }
     },
     "fish_drama3": {
@@ -473,6 +531,13 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "conditions",
+        "weights": "Fish Audio Community License 1.0",
+        "code": "mlx-audio: MIT",
+        "note": "Free while your annual revenue (you and your affiliates) is under US$500,000, and no hosted service for third parties. Output may not train other speech models.",
+        "url": "https://huggingface.co/fishaudio/drama-3"
       }
     },
     "fish_s2": {
@@ -506,6 +571,13 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "Fish Audio Research License",
+        "code": "mlx-audio: MIT",
+        "note": "Research and personal use only. The licence counts a company's internal operations as commercial use.",
+        "url": "https://huggingface.co/fishaudio/s2-pro"
       }
     },
     "breeze_tts": {
@@ -539,6 +611,13 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "BreezeBlue Research and Non-Commercial License",
+        "code": "mlx-audio: MIT",
+        "note": "Non-commercial use only, including no use for an organisation's internal operations.",
+        "url": "https://huggingface.co/BreezeBlue/Breeze-TTS-2"
       }
     },
     "wan_video": {
@@ -574,6 +653,12 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "mlx-video: MIT",
+        "url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B"
       }
     },
     "qwen_image_2512": {
@@ -612,6 +697,12 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "mflux: MIT",
+        "url": "https://huggingface.co/Qwen/Qwen-Image-2512"
       }
     },
     "z_image": {
@@ -647,6 +738,12 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "mflux: MIT",
+        "url": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo"
       }
     }
   }

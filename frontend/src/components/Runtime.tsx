@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Download, FileText, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, Pencil, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
 import { formatBytes } from '../api'
-import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeSetting, SettingValue, UploadRecord } from '../types'
+import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeLicense, RuntimeSetting, SettingValue, UploadRecord } from '../types'
 import { FilePicker, type FileItem } from './FilePicker'
 import { CropEditor, shapeAspect } from './CropEditor'
 import { estimateFit, isUnified } from './Resources'
@@ -694,6 +694,34 @@ export function JobModal({ open, onClose, title, children }: { open: boolean; on
   </dialog>
 }
 
+const LICENSE_WORD: Record<RuntimeLicense['use'], string> = { work: 'Work use', conditions: 'Check terms', personal: 'Personal use only' }
+const LICENSE_MEANING: Record<RuntimeLicense['use'], string> = {
+  work: 'Free for a company\'s own use as far as its licences say.',
+  conditions: 'Free for company use with limits to check, listed below.',
+  personal: 'Non-commercial or limited by territory: keep it to your own machine and your own use.',
+}
+
+/** The licence verdict as a small label on a model's card. A model with no licence recorded says so. */
+export function LicenseBadge({ license }: { license?: RuntimeLicense | null }) {
+  const use = license?.use ?? 'unreviewed'
+  return <span className={`license-badge license-${use}`} title={license ? `${LICENSE_MEANING[license.use]} Weights: ${license.weights}.` : 'No licence has been recorded for this model.'}>{license ? LICENSE_WORD[license.use] : 'Licence not reviewed'}</span>
+}
+
+/** The licence in the model's details: weights, code, what it allows and where to read it. A reading, not legal advice. */
+export function LicenseDetails({ license }: { license?: RuntimeLicense | null }) {
+  if (!license) return <section className="runtime-license" aria-label="Licence"><h3>Licence</h3><p>No licence has been recorded for this model. Read its terms before anyone else uses it.</p></section>
+  return <section className="runtime-license" aria-label="Licence">
+    <h3>Licence <LicenseBadge license={license} /></h3>
+    <dl>
+      <dt>Weights</dt><dd>{license.weights}</dd>
+      {license.code && <><dt>Code</dt><dd>{license.code}</dd></>}
+    </dl>
+    <p>{LICENSE_MEANING[license.use]}{license.note ? ` ${license.note}` : ''}</p>
+    {license.url && <p><a href={license.url} target="_blank" rel="noreferrer noopener">Read the licence <ArrowUpRight size={14} aria-hidden="true" /></a></p>}
+    <p className="runtime-license-caveat">This is a plain-words reading of the licences, not legal advice.</p>
+  </section>
+}
+
 export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, message, onRun, openHref, aside, usage, color, estimate, onEstimate }: {
   runtime: Runtime; model?: Model; host?: Host; fresh: boolean; pending: boolean; refusal?: Refusal; message?: string
   onRun: (runtime: Runtime, action: 'start' | 'stop', launch?: Launch) => Promise<void>
@@ -798,7 +826,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
     </div>
   </div>
   return <article className={`profile-card runtime-card ${open ? 'runtime-card-open' : ''}`}>
-    <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={20} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload}</span></div>
+    <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={20} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload}</span><LicenseBadge license={runtime.license} /></div>
       {summary}
       <div className="profile-actions runtime-head-actions">
         {stopped && <button className="button button-primary" disabled={!canStart} title={!fresh ? 'A fresh telemetry sample is required.' : !host?.loading_enabled ? host?.loading_reason : !valid ? 'Fix the highlighted settings first.' : undefined} onClick={() => void onRun(runtime, 'start', launch)}><ArrowUpRight size={16} />Start</button>}
@@ -807,6 +835,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
       </div></div></div>
     {open && <div className="runtime-details" id={detailsId}>
     {runtime.description && <p className="runtime-description">{runtime.description}</p>}
+    <LicenseDetails license={runtime.license} />
 
     <div className={`runtime-body ${aside ? 'runtime-body-split' : ''}`}><div className="runtime-controls">
     {Object.keys(runtime.presets).length > 1 && <fieldset className="runtime-choice" disabled={!stopped || pending}>

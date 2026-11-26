@@ -25,6 +25,20 @@ The browser can only choose a preset, choose GPUs from the preset's `allowed_gpu
 
 GPU indices are NVML/`nvidia-smi` order. Plugins that start CUDA programs should set `CUDA_DEVICE_ORDER=PCI_BUS_ID` so the indices match (Basalt does).
 
+Every `runtimes.json` entry should also carry a `license` block, which the Models page shows as a badge and in the model's details:
+
+```json
+"license": {
+  "use": "work",
+  "weights": "Apache-2.0",
+  "code": "mflux: MIT",
+  "note": "The terms that matter, in plain words.",
+  "url": "https://huggingface.co/..."
+}
+```
+
+`use` is `work` (free for a company's own use as far as the licences say), `conditions` (free with limits to check, such as a revenue cap or a ban on hosted services) or `personal` (non-commercial, or limited by territory, so keep it to your own machine). `weights` is required; `code`, `note` and `url` are optional. An entry without a block is shown as "Licence not reviewed". Read the licence text itself before recording a verdict, and record the clause that decides it in `note`. The verdict is a reading of the licence, not legal advice.
+
 ## Adding a plugin
 
 1. Create `backend/generationstation/plugins/<name>.py` with a `RuntimePlugin` subclass. Narrow `kind` with `Literal["<name>"]` in its runtime model.

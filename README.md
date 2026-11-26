@@ -21,6 +21,14 @@ You can browse the dashboard from any other machine on your network or tailnet; 
 
 Which of these a host offers depends on its `runtimes.json` and on the models installed there. No model weights are included in this repository.
 
+## Personal models and work models
+
+Some open-weight models may only be used non-commercially or outside certain countries, and some are free for a company's own use. Every model in the catalog records its licence (weights and code) with a verdict, and the Models page shows it as a badge and in the model's details. The filter above the cards narrows the list to **Work use** (free for company use, including models with limits to check) or **Personal use only**.
+
+- Run a personal copy on your own machine with everything, including the personal-use models.
+- For colleagues, keep a `runtimes.json` that lists only the work-appropriate models, or point them at a host where only those are started, and use the filter to see what is fine to use.
+- The verdicts are a plain-words reading of the licences, not legal advice. The details show which clause decides each one. A model with no recorded licence says "Licence not reviewed".
+
 ## How it fits together
 
 ```

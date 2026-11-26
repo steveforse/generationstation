@@ -80,6 +80,7 @@ function llmRuntimeFixture() {
     key, label, kind, default: value, minimum: null, maximum: null, unit: null, help: `${label} help`, options: null, advanced: false, ...extra,
   })
   return {
+    license: { use: 'work', weights: 'Apache-2.0', code: 'oMLX: Apache-2.0', note: 'Fine for company use.', url: 'https://example.com/license' },
     assistant: true,
     id: 'inkling2', kind: 'llm', plugin: 'Text model', name: 'Inkling 2 Mini', description: 'A small, fast model that reads pictures.', workload: 'text', port: 8161,
     default_preset: 'main', last_launch: null, chat: true, max_gpus: null,
@@ -127,6 +128,7 @@ function songRuntimeFixture() {
     key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
   })
   return {
+    license: { use: 'personal', weights: 'CC BY-NC 4.0 (non-commercial)', note: 'Non-commercial use only.' },
     id: 'yue2', kind: 'yue2', plugin: 'YuE2', name: 'YuE2 songs', description: 'Makes complete songs from lyrics and a style.', workload: 'music', port: 8170, default_preset: 'songs', last_launch: null, max_gpus: 1,
     presets: { songs: { name: 'YuE2 3B', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 24, gpu_min_free_gib: { 0: 14, 1: 14 } }, settings: [] } },
     generation: { output_kind: 'audio', inputs: [
@@ -1431,4 +1433,28 @@ test('the assistant answers with the page in mind and can start over', async ({ 
   // The panel stays open across pages and reloads on this device.
   await page.reload()
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
+})
+
+test('the Models page labels each model by licence, shows the terms, and filters work use from personal use', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, songs: true })
+  await go(page, '#/hosts/local/models')
+  const inkling = page.getByRole('region', { name: 'Inkling 2 Mini' })
+  const songs = page.getByRole('region', { name: 'YuE2 songs' })
+  await expect(inkling.getByText('Work use')).toBeVisible()
+  await expect(songs.getByText('Personal use only')).toBeVisible()
+  await openCard(page, 'YuE2 songs')
+  const licence = songs.getByRole('region', { name: 'Licence' })
+  await expect(licence.getByText('CC BY-NC 4.0 (non-commercial)')).toBeVisible()
+  await expect(licence.getByText('Non-commercial use only.')).toBeVisible()
+  await expect(licence.getByText('not legal advice')).toBeVisible()
+  const filter = page.getByRole('group', { name: 'Show models by licence' })
+  await filter.getByRole('button', { name: 'Work use' }).click()
+  await expect(inkling).toBeVisible()
+  await expect(songs).toHaveCount(0)
+  await filter.getByRole('button', { name: 'Personal use only' }).click()
+  await expect(songs).toBeVisible()
+  await expect(inkling).toHaveCount(0)
+  await filter.getByRole('button', { name: 'All' }).click()
+  await expect(inkling).toBeVisible()
+  await expect(songs).toBeVisible()
 })

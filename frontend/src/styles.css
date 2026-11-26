@@ -1066,3 +1066,20 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .transcript-time { padding-top: 8px; font-size: var(--fs-small); color: var(--text-3); font-variant-numeric: tabular-nums }
 .transcript-segment textarea { width: 100%; resize: vertical; line-height: 1.5 }
 @media (max-width: 720px) { .transcript-segment { grid-template-columns: 1fr } .transcript-time { padding-top: 0 } }
+
+.license-badge { display: inline-flex; align-items: center; height: 20px; margin-left: var(--sp-2); padding: 0 var(--sp-2); border-radius: var(--r-sm); background: var(--neutral-soft); color: var(--text-2); font-size: var(--fs-meta); font-weight: 600; line-height: 1; white-space: nowrap }
+.license-work { background: var(--success-soft); color: var(--success) }
+.license-conditions { background: var(--warning-soft); color: var(--warning) }
+.license-personal { background: var(--bg-accent-soft); color: var(--accent) }
+.models-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3) }
+.models-filter-note { font-size: var(--fs-meta); color: var(--text-3) }
+.runtime-license { max-width: 68ch; margin: 0 0 var(--sp-3) 52px; font-size: var(--fs-body); color: var(--text-2) }
+.runtime-license h3 { display: flex; align-items: center; margin: 0 0 var(--sp-1); font-size: var(--fs-body); font-weight: 600; color: var(--text) }
+.runtime-license h3 .license-badge { margin-left: var(--sp-2) }
+.runtime-license dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--sp-3); margin: 0 0 var(--sp-1) }
+.runtime-license dt { color: var(--text-3) }
+.runtime-license dd { margin: 0 }
+.runtime-license p { margin: var(--sp-1) 0 0 }
+.runtime-license-caveat { font-size: var(--fs-meta); color: var(--text-3) }
+@media (max-width: 700px) { .runtime-license { margin-left: 0 } }
+.profile-card-title .license-badge { align-self: flex-start; width: max-content; margin: var(--sp-1) 0 0 }

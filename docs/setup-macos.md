@@ -42,6 +42,10 @@ The target is a 64 GB Mac, which runs one large text model beside the meeting wo
 
 A start is refused unless its estimate fits in the memory the Mac has available, less 4 GiB of headroom and what other running models already reserve (see [Memory on a Mac](#memory-on-a-mac)).
 
+## Personal and work models
+
+The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS and Wan 2.2 are work use; meeting notes and Drama 3 have conditions to check; Qwen Image 2.1, YuE2, OmniVoice, S2 Pro and Breeze TTS 2 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
+
 ## 1. Install the basics
 
 - **Xcode command line tools** (`xcode-select --install`). Building oMLX also needs the Metal toolchain: `xcodebuild -downloadComponent MetalToolchain`.

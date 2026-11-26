@@ -32,7 +32,9 @@ export type JobFile = { name: string; kind: string; mime: string; original: stri
 /** A measured time for one result; the first whose conditions all match applies. */
 export type Timing = { seconds: number; first_seconds: number | null; when: Record<string, string>; preset: string | null; gpu: number | null; note: string | null }
 export type Generation = { output_kind: 'audio' | 'image' | 'video' | 'document'; inputs: InputField[]; modes?: GenerationMode[]; timings?: Timing[]; make_label?: string | null; result_noun?: string | null }
-export type Runtime = { id: string; kind: string; name: string; description?: string | null; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null; max_gpus?: number | null; generation?: Generation | null; chat?: boolean; /** The help assistant runs on this model. */ assistant?: boolean; /** Thinking levels the chat may ask for where the model last started (lowest first). */ thinking?: Thinking | null }
+/** What a model may be used for: free for company use, free with limits to check, or personal/non-commercial/territory-limited. */
+export type RuntimeLicense = { use: 'work' | 'conditions' | 'personal'; weights: string; code?: string | null; note?: string | null; url?: string | null }
+export type Runtime = { id: string; kind: string; name: string; description?: string | null; workload: string; port: number; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null; max_gpus?: number | null; generation?: Generation | null; license?: RuntimeLicense | null; chat?: boolean; /** The help assistant runs on this model. */ assistant?: boolean; /** Thinking levels the chat may ask for where the model last started (lowest first). */ thinking?: Thinking | null }
 export type Thinking = { levels: string[]; default: string | null; off: boolean }
 export type JobOutput = { name: string; mime: string; bytes: number }
 /** `details` is what the worker actually used (seed, steps, size, full prompt) and `seconds` taken; `launch` the model settings it ran with. */

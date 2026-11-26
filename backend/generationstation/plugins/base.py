@@ -129,6 +129,20 @@ class BasePreset(BaseModel):
         return self
 
 
+class RuntimeLicense(BaseModel):
+    """What a model may be used for, shown on the Models page. A reading of the licences, not legal advice.
+
+    use: "work" is free for a company's own use as far as the licences say; "conditions" is free with limits to check
+    (a revenue cap, a ban on hosted services); "personal" is non-commercial or limited by territory, so keep it to
+    your own machine and your own use."""
+    model_config = ConfigDict(extra="forbid")
+    use: Literal["work", "conditions", "personal"]
+    weights: str = Field(min_length=1, max_length=160, description="The model weights' licence, e.g. Apache-2.0.")
+    code: str | None = Field(default=None, max_length=160, description="The runtime code's licence.")
+    note: str | None = Field(default=None, max_length=700, description="The terms that matter, in plain words.")
+    url: str | None = Field(default=None, max_length=300, pattern=r"^https://", description="Where the licence is.")
+
+
 class BaseRuntime(BaseModel):
     """Fields every runtime entry has. Plugins subclass this and narrow `presets`."""
     model_config = ConfigDict(extra="forbid")
@@ -141,6 +155,7 @@ class BaseRuntime(BaseModel):
     stop_timeout_seconds: float = Field(default=30, gt=0, le=600)
     default_preset: str
     presets: dict[str, BasePreset] = Field(min_length=1)
+    license: RuntimeLicense | None = None
     # The text model the help assistant (the bubble on every page) runs on. At most one; a chat model.
     assistant: bool = False
 
