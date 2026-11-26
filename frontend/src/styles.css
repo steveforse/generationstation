@@ -1116,3 +1116,7 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .quality-table a { display: inline-flex; align-items: center; gap: 2px }
 @media (max-width: 700px) { .quality-row { grid-template-columns: minmax(0, 1fr) 4.5rem; row-gap: 2px } .quality-track { grid-column: 1 / -1; grid-row: 2 } .quality-value { grid-row: 1; grid-column: 2 } }
 .quality-unrated { margin: 0; font-size: var(--fs-meta); color: var(--text-3) }
+.quality-charts > summary { list-style: none }
+.quality-charts > summary::-webkit-details-marker { display: none }
+.quality-charts > summary::before { content: ''; align-self: center; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .12s }
+.quality-charts[open] > summary::before { transform: rotate(45deg) }
