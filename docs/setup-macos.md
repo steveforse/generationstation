@@ -28,6 +28,7 @@ The Mac reports its shared memory as one pool (`apple-unified-memory`), counted 
 | `meeting_notes` speech steps | 6 GiB | about 3 GiB | about 4 minutes per hour of recording |
 | `qwen_image`, Qwen Image 2.1 Turbo (8-bit, through mflux) | 10 GiB, held only while a picture is made | 18 GB | 17-23 s for a 1024x1024 picture |
 | `yue2`, YuE2 3B (8-bit language model, through mlx-Yue) | 14 GiB | about 10 GB | 0.5-1.1 times the song's length |
+| `qwen_image` preset `qwen21`, Qwen Image 2.1 full (8-bit) | 18 GiB, while a picture is made | 17 GB | about 100 s for 1024x1024 |
 | `qwen_image` preset `zimage`, Z-Image Turbo (8-bit) | 9 GiB, while a picture is made | 10 GB | 16-22 s for 1024x1024 |
 | `qwen_image` preset `qwen2512`, Qwen-Image 2512 (8-bit) | 38 GiB, while a picture is made | 34 GB | about 3 min for 768x1152 |
 | `wan_video`, Wan 2.2 TI2V 5B (8-bit) | 30 GiB, while a clip is made | 18 GB | about 70-100 s for a 1.4 s clip |
@@ -187,17 +188,18 @@ uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python -e . sou
 
 `prepare` leaves the decoder in the Hugging Face cache; copy or point `vae_dir` at it. The port checks the model folder strictly and refuses stray files (a `.cache` folder, a `vae` folder, a `.gitattributes`), so keep only the files it wrote there. The worker sets `MLX_ENABLE_TF32=0`, as the port documents.
 
-### Z-Image Turbo and Qwen-Image 2512
+### Qwen Image 2.1 (full), Z-Image Turbo and Qwen-Image 2512
 
-Both are presets of the same `qwen_image` model (pick one on the Models page); the worker passes the preset's `command`, `steps`, `guidance` and `base_model` to mflux.
+All three are presets of the same `qwen_image` model (pick one on the Models page); the worker passes the preset's `command`, `steps`, `guidance` and `base_model` to mflux.
 
 ```sh
 HF=~/ai/envs/meeting-worker/bin/hf
+$HF download mflux-community/qwen-image-2-1-mflux-q8 --local-dir ~/ai/models/qwen-image-mac/qwen-image-2-1-mflux-q8
 $HF download mflux-community/z-image-turbo-mflux-q8 --local-dir ~/ai/models/qwen-image-mac/z-image-turbo-mflux-q8
 $HF download mflux-community/qwen-image-2512-mflux-q8 --local-dir ~/ai/models/qwen-image-mac/qwen-image-2512-mflux-q8
 ```
 
-Z-Image Turbo (Tongyi-MAI, Apache-2.0) is the fast alternative: 7.5 GiB peak, 16-22 s. Qwen-Image 2512 (Apache-2.0) is a base model with a negative prompt and 20 guided steps. Even at 8 bits it peaks near 37 GiB and takes about 3 minutes for a portrait picture (4.5 minutes for 1024x1024); the 4-bit conversion still peaked near 29 GiB and was slower, so only start it with the other large models stopped.
+Qwen Image 2.1 full is the quality option next to Turbo: 15.8 GiB peak, 100 s for 1024x1024 at 30 steps. Z-Image Turbo (Tongyi-MAI, Apache-2.0) is the fast alternative: 7.5 GiB peak, 16-22 s. Qwen-Image 2512 (Apache-2.0) is a base model with a negative prompt and 20 guided steps. Even at 8 bits it peaks near 37 GiB and takes about 3 minutes for a portrait picture (4.5 minutes for 1024x1024); the 4-bit conversion still peaked near 29 GiB and was slower, so only start it with the other large models stopped.
 
 ### Wan 2.2 video (mlx-video)
 

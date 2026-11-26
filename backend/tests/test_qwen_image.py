@@ -72,7 +72,7 @@ def test_example_catalog_entry_is_valid():
 def test_mac_entry_uses_the_mflux_worker_and_one_unified_memory_device():
     catalog = parse_catalog(json.loads((ROOT / "runtimes.mac.example.json").read_text()))
     entry = catalog.runtimes["qwen_image"]
-    assert set(entry.presets) == {"mlx", "zimage", "qwen2512"} and entry.default_preset == "mlx"
+    assert set(entry.presets) == {"mlx", "qwen21", "zimage", "qwen2512"} and entry.default_preset == "mlx"
     assert QWEN.script_path(entry) == ROOT / "workers" / "qwen_image_mflux_worker.py"
     assert QWEN.script_path(entry).exists()
     preset = entry.presets["mlx"]

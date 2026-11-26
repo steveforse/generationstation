@@ -356,6 +356,27 @@
             "ram_gib": 38,
             "gpu_min_free_gib": {}
           }
+        },
+        "qwen21": {
+          "name": "Qwen Image 2.1 (MLX, 8-bit, best quality)",
+          "description": "The full model behind Turbo: 30 guided steps with a negative prompt, about 100 s per 1024x1024 picture and 16 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/qwen-image-2-1-mflux-q8",
+            "steps": 30,
+            "guidance": 5.0,
+            "negative": true
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 18,
+            "gpu_min_free_gib": {}
+          }
         }
       },
       "worker_script": "qwen_image_mflux_worker.py"
