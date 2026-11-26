@@ -123,6 +123,16 @@ function toneWav() {
   return buffer
 }
 
+/** Three speech models: two with an arena score (one an estimate) and one without. */
+function ratedSpeechFixtures() {
+  const quality = (score: number, estimated = false) => ({ metric: 'Speech arena Elo', score, estimated, source: 'https://example.com/arena', as_of: '2026-11-26', note: estimated ? 'Estimated from a sibling.' : 'From votes.' })
+  return [
+    { ...speechRuntimeFixture(), id: 'voice-a', name: 'Voice A', quality: quality(1278) },
+    { ...speechRuntimeFixture(), id: 'voice-b', name: 'Voice B', quality: quality(1104, true) },
+    { ...speechRuntimeFixture(), id: 'voice-c', name: 'Voice C' },
+  ]
+}
+
 function songRuntimeFixture() {
   const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
     key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
@@ -153,7 +163,7 @@ function meetingRuntimeFixture() {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; meeting?: boolean } = {}) {
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -163,7 +173,8 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : [])] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : [])] } }))
+  if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/estimate', (route) => {
     const body = route.request().postDataJSON() as { preset: string; settings: Record<string, unknown>; gpus: number[] }
@@ -393,7 +404,7 @@ async function signIn(page: Page, value = token, address?: string) {
   await page.getByRole('button', { name: 'Save and connect' }).click()
 }
 
-async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; meeting?: boolean } = {}) {
+async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean } = {}) {
   await installSseMock(page)
   const api = await installM2Api(page, options)
   const host = fixtureHost(label, stale)
@@ -1457,4 +1468,23 @@ test('the Models page labels each model by licence, shows the terms, and filters
   await filter.getByRole('button', { name: 'All' }).click()
   await expect(inkling).toBeVisible()
   await expect(songs).toBeVisible()
+})
+
+test('the Models page groups models by kind and charts their published quality scores', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, songs: true, rated: true })
+  await go(page, '#/hosts/local/models')
+  // One section per kind, in the sidebar's order.
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Text|Speech|Music)/ })).toHaveText(['Text1', 'Speech3', 'Music1'])
+  const speech = page.getByRole('region', { name: 'Speech' })
+  const chart = speech.getByRole('figure', { name: 'Speech arena Elo' })
+  await expect(chart).toBeVisible()
+  // Ranked high to low, with an estimate marked, and the unscored model named.
+  await expect(chart.getByRole('listitem')).toHaveText([/Voice A.*1278/, /Voice B.*1104.*est\./])
+  await expect(speech.getByText('No score yet: Voice C.')).toBeVisible()
+  await chart.getByRole('listitem').nth(1).hover()
+  await expect(chart.locator('.quality-detail')).toContainText('Voice B: 1104 (estimated). Estimated from a sibling.')
+  await chart.getByText('Table').click()
+  await expect(chart.getByRole('cell', { name: 'Estimate: Estimated from a sibling.' })).toBeVisible()
+  // A kind with one scored model has no chart.
+  await expect(page.getByRole('region', { name: 'Music' }).getByRole('figure')).toHaveCount(0)
 })

@@ -39,6 +39,21 @@ Every `runtimes.json` entry should also carry a `license` block, which the Model
 
 `use` is `work` (free for a company's own use as far as the licences say), `conditions` (free with limits to check, such as a revenue cap or a ban on hosted services) or `personal` (non-commercial, or limited by territory, so keep it to your own machine). `weights` is required; `code`, `note` and `url` are optional. A preset may carry its own `license` block, which overrides the model's for that version (the Windows meeting notes: Nemotron is work use, the DiariZen version is personal). On the Models page a model with several versions shows under each use its versions allow. An entry without a block is shown as "Licence not reviewed". Read the licence text itself before recording a verdict, and record the clause that decides it in `note`. The verdict is a reading of the licence, not legal advice.
 
+An entry or preset may also carry a `quality` block, a published score the Models page charts against the other models of the same kind:
+
+```json
+"quality": {
+  "metric": "Speech arena Elo (Artificial Analysis)",
+  "score": 1278,
+  "estimated": false,
+  "source": "https://...",
+  "as_of": "2026-11-26",
+  "note": "How it was found, or what it covers."
+}
+```
+
+Scores are compared only within the same `metric`, one chart per kind of model (text, speech, pictures, video, music) and per metric; a kind with fewer than two scored models has no chart, and models without a score are listed under it as "No score yet". Set `estimated` when the score is not published for the exact build run here (a quant, a smaller sibling), and say how it was derived in `note`; estimates are drawn hatched. A preset's `quality` overrides the model's for that version. Do not invent scores: every one needs a source or an explicit estimate method.
+
 ## Adding a plugin
 
 1. Create `backend/generationstation/plugins/<name>.py` with a `RuntimePlugin` subclass. Narrow `kind` with `Literal["<name>"]` in its runtime model.

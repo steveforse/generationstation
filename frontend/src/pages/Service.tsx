@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Activity, ArrowUpRight, ChevronDown, MemoryStick } from 'lucide-react'
 import { StatePill } from '../components/StatePill'
-import { groupByWorkload } from '../components/WorkloadIcon'
+import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
+import { QualityChart } from '../components/QualityChart'
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
 import { estimateFit, GpuCard, isUnified, modelColor, modelUsage, type Preview, ramSegments, ResourceCard } from '../components/Resources'
 import { fieldsFor, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
@@ -68,7 +69,10 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     </div>}
     {state.runtimes && allRuntimes.length === 0 && <div className="empty-models"><div><strong>No model servers</strong><p>This host does not list any model servers.</p></div></div>}
     {allRuntimes.length > 0 && runtimes.length === 0 && <div className="empty-models"><div><strong>No models match</strong><p>None of this host's models are marked for that use.</p></div></div>}
-    {runtimes.map((runtime) => {
+    {groupByWorkload(runtimes, (runtime) => runtime.workload).map((group) => <section className="models-group" key={group.key} aria-labelledby={`models-group-${group.key}`}>
+      <h2 className="models-group-heading" id={`models-group-${group.key}`}><WorkloadIcon workload={group.key} size={20} /><span>{group.label}</span><span className="models-group-count">{group.items.length}</span></h2>
+      <QualityChart runtimes={group.items} />
+      {group.items.map((runtime) => {
       const model = state.models?.find((item) => item.id === runtime.id)
       return <section className="model-server" key={runtime.id} aria-label={runtime.name} onMouseEnter={() => setFocusId(runtime.id)} onFocus={() => setFocusId(runtime.id)}>
         <RuntimeCard key={`${host.id}:${runtime.id}`} runtime={runtime} model={model} host={view.host} fresh={view.fresh} pending={state.pendingModelId === runtime.id}
@@ -79,7 +83,8 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
           onEstimate={(estimate) => setEstimates((current) => current[runtime.id] === estimate ? current : { ...current, [runtime.id]: estimate })}
           aside={<OperationHistory id={`history-${runtime.id}`} operations={state.operations.filter((operation) => operation.model_id === runtime.id && !operation.simulation)} title="History" text="Starts and stops of this model server." empty="No starts or stops yet." />} />
       </section>
-    })}
+      })}
+    </section>)}
     </div>
     {!!state.snapshot && state.connection !== 'idle' && <aside className="models-rail"><section className="resource-grid models-resources" aria-label={`${hostName(host, state)} resource usage`}>
       <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent error={view.host?.ram_error ?? undefined} kind="RAM" unified={isUnified(view.host)} stale={view.stale} segments={ramSegments(view.host, state.runtimes)} preview={ramPreview} legend />

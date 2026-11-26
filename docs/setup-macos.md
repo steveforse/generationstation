@@ -48,6 +48,20 @@ A start is refused unless its estimate fits in the memory the Mac has available,
 
 The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2 and meeting notes are work use; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
 
+## Models page: sections and quality chart
+
+The Models page is grouped like the sidebar (Text, Speech, Pictures, Video, Music). Above each group's cards, a bar chart ranks the models that have a published score on the same measure:
+
+| Group | Measure | Source |
+| --- | --- | --- |
+| Text | Intelligence Index v5 | Artificial Analysis |
+| Speech | Speech arena Elo | Artificial Analysis |
+| Pictures | Image arena Elo | Artificial Analysis |
+| Video | Text-to-video arena Elo | Arena AI (read through the benchmarklist.com mirror) |
+| Music | none: one model, so nothing to compare | |
+
+These are scores for the hosted, full-precision models, not for the quantised builds that run here, so they are a proxy. A hatched bar with "est." is an estimate: the score was not published for that exact build (every text quant, Qwen3-TTS, Qwen-Image 2512 and Wan 2.2 5B). Hover or focus a bar to see how it was derived, or open the Table under the chart for the sources. Hy4-Flash and OmniVoice have no score anywhere yet and are listed as such. Only a Mac template carries scores for now; the Windows template does not.
+
 ## 1. Install the basics
 
 - **Xcode command line tools** (`xcode-select --install`). Building oMLX also needs the Metal toolchain: `xcodebuild -downloadComponent MetalToolchain`.

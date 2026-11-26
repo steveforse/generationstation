@@ -122,6 +122,17 @@ class RuntimeLicense(BaseModel):
     url: str | None = Field(default=None, max_length=300, pattern=r"^https://", description="Where the licence is.")
 
 
+class RuntimeQuality(BaseModel):
+    """A published quality score for a model, charted on the Models page against others measured the same way."""
+    model_config = ConfigDict(extra="forbid")
+    metric: str = Field(min_length=1, max_length=80, description="What the score is, e.g. 'Arena Elo (TTS Arena)'.")
+    score: float
+    estimated: bool = Field(default=False, description="True when the score is not published for this exact build.")
+    source: str | None = Field(default=None, max_length=300, pattern=r"^https://", description="Where the score is published.")
+    as_of: str | None = Field(default=None, max_length=20, description="When the score was read, e.g. 2026-11-26.")
+    note: str | None = Field(default=None, max_length=500, description="How an estimate was made, or what the score covers.")
+
+
 class BasePreset(BaseModel):
     """Fields every preset has. Plugins subclass this to add their own (model path, flags)."""
     model_config = ConfigDict(extra="forbid")
@@ -133,6 +144,8 @@ class BasePreset(BaseModel):
     estimate: Estimate
     license: RuntimeLicense | None = Field(
         default=None, description="Overrides the model's licence for this preset, when versions differ.")
+    quality: RuntimeQuality | None = Field(
+        default=None, description="Overrides the model's quality score for this preset (for example a smaller quant).")
 
     @model_validator(mode="after")
     def check_gpus(self):
@@ -158,6 +171,7 @@ class BaseRuntime(BaseModel):
     default_preset: str
     presets: dict[str, BasePreset] = Field(min_length=1)
     license: RuntimeLicense | None = None
+    quality: RuntimeQuality | None = None
     # The text model the help assistant (the bubble on every page) runs on. At most one; a chat model.
     assistant: bool = False
 

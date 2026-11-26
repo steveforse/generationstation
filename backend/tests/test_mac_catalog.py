@@ -52,3 +52,22 @@ def test_a_preset_licence_overrides_the_models_for_that_version():
     windows = parse_catalog(json.loads((ROOT / "runtimes.example.json").read_text())).runtimes["meeting_notes"]
     uses = {key: (preset.license or windows.license).use for key, preset in windows.presets.items()}
     assert uses == {"nemotron": "work", "qwen": "personal"}
+
+
+def test_quality_scores_in_a_kind_of_model_share_one_metric_and_cite_a_source():
+    by_kind = {}
+    for entry in CATALOG.runtimes.values():
+        for score in [entry.quality, *(preset.quality for preset in entry.presets.values())]:
+            if score is not None:
+                assert score.source and score.as_of, entry.name
+                by_kind.setdefault(entry.workload, set()).add(score.metric)
+    # One metric per kind, so each chart has one axis; text has none until a score covers it.
+    assert all(len(metrics) == 1 for metrics in by_kind.values()), by_kind
+    assert set(by_kind) == {"text", "speech", "image", "video"}
+
+
+def test_scores_for_quantised_builds_are_marked_as_estimates():
+    flash = CATALOG.runtimes["flash_next"]
+    assert all(preset.quality.estimated for preset in flash.presets.values())
+    assert CATALOG.runtimes["qwen38_27b"].quality.estimated and CATALOG.runtimes["wan_video"].quality.estimated
+    assert not CATALOG.runtimes["fish_drama3"].quality.estimated
