@@ -46,7 +46,7 @@ A start is refused unless its estimate fits in the memory the Mac has available,
 
 ## Personal and work models
 
-The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS and Wan 2.2 are work use; meeting notes has conditions to check; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
+The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2 and meeting notes are work use; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
 
 ## 1. Install the basics
 
@@ -118,6 +118,7 @@ Things worth knowing:
 
 - Speaker detection is tuned for Zoom recordings (`diar_threshold` 0.9 in the template; lower splits one person into several, higher merges people).
 - For video, the speaker's name is read from the name tag at the bottom-left of the active speaker's tile. It needs the OCR packages above and `ffmpeg`. Google Meet has not been tried.
+- Licences, checked 2026-11-26: Qwen3-ASR Apache-2.0; pyannote segmentation 3.0 MIT; NVIDIA TitaNet-S Apache-2.0 (covered by the NeMo toolkit licence, per its NGC card); sherpa-onnx and RapidOCR (with its PaddleOCR models) Apache-2.0; mlx-audio and mlx-lm MIT; ffmpeg is run as a separate program. All permissive, so the meeting-notes pipeline is work use. The notes come from the text model you pick, which has its own licence (see the Models page). On Windows, the DiariZen speaker model (CC BY-NC 4.0) makes that engine personal use only; the Nemotron engine (OpenMDW-1.1) is not.
 - After you change `workers/` code, **unload** Meeting notes on the Models page and start it again. The worker is a long-running process and keeps the code it started with.
 
 ## 4. Text models

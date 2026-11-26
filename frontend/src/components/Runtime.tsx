@@ -806,6 +806,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
               : fits.every((fit) => fit.fits === true) ? { kind: 'yes', text: 'Fits' } : { kind: 'wait', text: 'Fit unknown' }
   const unified = isUnified(host) // one memory pool: no separate VRAM to show
   const usedVram = usage ? Object.values(usage.gpus).reduce((sum, bytes) => sum + bytes, 0) : 0
+  const license = preset?.license ?? runtime.license
   const summary = preset && <div className="runtime-summary">
     <fieldset className="runtime-chips" disabled={!stopped || pending}>
       <legend className="sr-only">GPUs</legend>
@@ -826,7 +827,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
     </div>
   </div>
   return <article className={`profile-card runtime-card ${open ? 'runtime-card-open' : ''}`}>
-    <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={20} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload}</span><LicenseBadge license={runtime.license} /></div>
+    <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={20} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload}</span><LicenseBadge license={license} /></div>
       {summary}
       <div className="profile-actions runtime-head-actions">
         {stopped && <button className="button button-primary" disabled={!canStart} title={!fresh ? 'A fresh telemetry sample is required.' : !host?.loading_enabled ? host?.loading_reason : !valid ? 'Fix the highlighted settings first.' : undefined} onClick={() => void onRun(runtime, 'start', launch)}><ArrowUpRight size={16} />Start</button>}
@@ -835,7 +836,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
       </div></div></div>
     {open && <div className="runtime-details" id={detailsId}>
     {runtime.description && <p className="runtime-description">{runtime.description}</p>}
-    <LicenseDetails license={runtime.license} />
+    <LicenseDetails license={license} />
 
     <div className={`runtime-body ${aside ? 'runtime-body-split' : ''}`}><div className="runtime-controls">
     {Object.keys(runtime.presets).length > 1 && <fieldset className="runtime-choice" disabled={!stopped || pending}>

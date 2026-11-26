@@ -14,7 +14,12 @@ import type { JobFile, Operation, Runtime, RuntimeEstimate } from '../types'
 
 /** The Models page's licence filter: everything, what is fine for work, or what is personal use only. */
 const USE_FILTERS = [['', 'All'], ['work', 'Work use'], ['personal', 'Personal use only']] as const
-const usable = (filter: string, runtime: Runtime) => !filter || (filter === 'work' ? runtime.license?.use === 'work' || runtime.license?.use === 'conditions' : runtime.license?.use === 'personal')
+/** The uses a model's versions allow: a model with several versions counts under each use one of them allows. */
+const usesOf = (runtime: Runtime) => new Set(Object.values(runtime.presets).map((preset) => (preset.license ?? runtime.license)?.use))
+const usable = (filter: string, runtime: Runtime) => {
+  const uses = usesOf(runtime)
+  return !filter || (filter === 'work' ? uses.has('work') || uses.has('conditions') : uses.has('personal'))
+}
 
 function Missing({ title, text }: { title: string; text: string }) {
   return <div className="empty-models"><div><strong>{title}</strong><p>{text}</p></div><a className="button button-secondary" href={href({ page: 'overview' })}>Back to Overview</a></div>
@@ -59,7 +64,7 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     <div className="models-layout"><div className="models-main">
     {allRuntimes.some((runtime) => runtime.license) && <div className="models-filter" role="group" aria-label="Show models by licence">
       {USE_FILTERS.map(([key, label]) => <button key={key || 'all'} type="button" className={`button button-small ${useFilter === key ? 'button-primary' : 'button-secondary'}`} aria-pressed={useFilter === key} onClick={() => setUseFilter(key)}>{label}</button>)}
-      <span className="models-filter-note">Work use includes models with limits to check.</span>
+      <span className="models-filter-note">Work use includes models with limits to check. A model with several versions shows under each use its versions allow.</span>
     </div>}
     {state.runtimes && allRuntimes.length === 0 && <div className="empty-models"><div><strong>No model servers</strong><p>This host does not list any model servers.</p></div></div>}
     {allRuntimes.length > 0 && runtimes.length === 0 && <div className="empty-models"><div><strong>No models match</strong><p>None of this host's models are marked for that use.</p></div></div>}

@@ -686,6 +686,13 @@
             "gpu_min_free_gib": {
               "0": 1
             }
+          },
+          "license": {
+            "use": "work",
+            "weights": "NVIDIA Nemotron 3.5 Transcribe: OpenMDW-1.1 (NVIDIA says it is ready for commercial use).",
+            "code": "vLLM: Apache-2.0. RapidOCR with its PaddleOCR models: Apache-2.0.",
+            "note": "The notes come from the text model you pick, which has its own licence.",
+            "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-NVFP4"
           }
         },
         "qwen": {
@@ -714,6 +721,13 @@
               "0": 1,
               "1": 1
             }
+          },
+          "license": {
+            "use": "personal",
+            "weights": "DiariZen speaker model (BUT-FIT): CC BY-NC 4.0, non-commercial. Qwen3-ASR: Apache-2.0.",
+            "code": "DiariZen and pyannote.audio: MIT. RapidOCR with its PaddleOCR models: Apache-2.0.",
+            "note": "The speaker model's weights are non-commercial because some of its training data is research-only. Use the Nemotron version for work.",
+            "url": "https://huggingface.co/BUT-FIT/diarizen-wavlm-large-s80-md"
           }
         }
       }

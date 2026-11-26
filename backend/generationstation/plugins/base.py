@@ -108,27 +108,6 @@ class Estimate(BaseModel):
     gpu_min_free_gib: dict[int, float] = Field(description="Free VRAM needed per GPU index before start.")
 
 
-class BasePreset(BaseModel):
-    """Fields every preset has. Plugins subclass this to add their own (model path, flags)."""
-    model_config = ConfigDict(extra="forbid")
-    name: str = Field(min_length=1, max_length=120)
-    description: str | None = Field(default=None, max_length=500, description="What this model is good at, for the UI.")
-    gpus: list[int] = Field(min_length=1, description="Default GPU indices, in NVML/PCI order.")
-    allowed_gpus: list[int] | None = None
-    settings: dict[str, SettingValue] = Field(default_factory=dict)
-    estimate: Estimate
-
-    @model_validator(mode="after")
-    def check_gpus(self):
-        if self.allowed_gpus is None:
-            self.allowed_gpus = list(self.gpus)
-        if not set(self.gpus) <= set(self.allowed_gpus):
-            raise ValueError("Default GPUs must be within allowed_gpus.")
-        if set(self.estimate.gpu_min_free_gib) - set(self.allowed_gpus):
-            raise ValueError("Estimates may only name allowed GPUs.")
-        return self
-
-
 class RuntimeLicense(BaseModel):
     """What a model may be used for, shown on the Models page. A reading of the licences, not legal advice.
 
@@ -141,6 +120,29 @@ class RuntimeLicense(BaseModel):
     code: str | None = Field(default=None, max_length=160, description="The runtime code's licence.")
     note: str | None = Field(default=None, max_length=700, description="The terms that matter, in plain words.")
     url: str | None = Field(default=None, max_length=300, pattern=r"^https://", description="Where the licence is.")
+
+
+class BasePreset(BaseModel):
+    """Fields every preset has. Plugins subclass this to add their own (model path, flags)."""
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500, description="What this model is good at, for the UI.")
+    gpus: list[int] = Field(min_length=1, description="Default GPU indices, in NVML/PCI order.")
+    allowed_gpus: list[int] | None = None
+    settings: dict[str, SettingValue] = Field(default_factory=dict)
+    estimate: Estimate
+    license: RuntimeLicense | None = Field(
+        default=None, description="Overrides the model's licence for this preset, when versions differ.")
+
+    @model_validator(mode="after")
+    def check_gpus(self):
+        if self.allowed_gpus is None:
+            self.allowed_gpus = list(self.gpus)
+        if not set(self.gpus) <= set(self.allowed_gpus):
+            raise ValueError("Default GPUs must be within allowed_gpus.")
+        if set(self.estimate.gpu_min_free_gib) - set(self.allowed_gpus):
+            raise ValueError("Estimates may only name allowed GPUs.")
+        return self
 
 
 class BaseRuntime(BaseModel):

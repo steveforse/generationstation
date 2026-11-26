@@ -157,6 +157,7 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
             "allowed_gpus": [{"index": i, "name": names.get(i, f"GPU {i}")} for i in preset.allowed_gpus],
             "settings": settings, "estimate": preset.estimate.model_dump(),
             "max_gpus": plugin.gpu_limit(preset), "card_notes": getattr(preset, "card_notes", {}) or {},
+            "license": preset.license.model_dump() if preset.license else None,
         }
     generation = None
     if plugin.generates:

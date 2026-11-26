@@ -37,7 +37,7 @@ Every `runtimes.json` entry should also carry a `license` block, which the Model
 }
 ```
 
-`use` is `work` (free for a company's own use as far as the licences say), `conditions` (free with limits to check, such as a revenue cap or a ban on hosted services) or `personal` (non-commercial, or limited by territory, so keep it to your own machine). `weights` is required; `code`, `note` and `url` are optional. An entry without a block is shown as "Licence not reviewed". Read the licence text itself before recording a verdict, and record the clause that decides it in `note`. The verdict is a reading of the licence, not legal advice.
+`use` is `work` (free for a company's own use as far as the licences say), `conditions` (free with limits to check, such as a revenue cap or a ban on hosted services) or `personal` (non-commercial, or limited by territory, so keep it to your own machine). `weights` is required; `code`, `note` and `url` are optional. A preset may carry its own `license` block, which overrides the model's for that version (the Windows meeting notes: Nemotron is work use, the DiariZen version is personal). On the Models page a model with several versions shows under each use its versions allow. An entry without a block is shown as "Licence not reviewed". Read the licence text itself before recording a verdict, and record the clause that decides it in `note`. The verdict is a reading of the licence, not legal advice.
 
 ## Adding a plugin
 

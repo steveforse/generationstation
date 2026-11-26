@@ -308,10 +308,11 @@
         }
       },
       "license": {
-        "use": "conditions",
-        "weights": "Qwen3-ASR: Apache-2.0",
-        "code": "sherpa-onnx and RapidOCR: Apache-2.0",
-        "note": "The speaker-detection models (pyannote segmentation, NeMo TitaNet) have their own licences, which have not been reviewed. The notes themselves come from whichever text model you pick."
+        "use": "work",
+        "weights": "Qwen3-ASR: Apache-2.0. Speaker detection: pyannote segmentation 3.0 (MIT) and NVIDIA TitaNet-S (Apache-2.0, the NeMo toolkit licence).",
+        "code": "sherpa-onnx and RapidOCR with its PaddleOCR models: Apache-2.0. mlx-audio and mlx-lm: MIT. ffmpeg runs as a separate program.",
+        "note": "Every speech, speaker and name-reading piece is permissively licensed. The notes themselves come from the text model you pick, which has its own licence; check it on its card.",
+        "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B"
       }
     },
     "qwen_image": {
