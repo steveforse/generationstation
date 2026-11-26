@@ -1120,3 +1120,5 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .quality-charts > summary::-webkit-details-marker { display: none }
 .quality-charts > summary::before { content: ''; align-self: center; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .12s }
 .quality-charts[open] > summary::before { transform: rotate(45deg) }
+.quality-tabs { display: flex; flex-wrap: wrap; gap: 6px }
+.quality-tabs small { margin-left: 6px; opacity: .7 }

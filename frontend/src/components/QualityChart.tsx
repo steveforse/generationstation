@@ -8,17 +8,26 @@ type Bar = { key: string; label: string; quality: RuntimeQuality }
 const versionName = (runtime: Runtime, presetName: string) =>
   presetName.toLowerCase().includes(runtime.name.toLowerCase()) ? presetName : `${runtime.name} · ${presetName}`
 
-/** One bar per model version that has a score (a preset's own score wins over the model's), grouped by metric. */
+/** One bar per model version and metric, grouped by metric. A version's own score for a metric replaces the model's for
+ * that metric; a metric no version overrides is drawn once for the model, since it applies to every version. */
 export function qualityBars(runtimes: Runtime[]): Map<string, Bar[]> {
   const byMetric = new Map<string, Bar[]>()
+  const scoresOf = (owner: { quality?: RuntimeQuality | null; rankings?: RuntimeQuality[] }) =>
+    new Map([owner.quality, ...(owner.rankings ?? [])].filter((score): score is RuntimeQuality => !!score).map((score) => [score.metric, score]))
+  const add = (metric: string, bar: Bar) => byMetric.set(metric, [...(byMetric.get(metric) ?? []), bar])
   for (const runtime of runtimes) {
-    for (const [key, preset] of Object.entries(runtime.presets)) {
-      const quality = preset.quality ?? runtime.quality
-      if (!quality) continue
-      // A model-level score applies to every version, which would draw the same bar once per version: draw it once.
-      if (!preset.quality && Object.keys(runtime.presets).indexOf(key) > 0) continue
-      const label = preset.quality && Object.keys(runtime.presets).length > 1 ? versionName(runtime, preset.name) : runtime.name
-      byMetric.set(quality.metric, [...(byMetric.get(quality.metric) ?? []), { key: `${runtime.id}:${key}`, label, quality }])
+    const shared = scoresOf(runtime)
+    const presets = Object.entries(runtime.presets).map(([key, preset]) => ({ key, preset, own: scoresOf(preset) }))
+    const metrics = new Set([...shared.keys(), ...presets.flatMap(({ own }) => [...own.keys()])])
+    for (const metric of metrics) {
+      if (!presets.some(({ own }) => own.has(metric))) {
+        add(metric, { key: `${runtime.id}:${presets[0].key}`, label: runtime.name, quality: shared.get(metric)! })
+        continue
+      }
+      for (const { key, preset, own } of presets) {
+        const quality = own.get(metric) ?? shared.get(metric)
+        if (quality) add(metric, { key: `${runtime.id}:${key}`, label: presets.length > 1 ? versionName(runtime, preset.name) : runtime.name, quality })
+      }
     }
   }
   return byMetric
@@ -70,18 +79,25 @@ function QualityBars({ metric, bars }: { metric: string; bars: Bar[] }) {
   </figure>
 }
 
-/** Ranked bars of the published quality scores of one kind of model. Models measured on different metrics get their own
- * chart, and a metric with a single model is not charted: one bar says nothing. */
+/** Ranked bars of the published quality scores of one kind of model, one ranking at a time: a button per metric switches
+ * between them. A metric with a single model is not offered: one bar says nothing. */
 export function QualityChart({ runtimes }: { runtimes: Runtime[] }) {
   const charts = [...qualityBars(runtimes)].filter(([, bars]) => bars.length > 1)
+  const [chosen, setChosen] = useState<string | null>(null)
+  const tabs = useId()
   if (charts.length === 0) return null
-  const unrated = runtimes.filter((runtime) => (runtime.workload !== 'text' || runtime.chat) && !runtime.quality && !Object.values(runtime.presets).some((preset) => preset.quality))
+  const [metric, bars] = charts.find(([name]) => name === chosen) ?? charts[0]
+  const scored = new Set(bars.map((bar) => bar.key.split(':')[0]))
+  const unrated = runtimes.filter((runtime) => (runtime.workload !== 'text' || runtime.chat) && !scored.has(runtime.id))
   // Folded by default: the cards are the page's subject, and the ranking is there when it is wanted.
   return <details className="quality-charts">
-    <summary><span>Quality ranking</span><small>{charts.map(([metric]) => metric).join(' · ')}</small></summary>
+    <summary><span>Quality ranking</span><small>{charts.map(([name]) => name).join(' · ')}</small></summary>
     <div className="quality-charts-body">
-      {charts.map(([metric, bars]) => <QualityBars key={metric} metric={metric} bars={bars} />)}
-      {unrated.length > 0 && <p className="quality-unrated">No score yet: {unrated.map((runtime) => runtime.name).join(', ')}.</p>}
+      {charts.length > 1 && <div className="quality-tabs" role="group" aria-label="Ranking">
+        {charts.map(([name, list]) => <button key={name} type="button" id={`${tabs}-${name}`} className={`button button-small ${name === metric ? 'button-primary' : 'button-secondary'}`} aria-pressed={name === metric} onClick={() => setChosen(name)}>{name}<small>{list.length}</small></button>)}
+      </div>}
+      <QualityBars key={metric} metric={metric} bars={bars} />
+      {unrated.length > 0 && <p className="quality-unrated">Not on this ranking: {unrated.map((runtime) => runtime.name).join(', ')}.</p>}
     </div>
   </details>
 }

@@ -52,16 +52,21 @@ The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B,
 
 ## Models page: sections and quality chart
 
-The Models page is grouped like the sidebar (Text, Speech, Pictures, Video, Music). Above each group's cards, a bar chart ranks the models that have a published score on the same measure:
+The Models page is grouped like the sidebar (Text, Speech, Pictures, Video, Music). Above each group's cards, a folded chart ranks the models that have a published score on the same measure:
+
+A group can offer several rankings (a model carries extra scores in `rankings`); buttons above the chart switch between them, and models missing from the chosen ranking are named under it.
 
 | Group | Measure | Source |
 | --- | --- | --- |
-| Text | Intelligence Index v5 | Artificial Analysis |
+| Text | Intelligence Index v5 | Artificial Analysis (independent; no score for Hy4-Flash) |
+| Text | LLM Stats score | llm-stats.com, an aggregate of mostly vendor-reported benchmarks (all four models) |
+| Text | DeepSWE v1.1 | Vendor-reported agentic coding scores (all four; harnesses differ, Hy4-Flash's is second-hand) |
+| Text | Arena text Elo | LMArena human votes, read through its Hugging Face dataset because arena.ai blocks scripts (Qwen3.8 27B and Inkling 2 Mini only) |
+| Text | LiveBench coding | LiveBench 2.0 release 2026-11-06, independent (Qwen3.8 27B and Inkling 2 Mini only) |
 | Speech | Speech arena Elo | Artificial Analysis |
 | Music | SongBench average (WildSongBench) | The YuE2 authors' model card, so vendor-run and scored by automatic metrics |
 | Pictures | Image arena Elo | Artificial Analysis |
 | Video | Text-to-video arena Elo | Arena AI (read through the benchmarklist.com mirror) |
-| Music | none: one model, so nothing to compare | |
 
 These are scores for the hosted, full-precision models, not for the quantised builds that run here, so they are a proxy. A hatched bar with "est." is an estimate: the score was not published for that exact build (every text quant, Qwen3-TTS, Qwen-Image 2512 and Wan 2.2 5B). Hover or focus a bar to see how it was derived, or open the Table under the chart for the sources. Hy4-Flash and OmniVoice have no score anywhere yet and are listed as such. Only a Mac template carries scores for now; the Windows template does not.
 

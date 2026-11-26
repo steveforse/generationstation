@@ -54,16 +54,17 @@ def test_a_preset_licence_overrides_the_models_for_that_version():
     assert uses == {"nemotron": "work", "qwen": "personal"}
 
 
-def test_quality_scores_in_a_kind_of_model_share_one_metric_and_cite_a_source():
-    by_kind = {}
+def test_quality_scores_cite_a_source_and_never_repeat_a_metric_for_one_model():
+    kinds = set()
     for entry in CATALOG.runtimes.values():
-        for score in [entry.quality, *(preset.quality for preset in entry.presets.values())]:
-            if score is not None:
+        for owner in [entry, *entry.presets.values()]:
+            scores = [score for score in [owner.quality, *owner.rankings] if score is not None]
+            for score in scores:
                 assert score.source and score.as_of, entry.name
-                by_kind.setdefault(entry.workload, set()).add(score.metric)
-    # One metric per kind, so each chart has one axis; text has none until a score covers it.
-    assert all(len(metrics) == 1 for metrics in by_kind.values()), by_kind
-    assert set(by_kind) == {"text", "speech", "image", "video", "music"}
+                kinds.add(entry.workload)
+            # Two scores on one metric would draw two bars for one model in the same ranking.
+            assert len({score.metric for score in scores}) == len(scores), entry.name
+    assert kinds == {"text", "speech", "image", "video", "music"}
 
 
 def test_scores_for_quantised_builds_are_marked_as_estimates():

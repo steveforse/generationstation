@@ -52,7 +52,7 @@ An entry or preset may also carry a `quality` block, a published score the Model
 }
 ```
 
-Scores are compared only within the same `metric`, one chart per kind of model (text, speech, pictures, video, music) and per metric; a kind with fewer than two scored models has no chart, and models without a score are listed under it as "No score yet". Set `estimated` when the score is not published for the exact build run here (a quant, a smaller sibling), and say how it was derived in `note`; estimates are drawn hatched. A preset's `quality` overrides the model's for that version. Do not invent scores: every one needs a source or an explicit estimate method.
+Scores are compared only within the same `metric`, one chart per kind of model (text, speech, pictures, video, music), one ranking per metric, with buttons to switch between rankings. A model's first score goes in `quality`; further scores on other metrics go in a `rankings` list of the same blocks (a model may not repeat a metric); a kind with fewer than two scored models has no chart, and models missing from the chosen ranking are listed under it as "Not on this ranking". Set `estimated` when the score is not published for the exact build run here (a quant, a smaller sibling), and say how it was derived in `note`; estimates are drawn hatched. A preset's `quality` overrides the model's for that version. Do not invent scores: every one needs a source or an explicit estimate method.
 
 ## Adding a plugin
 

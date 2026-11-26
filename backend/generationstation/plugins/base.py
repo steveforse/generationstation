@@ -146,6 +146,8 @@ class BasePreset(BaseModel):
         default=None, description="Overrides the model's licence for this preset, when versions differ.")
     quality: RuntimeQuality | None = Field(
         default=None, description="Overrides the model's quality score for this preset (for example a smaller quant).")
+    rankings: list[RuntimeQuality] = Field(
+        default_factory=list, description="Further scores on other metrics, charted as extra rankings. Per metric, these replace the model's score for this version.")
 
     @model_validator(mode="after")
     def check_gpus(self):
@@ -172,6 +174,8 @@ class BaseRuntime(BaseModel):
     presets: dict[str, BasePreset] = Field(min_length=1)
     license: RuntimeLicense | None = None
     quality: RuntimeQuality | None = None
+    rankings: list[RuntimeQuality] = Field(
+        default_factory=list, description="Further scores on other metrics, charted as extra rankings next to `quality`.")
     # The text model the help assistant (the bubble on every page) runs on. At most one; a chat model.
     assistant: bool = False
 

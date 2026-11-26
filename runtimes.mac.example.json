@@ -50,7 +50,41 @@
         "source": "https://artificialanalysis.ai/models/qwen3-8-27b",
         "as_of": "2026-11-26",
         "note": "ESTIMATE for the quantised build run here: Artificial Analysis scores the full-precision hosted model, and no score has been published for this quant. Full precision scores 20 at the highest reasoning setting (18 at medium). 4-bit usually costs 0-1 point (range 19-20)."
-      }
+      },
+      "rankings": [
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 43.2,
+          "estimated": true,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "DeepSWE v1.1 (vendor-reported)",
+          "score": 42.2,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-27B",
+          "as_of": "2026-11-26",
+          "note": "Agentic coding, reported by the vendor. Best of two harnesses (Claude Code, mini-SWE-agent) at xhigh reasoning. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1437.7,
+          "estimated": true,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, rank 85 in the 2026-11-22 snapshot (37,444 votes), read through LMArena's Hugging Face mirror because arena.ai blocks scripts. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 69.3,
+          "estimated": true,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0, run by the LiveBench team (independent). Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        }
+      ]
     },
     "flash_next": {
       "kind": "llm",
@@ -180,7 +214,25 @@
         "code": "Strata: MIT",
         "note": "Free to use, including commercially. A separate licence is needed only to run a Model-as-a-Service or AI work-assistant business; large products (100M monthly users or US$20M monthly revenue) must credit the model.",
         "url": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next/blob/main/LICENSE"
-      }
+      },
+      "rankings": [
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 47.02,
+          "estimated": true,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "DeepSWE v1.1 (vendor-reported)",
+          "score": 58.7,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
+          "as_of": "2026-11-26",
+          "note": "Agentic coding, reported by the vendor. Best of two harnesses (Claude Code, mini-SWE-agent) at xhigh reasoning. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        }
+      ]
     },
     "hy4_flash": {
       "kind": "llm",
@@ -246,7 +298,25 @@
         "code": "Strata: MIT",
         "note": "Apache-2.0 plus extra terms in section 10 for large Model-as-a-Service operators; ordinary internal use is not affected.",
         "url": "https://huggingface.co/tencent/Hy4-flash/blob/main/LICENSE"
-      }
+      },
+      "rankings": [
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 40.95,
+          "estimated": true,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "DeepSWE v1.1 (vendor-reported)",
+          "score": 64.6,
+          "estimated": true,
+          "source": "https://llmlearner.com/models/hy4-flash",
+          "as_of": "2026-11-26",
+          "note": "Agentic coding, reported by the vendor. Second-hand: Tencent's figure (Thinking High, with tools) as quoted by a mirror, harness not stated. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        }
+      ]
     },
     "inkling2": {
       "kind": "llm",
@@ -307,7 +377,41 @@
         "source": "https://artificialanalysis.ai/models/inkling-2-mini",
         "as_of": "2026-11-26",
         "note": "ESTIMATE for the quantised build run here: Artificial Analysis scores the full-precision hosted model, and no score has been published for this quant. Full precision scores 20 (20.1 on the vendor's card). The vendor's own checkpoint is already mixed NVFP4 and MXFP8, and this oQ4e build (about 4.9 bits per weight) keeps attention at 8 bits, so little loss is assumed."
-      }
+      },
+      "rankings": [
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 39.36,
+          "estimated": true,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "DeepSWE v1.1 (vendor-reported)",
+          "score": 48.2,
+          "estimated": true,
+          "source": "https://thinkingmachines.ai/model-card/inkling-2-mini",
+          "as_of": "2026-11-26",
+          "note": "Agentic coding, reported by the vendor. mini-swe-agent v2.4.6 only, so not like-for-like with the Qwen figures. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1343.7,
+          "estimated": true,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, rank 220 in the 2026-11-22 snapshot, read through LMArena's Hugging Face mirror. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 59.0,
+          "estimated": true,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0, run by the LiveBench team (independent). Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        }
+      ]
     },
     "meeting_notes": {
       "kind": "meeting_notes",

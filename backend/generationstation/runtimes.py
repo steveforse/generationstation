@@ -159,6 +159,7 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
             "max_gpus": plugin.gpu_limit(preset), "card_notes": getattr(preset, "card_notes", {}) or {},
             "license": preset.license.model_dump() if preset.license else None,
             "quality": preset.quality.model_dump() if preset.quality else None,
+            "rankings": [score.model_dump() for score in preset.rankings],
         }
     generation = None
     if plugin.generates:
@@ -175,7 +176,8 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
             "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation, "chat": plugin.chats,
             "assistant": bool(runtime.assistant and plugin.chats),
             "license": runtime.license.model_dump() if runtime.license else None,
-            "quality": runtime.quality.model_dump() if runtime.quality else None}
+            "quality": runtime.quality.model_dump() if runtime.quality else None,
+            "rankings": [score.model_dump() for score in runtime.rankings]}
 
 
 def _valid_crop(value: str) -> bool:

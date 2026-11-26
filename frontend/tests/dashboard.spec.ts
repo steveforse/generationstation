@@ -127,9 +127,9 @@ function toneWav() {
 function ratedSpeechFixtures() {
   const quality = (score: number, estimated = false) => ({ metric: 'Speech arena Elo', score, estimated, source: 'https://example.com/arena', as_of: '2026-11-26', note: estimated ? 'Estimated from a sibling.' : 'From votes.' })
   return [
-    { ...speechRuntimeFixture(), id: 'voice-a', name: 'Voice A', quality: quality(1278) },
+    { ...speechRuntimeFixture(), id: 'voice-a', name: 'Voice A', quality: quality(1278), rankings: [{ metric: 'Naturalness MOS', score: 4.4, estimated: false, source: 'https://example.com/mos', as_of: '2026-11-26', note: 'Listener ratings.' }] },
     { ...speechRuntimeFixture(), id: 'voice-b', name: 'Voice B', quality: quality(1104, true) },
-    { ...speechRuntimeFixture(), id: 'voice-c', name: 'Voice C' },
+    { ...speechRuntimeFixture(), id: 'voice-c', name: 'Voice C', rankings: [{ metric: 'Naturalness MOS', score: 4.1, estimated: false, source: 'https://example.com/mos', as_of: '2026-11-26' }] },
   ]
 }
 
@@ -1484,11 +1484,17 @@ test('the Models page groups models by kind and charts their published quality s
   await expect(chart).toBeVisible()
   // Ranked high to low, with an estimate marked, and the unscored model named.
   await expect(chart.getByRole('listitem')).toHaveText([/Voice A.*1278/, /Voice B.*1104.*est\./])
-  await expect(speech.getByText('No score yet: Voice C.')).toBeVisible()
+  await expect(speech.getByText('Not on this ranking: Voice C.')).toBeVisible()
   await chart.getByRole('listitem').nth(1).hover()
   await expect(chart.locator('.quality-detail')).toContainText('Voice B: 1104 (estimated). Estimated from a sibling.')
   await chart.getByText('Table').click()
   await expect(chart.getByRole('cell', { name: 'Estimate: Estimated from a sibling.' })).toBeVisible()
+  // A button switches to the other ranking, which has its own models and its own gap.
+  await speech.getByRole('button', { name: /Naturalness MOS/ }).click()
+  const mos = speech.getByRole('figure', { name: 'Naturalness MOS' })
+  await expect(mos.getByRole('listitem')).toHaveText([/Voice A.*4\.4/, /Voice C.*4\.1/])
+  await expect(speech.getByText('Not on this ranking: Voice B.')).toBeVisible()
+  await expect(chart).toHaveCount(0)
   // A kind with one scored model has no chart.
   await expect(page.getByRole('region', { name: 'Music' }).getByText('Quality ranking')).toHaveCount(0)
 })
