@@ -745,6 +745,47 @@
         "code": "mflux: MIT",
         "url": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo"
       }
+    },
+    "h3_video": {
+      "kind": "h3_video",
+      "name": "MiniMax H3 video",
+      "workload": "video",
+      "description": "Short clips with sound from a description or from first and last pictures, through the h3.c Metal engine. Personal use only: the H3 licence excludes the US, EU, UK and South Korea.",
+      "python": "/Users/YOU/ai/envs/mlx-video/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/h3-video",
+      "port": 8270,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "MiniMax H3 (Metal, SSD streaming)",
+          "description": "The original BF16 weights streamed from the SSD: about 11 GiB while a clip is made. A 5 s clip at 480p takes about 3 minutes as a draft.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "h3_dir": "/Users/YOU/ai/tools/h3.c",
+            "model_dir": "/Users/YOU/ai/models/minimax-h3/MiniMax-H3",
+            "ssd_streaming": true
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "MiniMax H3 Community License (excludes the US, EU, UK and South Korea)",
+        "code": "h3.c: MIT",
+        "note": "Rights are granted only outside the US, EU, UK and South Korea, and use there is not licensed. Keep it to your own machine.",
+        "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE"
+      }
     }
   }
 }

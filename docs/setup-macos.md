@@ -6,8 +6,9 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 
 | Works | Does not (needs an NVIDIA card) |
 | --- | --- |
-| Dashboard, API, database, chat, logs | Video with MiniMax H3 or HunyuanVideo 1.5 |
+| Dashboard, API, database, chat, logs | HunyuanVideo 1.5 |
 | Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s | |
+| Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
 | Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
 | Songs: YuE2 through the MLX port (mlx-Yue) | |
 | Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
@@ -31,6 +32,7 @@ The Mac reports its shared memory as one pool (`apple-unified-memory`), counted 
 | `qwen_image` preset `qwen21`, the full Qwen Image 2.1 (8-bit) | 18 GiB, while a picture is made | 17 GB | about 100 s for 1024x1024 |
 | `z_image`, Z-Image Turbo (8-bit) | 9 GiB, while a picture is made | 10 GB | 16-22 s for 1024x1024 |
 | `qwen_image_2512`, Qwen-Image 2512 (8-bit) | 38 GiB, while a picture is made | 34 GB | about 3 min for 768x1152 |
+| `h3_video`, MiniMax H3 (BF16 streamed from the SSD) | 14 GiB, while a clip is made | 134 GB | 5 s at 480p: about 3 min as a draft, 16 min at standard |
 | `wan_video`, Wan 2.2 TI2V 5B (8-bit) | 30 GiB, while a clip is made | 18 GB | about 70-100 s for a 1.4 s clip |
 | `qwen3_tts` (8-bit, three 1.7B models, one at a time) | 8 GiB | 9 GB | a few seconds per sentence |
 | `omnivoice` (bf16) | 6 GiB | 1.5 GB | a few seconds per sentence |
@@ -44,7 +46,7 @@ A start is refused unless its estimate fits in the memory the Mac has available,
 
 ## Personal and work models
 
-The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS and Wan 2.2 are work use; meeting notes and Drama 3 have conditions to check; Qwen Image 2.1, YuE2, OmniVoice, S2 Pro and Breeze TTS 2 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
+The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS and Wan 2.2 are work use; meeting notes and Drama 3 have conditions to check; Qwen Image 2.1, YuE2, OmniVoice, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
 
 ## 1. Install the basics
 
@@ -218,6 +220,17 @@ uv pip install --python ~/ai/envs/mlx-video/bin/python "git+https://github.com/B
 ```
 
 The worker needs `google/umt5-xxl`'s tokenizer in the Hugging Face cache (the first generation without `HF_HUB_OFFLINE` fetches it). HunyuanVideo 1.5 is not set up: the only MLX port found is gated, and a GGUF run through stable-diffusion.cpp took about 80 s per step at 480x272. Its licence also excludes the EU, UK and South Korea.
+
+### MiniMax H3 (h3.c)
+
+[h3.c](https://github.com/antirez/h3.c) (MIT) is a native Metal engine for MiniMax H3. With `--ssd-streaming` it reads the original BF16 transformer from the SSD and keeps two layers in memory, so a clip needs about 11 GiB instead of 60, at the price of speed: 5 s at 864x480 took 200 s as a draft (4 steps) and 16.5 min at standard (20 steps); a 0.9 s clip at 512x512 took 35 s. It makes sound with the video. The app offers the text and first/last-frame modes, which need only the FL2VA checkpoint (134 GB). **The H3 licence excludes the US, EU, UK and South Korea, so use it only where it grants rights, on your own machine.**
+
+```sh
+git clone https://github.com/antirez/h3.c ~/ai/tools/h3.c && make -C ~/ai/tools/h3.c -j8
+~/ai/envs/meeting-worker/bin/hf download MiniMaxAI/MiniMax-H3 --include "FL2VA/*" --local-dir ~/ai/models/minimax-h3/MiniMax-H3
+```
+
+The engine finds its Metal shaders in its own folder, so the worker runs it from there. It uses the `mlx-video` environment's Python only to run the worker.
 
 ## 6. Speech
 

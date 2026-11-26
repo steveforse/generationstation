@@ -4,6 +4,7 @@ from .base import RuntimePlugin
 from .breeze_tts import BreezeTTSPlugin
 from .fish_drama3 import FishDrama3Plugin
 from .fish_s2 import FishS2Plugin
+from .h3_video import H3VideoPlugin
 from .llm import LLMPlugin
 from .meeting_notes import MeetingNotesPlugin
 from .minimax_h3 import MiniMaxH3Plugin
@@ -19,6 +20,7 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     YuE2Plugin(),
     QwenImagePlugin(),
     MiniMaxH3Plugin(),
+    H3VideoPlugin(),
     OmniVoicePlugin(),
     Qwen3TTSPlugin(),
     FishDrama3Plugin(),

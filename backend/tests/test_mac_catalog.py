@@ -42,7 +42,7 @@ def test_every_mac_entry_records_its_licence(model_id):
 
 def test_models_that_are_not_for_company_use_are_marked_personal():
     use = {model_id: entry.license.use for model_id, entry in CATALOG.runtimes.items()}
-    for model_id in ("yue2", "omnivoice", "fish_s2", "breeze_tts", "qwen_image"):
+    for model_id in ("yue2", "omnivoice", "fish_s2", "breeze_tts", "qwen_image", "h3_video"):
         assert use[model_id] == "personal", model_id
     for model_id in ("qwen3_tts", "wan_video", "z_image", "qwen_image_2512"):
         assert use[model_id] == "work", model_id
