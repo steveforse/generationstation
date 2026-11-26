@@ -28,9 +28,9 @@ The Mac reports its shared memory as one pool (`apple-unified-memory`), counted 
 | `meeting_notes` speech steps | 6 GiB | about 3 GiB | about 4 minutes per hour of recording |
 | `qwen_image`, Qwen Image 2.1 Turbo (8-bit, through mflux) | 10 GiB, held only while a picture is made | 18 GB | 17-23 s for a 1024x1024 picture |
 | `yue2`, YuE2 3B (8-bit language model, through mlx-Yue) | 14 GiB | about 10 GB | 0.5-1.1 times the song's length |
-| `qwen_image` preset `qwen21`, Qwen Image 2.1 full (8-bit) | 18 GiB, while a picture is made | 17 GB | about 100 s for 1024x1024 |
-| `qwen_image` preset `zimage`, Z-Image Turbo (8-bit) | 9 GiB, while a picture is made | 10 GB | 16-22 s for 1024x1024 |
-| `qwen_image` preset `qwen2512`, Qwen-Image 2512 (8-bit) | 38 GiB, while a picture is made | 34 GB | about 3 min for 768x1152 |
+| `qwen_image` preset `qwen21`, the full Qwen Image 2.1 (8-bit) | 18 GiB, while a picture is made | 17 GB | about 100 s for 1024x1024 |
+| `z_image`, Z-Image Turbo (8-bit) | 9 GiB, while a picture is made | 10 GB | 16-22 s for 1024x1024 |
+| `qwen_image_2512`, Qwen-Image 2512 (8-bit) | 38 GiB, while a picture is made | 34 GB | about 3 min for 768x1152 |
 | `wan_video`, Wan 2.2 TI2V 5B (8-bit) | 30 GiB, while a clip is made | 18 GB | about 70-100 s for a 1.4 s clip |
 | `qwen3_tts` (8-bit, three 1.7B models, one at a time) | 8 GiB | 9 GB | a few seconds per sentence |
 | `omnivoice` (bf16) | 6 GiB | 1.5 GB | a few seconds per sentence |
@@ -190,7 +190,7 @@ uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python -e . sou
 
 ### Qwen Image 2.1 (full), Z-Image Turbo and Qwen-Image 2512
 
-All three are presets of the same `qwen_image` model (pick one on the Models page); the worker passes the preset's `command`, `steps`, `guidance` and `base_model` to mflux.
+Qwen Image 2.1 Turbo and full are presets of the `qwen_image` entry; 2512 (`qwen_image_2512`) and Z-Image Turbo (`z_image`) are separate entries, since they are different models. All use the same worker, which passes the preset's `command`, `steps`, `guidance` and `base_model` to mflux.
 
 ```sh
 HF=~/ai/envs/meeting-worker/bin/hf

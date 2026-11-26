@@ -69,14 +69,15 @@ def test_example_catalog_entry_is_valid():
     assert entry.presets["turbo"].options["turbo"] is True
 
 
-def test_mac_entry_uses_the_mflux_worker_and_one_unified_memory_device():
+def test_mac_entries_are_one_per_model_and_use_the_mflux_worker():
     catalog = parse_catalog(json.loads((ROOT / "runtimes.mac.example.json").read_text()))
-    entry = catalog.runtimes["qwen_image"]
-    assert set(entry.presets) == {"mlx", "qwen21", "zimage", "qwen2512"} and entry.default_preset == "mlx"
-    assert QWEN.script_path(entry) == ROOT / "workers" / "qwen_image_mflux_worker.py"
-    assert QWEN.script_path(entry).exists()
-    preset = entry.presets["mlx"]
-    assert preset.allowed_gpus == [0] and QWEN.estimate(entry, preset, {}, [0]) == (10, {})
+    expected = {"qwen_image": {"mlx", "qwen21"}, "qwen_image_2512": {"qwen2512"}, "z_image": {"zimage"}}
+    for model_id, presets in expected.items():
+        entry = catalog.runtimes[model_id]
+        assert set(entry.presets) == presets and entry.default_preset in presets
+        assert QWEN.script_path(entry) == ROOT / "workers" / "qwen_image_mflux_worker.py"
+        assert all(p.allowed_gpus == [0] for p in entry.presets.values())
+    assert QWEN.estimate(catalog.runtimes["qwen_image"], catalog.runtimes["qwen_image"].presets["mlx"], {}, [0]) == (10, {})
 
 
 def test_mflux_worker_sizes_follow_the_shapes_and_snap_to_sixteen(monkeypatch):

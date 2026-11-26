@@ -285,15 +285,16 @@
     },
     "qwen_image": {
       "kind": "qwen_image",
-      "name": "Qwen Image pictures",
+      "name": "Qwen Image 2.1",
       "workload": "image",
-      "description": "Pictures from a written description, with legible lettering.",
+      "description": "Pictures from a written description, with legible lettering. Turbo is fast; the full model is slower and finer.",
       "python": "/Users/YOU/ai/envs/mflux/bin/python",
       "output_dir": "/Users/YOU/ai/outputs/qwen-image",
       "port": 8180,
       "ready_timeout_seconds": 120,
       "stop_timeout_seconds": 30,
       "default_preset": "mlx",
+      "worker_script": "qwen_image_mflux_worker.py",
       "presets": {
         "mlx": {
           "name": "Qwen Image 2.1 Turbo (MLX, 8-bit)",
@@ -311,49 +312,6 @@
           "settings": {},
           "estimate": {
             "ram_gib": 10,
-            "gpu_min_free_gib": {}
-          }
-        },
-        "zimage": {
-          "name": "Z-Image Turbo (MLX, 8-bit)",
-          "description": "Tongyi-MAI's 6B distilled model, Apache-2.0. 9 steps, one picture in about 16-20 s; no negative prompt.",
-          "gpus": [
-            0
-          ],
-          "allowed_gpus": [
-            0
-          ],
-          "options": {
-            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/z-image-turbo-mflux-q8",
-            "command": "mflux-generate-z-image-turbo",
-            "steps": 9
-          },
-          "settings": {},
-          "estimate": {
-            "ram_gib": 9,
-            "gpu_min_free_gib": {}
-          }
-        },
-        "qwen2512": {
-          "name": "Qwen-Image 2512 (MLX, 8-bit; heavy)",
-          "description": "Qwen's December 2025 base model, Apache-2.0: 20 steps with a negative prompt. Needs about 37 GiB while a picture is made and takes 4-5 minutes, so only start it with the other models stopped.",
-          "gpus": [
-            0
-          ],
-          "allowed_gpus": [
-            0
-          ],
-          "options": {
-            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/qwen-image-2512-mflux-q8",
-            "command": "mflux-generate-qwen",
-            "base_model": "qwen-image",
-            "steps": 20,
-            "guidance": 4.0,
-            "negative": true
-          },
-          "settings": {},
-          "estimate": {
-            "ram_gib": 38,
             "gpu_min_free_gib": {}
           }
         },
@@ -378,8 +336,7 @@
             "gpu_min_free_gib": {}
           }
         }
-      },
-      "worker_script": "qwen_image_mflux_worker.py"
+      }
     },
     "yue2": {
       "kind": "yue2",
@@ -614,6 +571,79 @@
           "settings": {},
           "estimate": {
             "ram_gib": 30,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    },
+    "qwen_image_2512": {
+      "kind": "qwen_image",
+      "name": "Qwen-Image 2512",
+      "workload": "image",
+      "description": "Qwen's December 2025 base model (Apache-2.0): 20 guided steps with a negative prompt. Heavy: about 37 GiB while a picture is made.",
+      "python": "/Users/YOU/ai/envs/mflux/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/qwen-image-2512",
+      "port": 8181,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "qwen2512",
+      "worker_script": "qwen_image_mflux_worker.py",
+      "presets": {
+        "qwen2512": {
+          "name": "Qwen-Image 2512 (MLX, 8-bit; heavy)",
+          "description": "Qwen's December 2025 base model, Apache-2.0: 20 steps with a negative prompt. Needs about 37 GiB while a picture is made and takes 4-5 minutes, so only start it with the other models stopped.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/qwen-image-2512-mflux-q8",
+            "command": "mflux-generate-qwen",
+            "base_model": "qwen-image",
+            "steps": 20,
+            "guidance": 4.0,
+            "negative": true
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 38,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    },
+    "z_image": {
+      "kind": "qwen_image",
+      "name": "Z-Image Turbo",
+      "workload": "image",
+      "description": "Tongyi-MAI's 6B distilled picture model (Apache-2.0): 9 steps, about 20 s per picture.",
+      "python": "/Users/YOU/ai/envs/mflux/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/z-image",
+      "port": 8182,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "zimage",
+      "worker_script": "qwen_image_mflux_worker.py",
+      "presets": {
+        "zimage": {
+          "name": "Z-Image Turbo (MLX, 8-bit)",
+          "description": "Tongyi-MAI's 6B distilled model, Apache-2.0. 9 steps, one picture in about 16-20 s; no negative prompt.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/z-image-turbo-mflux-q8",
+            "command": "mflux-generate-z-image-turbo",
+            "steps": 9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 9,
             "gpu_min_free_gib": {}
           }
         }
