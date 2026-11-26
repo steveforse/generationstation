@@ -10,7 +10,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s | |
 | Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
 | Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
-| Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use with conditions) | |
+| Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use while the app stays internal) | |
 | Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
 | Text models: Qwen3.8 27B, Qwen3.8 Flash-Next, Tencent Hy4-Flash, Inkling 2 Mini | The Basalt runtime and the Windows meeting engines (Nemotron, VibeVoice, DiariZen) |
 | Meeting notes: speaker detection, speech recognition, correction, notes, name reading from Zoom video, transcript editing | |
@@ -48,7 +48,7 @@ A start is refused unless its estimate fits in the memory the Mac has available,
 
 ## Personal and work models
 
-The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2, ACE-Step and meeting notes are work use; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
+The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2, ACE-Step, MiniMax Music 3 and meeting notes are work use; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
 
 ## Models page: sections and quality chart
 
@@ -232,7 +232,7 @@ Qwen Image 2.1 full is the quality option next to Turbo: 15.8 GiB peak, 100 s fo
 
 ### MiniMax Music 3 songs
 
-MiniMax Music 3 (`mlx-community/MiniMax-Music3-mxfp8`, 13 GB) runs through mlx-audio's `mlx_audio.music`, in the `mlx-tts` environment. It makes songs with vocals from a style and lyrics, 30 s to 3 min. A 30 s song took 65 s through the app and the lyrics came back correctly; a 60 s instrumental works too. The model refuses an empty lyric, so the worker sends `[instrumental]` when the lyrics box is empty. The community licence asks for "MiniMax-Music3" to be shown on a commercial interface, written authorisation above US$20M yearly revenue from products built on it, safeguards when offered to third parties, and indemnification, so the card says "conditions".
+MiniMax Music 3 (`mlx-community/MiniMax-Music3-mxfp8`, 13 GB) runs through mlx-audio's `mlx_audio.music`, in the `mlx-tts` environment. It makes songs with vocals from a style and lyrics, 30 s to 3 min. A 30 s song took 65 s through the app and the lyrics came back correctly; a 60 s instrumental works too. The model refuses an empty lyric, so the worker sends `[instrumental]` when the lyrics box is empty. The community licence asks for "MiniMax-Music3" to be shown on a commercial interface, written authorisation above US$20M yearly revenue from products built on it, safeguards when offered to third parties, and indemnification. The card says "work" because this app is an internal tool, which is the owner's reading rather than legal advice; revisit it if the app is ever offered outside the company.
 
 ```sh
 ~/ai/envs/meeting-worker/bin/hf download mlx-community/MiniMax-Music3-mxfp8 --local-dir ~/ai/models/music/MiniMax-Music3-mxfp8

@@ -1100,10 +1100,10 @@
         }
       },
       "license": {
-        "use": "conditions",
+        "use": "work",
         "weights": "MiniMax-Music3 Community License (MIT-style with commercial terms)",
         "code": "mlx-audio: MIT",
-        "note": "Free to use. A commercial product or service using it must display \"MiniMax-Music3\" on its interface, and the yearly revenue those products and services generate above US$20 million needs MiniMax's written authorisation (the test is the product's revenue, not the company's, so an internal tool is probably outside it, but have legal confirm). Offering generation to third parties requires safeguards against misuse, and you indemnify MiniMax for breaches. No territory exclusion.",
+        "note": "Free to use. Treated as work use because the app is an internal tool, not a product or service offered to others (the owner's reading, not legal advice). If it becomes one, the licence requires \"MiniMax-Music3\" displayed on the interface, MiniMax's written authorisation above US$20 million yearly revenue from such products or services, safeguards against misuse when offered to third parties, and indemnifying MiniMax for breaches. No territory exclusion.",
         "url": "https://huggingface.co/MiniMaxAI/MiniMax-Music3/blob/main/LICENSE"
       },
       "quality": {
