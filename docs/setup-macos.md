@@ -54,6 +54,8 @@ The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B,
 
 The Models page is grouped like the sidebar (Text, Speech, Pictures, Video, Music). Above each group's cards, a folded chart ranks the models that have a published score on the same measure:
 
+Each section has a Sort control: default order, name, or quality (using the ranking chosen in the chart), with a button to reverse it. Models without a score on that ranking stay last in either direction.
+
 A group can offer several rankings (a model carries extra scores in `rankings`); buttons above the chart switch between them, and models missing from the chosen ranking are named under it.
 
 | Group | Measure | Source |

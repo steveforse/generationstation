@@ -1122,3 +1122,8 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .quality-charts[open] > summary::before { transform: rotate(45deg) }
 .quality-tabs { display: flex; flex-wrap: wrap; gap: 6px }
 .quality-tabs small { margin-left: 6px; opacity: .7 }
+.models-group-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3) }
+.models-sort { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-meta); color: var(--text-2) }
+.models-sort label { display: flex; align-items: center; gap: var(--sp-2) }
+.models-sort select { font: inherit; color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px }
+.models-sort .button svg { margin-right: 4px }

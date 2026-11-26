@@ -79,14 +79,29 @@ function QualityBars({ metric, bars }: { metric: string; bars: Bar[] }) {
   </figure>
 }
 
+/** The rankings a kind of model offers: metrics at least two of its models have a score on. */
+export const qualityCharts = (runtimes: Runtime[]) => [...qualityBars(runtimes)].filter(([, bars]) => bars.length > 1)
+
+/** The chosen ranking, or the first when none is chosen or the choice is gone. */
+export const chosenChart = (charts: ReturnType<typeof qualityCharts>, metric: string | null) => charts.find(([name]) => name === metric) ?? charts[0]
+
+/** Each model's best score on a ranking (a model with several versions counts by its best), by runtime id. */
+export function scoresOn(bars: Bar[]) {
+  const best = new Map<string, number>()
+  for (const bar of bars) {
+    const id = bar.key.split(':')[0]
+    best.set(id, Math.max(best.get(id) ?? -Infinity, bar.quality.score))
+  }
+  return best
+}
+
 /** Ranked bars of the published quality scores of one kind of model, one ranking at a time: a button per metric switches
  * between them. A metric with a single model is not offered: one bar says nothing. */
-export function QualityChart({ runtimes }: { runtimes: Runtime[] }) {
-  const charts = [...qualityBars(runtimes)].filter(([, bars]) => bars.length > 1)
-  const [chosen, setChosen] = useState<string | null>(null)
+export function QualityChart({ runtimes, metric: chosen, onMetric }: { runtimes: Runtime[]; metric: string | null; onMetric: (metric: string) => void }) {
+  const charts = qualityCharts(runtimes)
   const tabs = useId()
   if (charts.length === 0) return null
-  const [metric, bars] = charts.find(([name]) => name === chosen) ?? charts[0]
+  const [metric, bars] = chosenChart(charts, chosen)
   const scored = new Set(bars.map((bar) => bar.key.split(':')[0]))
   const unrated = runtimes.filter((runtime) => (runtime.workload !== 'text' || runtime.chat) && !scored.has(runtime.id))
   // Folded by default: the cards are the page's subject, and the ranking is there when it is wanted.
@@ -94,7 +109,7 @@ export function QualityChart({ runtimes }: { runtimes: Runtime[] }) {
     <summary><span>Quality ranking</span><small>{charts.map(([name]) => name).join(' · ')}</small></summary>
     <div className="quality-charts-body">
       {charts.length > 1 && <div className="quality-tabs" role="group" aria-label="Ranking">
-        {charts.map(([name, list]) => <button key={name} type="button" id={`${tabs}-${name}`} className={`button button-small ${name === metric ? 'button-primary' : 'button-secondary'}`} aria-pressed={name === metric} onClick={() => setChosen(name)}>{name}<small>{list.length}</small></button>)}
+        {charts.map(([name, list]) => <button key={name} type="button" id={`${tabs}-${name}`} className={`button button-small ${name === metric ? 'button-primary' : 'button-secondary'}`} aria-pressed={name === metric} onClick={() => onMetric(name)}>{name}<small>{list.length}</small></button>)}
       </div>}
       <QualityBars key={metric} metric={metric} bars={bars} />
       {unrated.length > 0 && <p className="quality-unrated">Not on this ranking: {unrated.map((runtime) => runtime.name).join(', ')}.</p>}

@@ -1498,3 +1498,24 @@ test('the Models page groups models by kind and charts their published quality s
   // A kind with one scored model has no chart.
   await expect(page.getByRole('region', { name: 'Music' }).getByText('Quality ranking')).toHaveCount(0)
 })
+
+test('models within a section sort by name or by the chosen ranking, either way', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { rated: true })
+  await go(page, '#/hosts/local/models')
+  const speech = page.getByRole('region', { name: 'Speech' })
+  const names = () => speech.locator('section.model-server').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
+  expect(await names()).toEqual(['Voice A', 'Voice B', 'Voice C'])
+  await speech.getByLabel('Sort').selectOption('name')
+  await speech.getByRole('button', { name: /Z to A|A to Z/ }).click()
+  expect(await names()).toEqual(['Voice C', 'Voice B', 'Voice A'])
+  // Quality starts highest first, with the unscored model last; reversing keeps it last.
+  await speech.getByLabel('Sort').selectOption('quality')
+  expect(await names()).toEqual(['Voice A', 'Voice B', 'Voice C'])
+  await speech.getByRole('button', { name: /highest first/ }).click()
+  expect(await names()).toEqual(['Voice B', 'Voice A', 'Voice C'])
+  // Quality follows the ranking chosen in the chart.
+  await speech.getByText('Quality ranking').click()
+  await speech.getByRole('button', { name: /Naturalness MOS/ }).click()
+  await expect(speech.getByLabel('Sort')).toContainText('Quality (Naturalness MOS)')
+  expect(await names()).toEqual(['Voice C', 'Voice A', 'Voice B'])
+})

@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Activity, ArrowUpRight, ChevronDown, MemoryStick } from 'lucide-react'
+import { Activity, ArrowDown, ArrowUp, ArrowUpRight, ChevronDown, MemoryStick } from 'lucide-react'
 import { StatePill } from '../components/StatePill'
 import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
-import { QualityChart } from '../components/QualityChart'
+import { chosenChart, QualityChart, qualityCharts, scoresOn } from '../components/QualityChart'
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
 import { estimateFit, GpuCard, isUnified, modelColor, modelUsage, type Preview, ramSegments, ResourceCard } from '../components/Resources'
 import { fieldsFor, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
@@ -20,6 +20,47 @@ const usesOf = (runtime: Runtime) => new Set(Object.values(runtime.presets).map(
 const usable = (filter: string, runtime: Runtime) => {
   const uses = usesOf(runtime)
   return !filter || (filter === 'work' ? uses.has('work') || uses.has('conditions') : uses.has('personal'))
+}
+
+type SortKey = 'default' | 'name' | 'quality'
+
+/** One section of the Models page: its heading, a sort control, its quality ranking and its cards. Sorting by quality uses the
+ * ranking chosen in the chart; models without a score on it come last in either direction. */
+function ModelGroup({ id, label, items, children }: { id: string; label: string; items: Runtime[]; children: (runtime: Runtime) => React.ReactNode }) {
+  const [metric, setMetric] = useState<string | null>(null)
+  const [sort, setSort] = useState<SortKey>('default')
+  const [descending, setDescending] = useState(false)
+  const charts = qualityCharts(items)
+  const chart = charts.length > 0 ? chosenChart(charts, metric) : null
+  const scores = chart ? scoresOn(chart[1]) : new Map<string, number>()
+  const key: SortKey = sort === 'quality' && !chart ? 'default' : sort
+  const direction = descending ? -1 : 1
+  const sorted = key === 'default' ? items : [...items].sort((a, b) => {
+    if (key === 'name') return direction * a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    const x = scores.get(a.id), y = scores.get(b.id)
+    if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? 1 : -1
+    return direction * (x - y)
+  })
+  const choose = (next: SortKey) => { setSort(next); setDescending(next === 'quality') }
+  const ascendingWord = key === 'quality' ? 'lowest first' : 'A to Z'
+  const descendingWord = key === 'quality' ? 'highest first' : 'Z to A'
+  return <section className="models-group" aria-labelledby={`models-group-${id}`}>
+    <div className="models-group-bar">
+      <h2 className="models-group-heading" id={`models-group-${id}`}><WorkloadIcon workload={id} size={20} /><span>{label}</span><span className="models-group-count">{items.length}</span></h2>
+      {items.length > 1 && <div className="models-sort">
+        <label>Sort <select value={key} onChange={(event) => choose(event.target.value as SortKey)}>
+          <option value="default">Default order</option>
+          <option value="name">Name</option>
+          {chart && <option value="quality">Quality ({chart[0]})</option>}
+        </select></label>
+        {key !== 'default' && <button type="button" className="button button-small button-secondary" aria-label={`Order: ${descending ? descendingWord : ascendingWord}. Reverse it`} title="Reverse the order" onClick={() => setDescending(!descending)}>
+          {descending ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" />}{descending ? descendingWord : ascendingWord}
+        </button>}
+      </div>}
+    </div>
+    <QualityChart runtimes={items} metric={metric} onMetric={setMetric} />
+    {sorted.map(children)}
+  </section>
 }
 
 function Missing({ title, text }: { title: string; text: string }) {
@@ -69,10 +110,8 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     </div>}
     {state.runtimes && allRuntimes.length === 0 && <div className="empty-models"><div><strong>No model servers</strong><p>This host does not list any model servers.</p></div></div>}
     {allRuntimes.length > 0 && runtimes.length === 0 && <div className="empty-models"><div><strong>No models match</strong><p>None of this host's models are marked for that use.</p></div></div>}
-    {groupByWorkload(runtimes, (runtime) => runtime.workload).map((group) => <section className="models-group" key={group.key} aria-labelledby={`models-group-${group.key}`}>
-      <h2 className="models-group-heading" id={`models-group-${group.key}`}><WorkloadIcon workload={group.key} size={20} /><span>{group.label}</span><span className="models-group-count">{group.items.length}</span></h2>
-      <QualityChart runtimes={group.items} />
-      {group.items.map((runtime) => {
+    {groupByWorkload(runtimes, (runtime) => runtime.workload).map((group) => <ModelGroup key={group.key} id={group.key} label={group.label} items={group.items}>
+      {(runtime: Runtime) => {
       const model = state.models?.find((item) => item.id === runtime.id)
       return <section className="model-server" key={runtime.id} aria-label={runtime.name} onMouseEnter={() => setFocusId(runtime.id)} onFocus={() => setFocusId(runtime.id)}>
         <RuntimeCard key={`${host.id}:${runtime.id}`} runtime={runtime} model={model} host={view.host} fresh={view.fresh} pending={state.pendingModelId === runtime.id}
@@ -83,8 +122,8 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
           onEstimate={(estimate) => setEstimates((current) => current[runtime.id] === estimate ? current : { ...current, [runtime.id]: estimate })}
           aside={<OperationHistory id={`history-${runtime.id}`} operations={state.operations.filter((operation) => operation.model_id === runtime.id && !operation.simulation)} title="History" text="Starts and stops of this model server." empty="No starts or stops yet." />} />
       </section>
-      })}
-    </section>)}
+      }}
+    </ModelGroup>)}
     </div>
     {!!state.snapshot && state.connection !== 'idle' && <aside className="models-rail"><section className="resource-grid models-resources" aria-label={`${hostName(host, state)} resource usage`}>
       <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent error={view.host?.ram_error ?? undefined} kind="RAM" unified={isUnified(view.host)} stale={view.stale} segments={ramSegments(view.host, state.runtimes)} preview={ramPreview} legend />
