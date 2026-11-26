@@ -639,9 +639,9 @@
         }
       },
       "license": {
-        "use": "conditions",
+        "use": "personal",
         "weights": "Fish Audio Community License 1.0",
-        "note": "Free while your annual revenue (you and your affiliates) is under US$500,000, and no hosted service for third parties. Output may not train other speech models.",
+        "note": "Free only while the annual revenue of you and your affiliates is under US$500,000, so not for company use here; no hosted service for third parties either. Output may not train other speech models.",
         "url": "https://huggingface.co/fishaudio/drama-3"
       }
     },

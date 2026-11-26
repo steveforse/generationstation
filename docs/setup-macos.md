@@ -46,7 +46,7 @@ A start is refused unless its estimate fits in the memory the Mac has available,
 
 ## Personal and work models
 
-The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS and Wan 2.2 are work use; meeting notes and Drama 3 have conditions to check; Qwen Image 2.1, YuE2, OmniVoice, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
+The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS and Wan 2.2 are work use; meeting notes has conditions to check; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
 
 ## 1. Install the basics
 
@@ -248,7 +248,7 @@ for r in Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit Qwen3-TTS-12Hz-1.7B-VoiceDesign-8b
 | Model | Licence | Notes |
 | --- | --- | --- |
 | Qwen3-TTS | Apache-2.0 | Built-in voices, a voice from a description, cloning. About 3 GiB per model; only the tab in use stays loaded. |
-| Fish Drama 3 | Fish Audio Community License: free below USD 500,000 annual revenue (you and your affiliates), no hosted service for third parties | Scenes with several speakers, `[cue]` tags. 3-bit peaks near 22.6 GiB; the 4-bit near 26.4 GiB. |
+| Fish Drama 3 | Fish Audio Community License: free only below USD 500,000 annual revenue (you and your affiliates), so personal use only for a larger company; no hosted service for third parties | Scenes with several speakers, `[cue]` tags. 3-bit peaks near 22.6 GiB; the 4-bit near 26.4 GiB. |
 | Fish S2 Pro | Fish Audio Research License: **no commercial use, including a company's internal operations** | `[cue]` tags, cloning. |
 | OmniVoice | CC BY-NC (weights), plus a 100,000-user cap on its audio tokenizer | **Non-commercial.** The Mac model has no speed control, so that form field is ignored. |
 | Breeze TTS 2 (BreezeBlue's, not MediaTek's) | BreezeBlue research and non-commercial licence | **Non-commercial.** English and Chinese; one reference voice per take. |
