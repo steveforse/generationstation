@@ -213,6 +213,20 @@ class SearchTest(BaseModel):
     searxng_url: StrictStr | None = Field(default=None, max_length=300)
 
 
+class SegmentEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    index: StrictInt = Field(ge=0)
+    speaker: StrictStr | None = Field(default=None, max_length=80)
+    text: StrictStr | None = Field(default=None, max_length=20000)
+
+
+class TranscriptEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: StrictInt
+    segments: list[SegmentEdit] = Field(default_factory=list, max_length=5000)
+    rename: dict[Annotated[str, Field(max_length=80)], Annotated[str, Field(max_length=80)]] = Field(default_factory=dict, max_length=200)
+
+
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     inputs: dict[StrictStr, StrictStr | StrictInt | list[StrictStr] | None] = Field(default_factory=dict)
@@ -350,7 +364,10 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     @api.get("/models")
     def models_catalog():
         lifecycle.refresh_runtime_health()
-        return {"models": store.list_models()}
+        # A runtime taken out of the catalog keeps its row (and its history) in the database but is no longer a model
+        # to offer; a simulation profile is listed whether or not the catalog names it.
+        return {"models": [model for model in store.list_models()
+                           if model["id"] in catalog.runtimes or model["profile"]["id"] is not None]}
 
     @api.get("/runtimes")
     def runtimes():
@@ -400,6 +417,10 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     @api.delete("/jobs/{job_id}")
     def delete_job(job_id: str):
         return generation.delete(job_id)
+
+    @api.put("/jobs/{job_id}/transcript")
+    def edit_transcript(job_id: str, request: TranscriptEdit):
+        return generation.edit_transcript(job_id, request.model_dump())
 
     @api.get("/jobs/{job_id}/files/{name}")
     def job_file(job_id: str, name: str):

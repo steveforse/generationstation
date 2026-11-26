@@ -1,7 +1,10 @@
 """Text models: one entry per model, whatever program runs it.
 
 A preset lists, per card choice ("0", "1" or "0,1"), the engine that runs the model there and its files: Basalt
-(`basalt.exe serve --config FILE`) or Strata (its Python server in front of its engine). The person only picks the
+(`basalt.exe serve --config FILE`), Strata (its Python server in front of its engine) or, on an Apple-silicon Mac,
+mlx-lm's server (`python -m mlx_lm server`, the model's folder in `model_path`) or oMLX (`omlx serve`, which serves the
+folders inside `model_dir`). Which cards exist depends on the machine's own runtimes.json; a model keeps one id
+everywhere (a Mac's `inkling2` runs through oMLX, the desktop's through Basalt or Strata). The person only picks the
 model's card and plain settings; which engine runs is decided here and never shown. Both engines answer OpenAI-style
 chat on the runtime's port, so the chat page and the readiness probe treat them alike.
 """
@@ -20,7 +23,7 @@ from .worker import WORKERS_DIR
 class CardSetup(BaseModel):
     """How the model runs on one card choice."""
     model_config = ConfigDict(extra="forbid")
-    engine: Literal["basalt", "strata"]
+    engine: Literal["basalt", "strata", "strata_mac", "mlx", "omlx"]
     estimate: Estimate
     env: dict[str, str] = Field(default_factory=dict)
     # Basalt
@@ -30,7 +33,14 @@ class CardSetup(BaseModel):
     alias: str | None = None
     model_path: str | None = None
     fixed: dict[str, str | int | bool] = Field(default_factory=dict, description="Engine keys always written.")
-    # Strata
+    # oMLX: its `omlx` program, the folder holding the model's own folder (serve only what this entry names, so keep
+    # one model per folder), and where it keeps its settings, logs and cache (default: inside the launch folder).
+    model_dir: str | None = None
+    data_dir: str | None = None
+    # Strata on a Mac: the run config Strata's own `./setup.sh` wrote (its engine, model files and flags). Only the
+    # port and the log path are replaced; `server_dir` is Strata's `terminal` folder.
+    engine_config: str | None = None
+    # Strata (and mlx: the environment's python)
     python: str | None = None
     server_dir: str | None = None
     component: str | None = None
@@ -53,8 +63,9 @@ class CardSetup(BaseModel):
 
     @model_validator(mode="after")
     def complete(self):
-        need = ("executable", "alias", "model_path") if self.engine == "basalt" else \
-            ("python", "server_dir", "component", "pack", "tokenizer", "arch", "model_name")
+        need = {"basalt": ("executable", "alias", "model_path"), "mlx": ("python", "model_path"),
+                "omlx": ("executable", "model_dir"), "strata_mac": ("python", "server_dir", "engine_config"),
+                "strata": ("python", "server_dir", "component", "pack", "tokenizer", "arch", "model_name")}[self.engine]
         missing = [name for name in need if not getattr(self, name)]
         if missing:
             raise ValueError(f"{self.engine} card setup needs {', '.join(missing)}.")
@@ -202,6 +213,30 @@ class LLMPlugin(RuntimePlugin):
             path = Path(launch_dir) / "basalt-config.json"
             return LaunchSpec(argv=[setup.executable, "serve", "--config", str(path)], env=env, cwd=setup.working_dir,
                               files={"basalt-config.json": json.dumps(config, indent=2)})
+        if setup.engine == "omlx":
+            env.setdefault("HF_HUB_OFFLINE", "1")
+            env.setdefault("PYTHONUNBUFFERED", "1")
+            data = setup.data_dir or str(Path(launch_dir) / "omlx-data")  # never ~/.omlx: that is the person's own
+            argv = [setup.executable, "serve", "--model-dir", setup.model_dir, "--host", "127.0.0.1",
+                    "--port", str(runtime.port), "--base-path", data]
+            return LaunchSpec(argv=argv, env=env, cwd=setup.working_dir, files={})
+        if setup.engine == "strata_mac":
+            config = json.loads(Path(setup.engine_config).read_text(encoding="utf-8"))
+            config.update({"port": runtime.port, "log": str(Path(launch_dir) / "engine.log"), "open_browser": False})
+            path = Path(launch_dir) / "strata-config.json"
+            argv = [setup.python, str(Path(setup.server_dir) / "serve" / "server.py"), "--engine", "strata",
+                    "--config", str(path), "--port", str(runtime.port), "--host", "127.0.0.1",
+                    "--parallel", "1", "--no-api-key"]
+            return LaunchSpec(argv=argv, env=env, cwd=setup.server_dir,
+                              files={"strata-config.json": json.dumps(config, indent=2)})
+        if setup.engine == "mlx":
+            env.setdefault("HF_HUB_OFFLINE", "1")  # the model is a folder on this disk; never fetch anything
+            env.setdefault("PYTHONUNBUFFERED", "1")
+            argv = [setup.python, "-m", "mlx_lm", "server", "--model", setup.model_path, "--host", "127.0.0.1",
+                    "--port", str(runtime.port), "--temp", str(setup.sampling.get("temperature", 0.2))]
+            if setup.sampling.get("top_p") is not None:
+                argv += ["--top-p", str(setup.sampling["top_p"])]
+            return LaunchSpec(argv=argv, env=env, cwd=setup.working_dir, files={})
         config = self.strata_config(runtime, setup, values, gpus, Path(launch_dir))
         path = Path(launch_dir) / "strata-config.json"
         server = [str(WORKERS_DIR / "strata_inkling_thinking.py"), setup.server_dir] if setup.inkling_thinking \
@@ -272,4 +307,9 @@ class LLMPlugin(RuntimePlugin):
             return "loaded"
         if "failed" in statuses:
             return "failed"
+        # mlx-lm's server loads its model before it listens; oMLX lists its models at once and loads on the first
+        # request. Neither reports a status: an answer means the server is ready.
+        if payload.get("data") and any(card.engine in ("mlx", "omlx") for preset in runtime.presets.values()
+                                       for card in preset.cards.values()):
+            return "loaded"
         return "loading"

@@ -27,11 +27,31 @@ def process_tree(pid, create_time):
         return []
 
 
+def darwin_footprint(pid):
+    """A process's physical footprint on macOS (what Activity Monitor and `footprint` show), or None.
+
+    The resident size psutil reports leaves out memory-mapped model weights and Metal buffers, so an MLX server holding
+    16 GiB reads as 0.6 GiB there. proc_pid_rusage's first flavor carries the footprint after eight 8-byte fields.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        import ctypes.util
+        lib = ctypes.CDLL(ctypes.util.find_library("proc"), use_errno=True)
+        buf = (ctypes.c_uint64 * 32)()
+        if lib.proc_pid_rusage(int(pid), 0, ctypes.byref(buf)) != 0:  # RUSAGE_INFO_V0
+            return None
+        return int(buf[9])  # rusage_info_v0: ri_uuid (2 words), 7 counters, then ri_phys_footprint
+    except (OSError, AttributeError, TypeError, ValueError):
+        return None
+
+
 def tree_ram_bytes(procs):
     total = 0
     for proc in procs:
         try:
-            total += proc.memory_info().rss  # working set on Windows
+            footprint = darwin_footprint(proc.pid)
+            total += footprint if footprint is not None else proc.memory_info().rss  # working set on Windows
         except psutil.Error:
             continue
     return total

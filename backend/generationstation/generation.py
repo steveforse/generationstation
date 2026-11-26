@@ -166,6 +166,22 @@ class GenerationManager:
         self.store.delete_job(job_id)
         return {"id": job_id, "deleted": True}
 
+    def edit_transcript(self, job_id, payload):
+        """Correct a finished meeting's transcript (speakers and words). Only plugins that offer it (meeting notes) do."""
+        job = self.store.get_job(job_id)
+        runtime = self.catalog.runtimes.get(job["model_id"]) if job else None
+        edit = getattr(self.catalog.plugin(job["model_id"]), "edit_transcript", None) if runtime else None
+        if job is None or runtime is None or job["status"] != "done" or edit is None:
+            raise LifecycleError("JOB_NOT_FOUND", "There is no transcript to edit here.", 404)
+        root = Path(self.catalog.plugin(job["model_id"]).output_dir(runtime)).resolve()
+        folder = (root / job_id).resolve()
+        if folder.parent != root or not folder.is_dir():
+            raise LifecycleError("JOB_NOT_FOUND", "There is no transcript to edit here.", 404)
+        try:
+            return edit(folder, payload)
+        except ValueError as exc:  # TranscriptEditError
+            raise LifecycleError(getattr(exc, "code", "TRANSCRIPT_INVALID"), str(exc), getattr(exc, "status", 422)) from exc
+
     def output_path(self, job_id, name):
         job = self.store.get_job(job_id)
         if job is None or job["status"] != "done":

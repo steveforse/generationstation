@@ -12,19 +12,25 @@ Engines (options.engine), from the 2026-11-23 bake-off on four AMI meetings (spe
   qwen       DiariZen speaker turns, then Qwen3-ASR-1.7B per turn, 24.3%; about 11 GiB, either card, under a minute
              for a 25-minute meeting.
   vibevoice  VibeVoice-ASR (one pass), 35.1%; about 19 GiB.
+  mlx        Apple silicon, no WSL (options.distro "local"): sherpa-onnx speaker turns on the processor, then
+             Qwen3-ASR on MLX per turn. Steps run as plain child processes of this worker.
 
 The app stops a worker by terminating it, which does not reach processes inside WSL, so every WSL step runs under a
 watchdog that ends it when the worker's heartbeat file goes stale.
 """
+import contextlib
 import csv
 import json
+import os
 import re
+import signal
 import subprocess
 import threading
 import time
 import urllib.request
 from pathlib import Path, PureWindowsPath
 
+import meeting_transcript
 from gs_worker import JobCancelled, serve
 
 HEARTBEAT_SECONDS = 5
@@ -94,14 +100,7 @@ def wsl_path(path):
     return f"/mnt/{windows.drive[0].lower()}/" + "/".join(windows.parts[1:])
 
 
-def mmss(seconds):
-    seconds = int(seconds)
-    return f"{seconds // 3600}:{seconds // 60 % 60:02d}:{seconds % 60:02d}" if seconds >= 3600 else f"{seconds // 60:02d}:{seconds % 60:02d}"
-
-
-def srt_time(seconds):
-    ms = round(seconds * 1000)
-    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+mmss, srt_time = meeting_transcript.mmss, meeting_transcript.srt_time
 
 
 class Heartbeat:
@@ -131,20 +130,29 @@ class Worker:
         self.launch_dir = Path(config.get("launch_dir") or ".")
         self.log = log
         self.distro = self.options.get("distro", "Ubuntu")
+        # "local": run the steps as child processes of this worker (macOS, Linux) instead of inside WSL.
+        self.local = str(self.distro).lower() in ("", "local")
         self.watchdog = self.launch_dir / "meeting-watchdog.sh"
-        self.watchdog.write_text(WATCHDOG, encoding="utf-8", newline="\n")
         self.heartbeat = self.launch_dir / "meeting-heartbeat"
+        if not self.local:
+            self.watchdog.write_text(WATCHDOG, encoding="utf-8", newline="\n")
 
     # ----- WSL steps ------------------------------------------------------------------------------
 
     def wsl(self, command, job=None, timeout=7200):
-        """Run a shell command in WSL under the heartbeat watchdog; returns the last JSON line it printed."""
-        env = f"export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={self.gpus[0]} TOKENIZERS_PARALLELISM=false;"
-        argv = ["wsl.exe", "-d", self.distro, "--", "bash", wsl_path(self.watchdog), wsl_path(self.heartbeat),
-                "bash", "-lc", env + command]
-        with Heartbeat(self.heartbeat):
+        """Run a shell command (in WSL under the heartbeat watchdog, or locally) and return the last JSON line it printed."""
+        if self.local:
+            env = dict(os.environ, TOKENIZERS_PARALLELISM="false", PYTHONUNBUFFERED="1")
+            env["PATH"] = os.pathsep.join(["/opt/homebrew/bin", "/usr/local/bin", env.get("PATH", "")])
+            argv, kwargs = ["bash", "-c", command], {"env": env, "start_new_session": True}
+        else:
+            env = f"export CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES={self.gpus[0]} TOKENIZERS_PARALLELISM=false;"
+            argv = ["wsl.exe", "-d", self.distro, "--", "bash", wsl_path(self.watchdog), wsl_path(self.heartbeat),
+                    "bash", "-lc", env + command]
+            kwargs = {}
+        with Heartbeat(self.heartbeat) if not self.local else contextlib.nullcontext():
             process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                       encoding="utf-8", errors="replace")
+                                       encoding="utf-8", errors="replace", **kwargs)
             lines, started = [], time.time()
             reader = threading.Thread(target=lambda: lines.extend(process.stdout), daemon=True)
             reader.start()
@@ -168,12 +176,18 @@ class Worker:
                     pass
         if not result or not result.get("ok"):
             tail = "".join(lines[-15:]).strip()
-            self.log(f"WSL step failed:\n{tail}")
+            self.log(f"Speech step failed:\n{tail}")
             raise RuntimeError((result or {}).get("error") or f"a speech step failed: {tail[-500:]}")
         return result
 
     def stop_heartbeat_and_wait(self, process):
-        """Stop beating so the watchdog ends the WSL side, and end the wsl.exe process here."""
+        """End the step: stop beating so the watchdog ends the WSL side, or signal the local step's process group."""
+        if self.local:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            return
         process.terminate()
 
     def card_free_gib(self):
@@ -186,6 +200,8 @@ class Worker:
             return None
 
     def wait_for_card(self, job, need_gib, limit=900):
+        if self.local:
+            return  # no separate card memory to wait for (Apple silicon shares memory; admission counts it as RAM)
         started = time.time()
         while True:
             free = self.card_free_gib()
@@ -215,6 +231,15 @@ class Worker:
             r2 = self.wsl(f"{q(o['qwen_python'])} {q(script)} turns {q(wsl_path(audio))} {q(wsl_path(turns))} "
                           f"{q(wsl_path(segments))} {q(o['qwen_model'])} {q(terms)}", job)
             stats = {"diarize_seconds": r1.get("seconds"), "transcribe_seconds": r2.get("seconds")}
+        elif engine == "mlx":
+            job.report("Working out who spoke when")
+            turns = work / "turns.json"
+            r1 = self.wsl(f"{q(o['python'])} {q(script)} sherpa {q(wsl_path(audio))} {q(wsl_path(turns))} "
+                          f"{q(o['segmentation_model'])} {q(o['embedding_model'])} {q(o.get('diar_threshold', 0.4))}", job)
+            job.report(f"Transcribing {r1.get('speakers')} speakers")
+            r2 = self.wsl(f"{q(o['python'])} {q(script)} mlxturns {q(wsl_path(audio))} {q(wsl_path(turns))} "
+                          f"{q(wsl_path(segments))} {q(o['asr_model'])} {q(terms)}", job)
+            stats = {"diarize_seconds": r1.get("seconds"), "transcribe_seconds": r2.get("seconds")}
         elif engine == "vibevoice":
             self.wait_for_card(job, float(o.get("need_gib", 20)))
             job.report("Transcribing (who spoke, what and when)")
@@ -227,6 +252,26 @@ class Worker:
         else:
             raise ValueError(f"unknown engine {engine!r}")
         return json.loads(segments.read_text(encoding="utf-8")), stats
+
+    def name_tags(self, video, segments, job):
+        """Speaker names read off the video's name tags: {speaker: name}. Never fails the job: no OCR set up, or a step that
+        errors, gives {} and the speakers keep their numbers."""
+        o = self.options
+        python = o.get("ocr_python") or (o.get("python") if o.get("engine") == "mlx" else None)
+        if not python:
+            return {}, {"name_tags": "not set up"}
+        script = wsl_path(Path(__file__).with_name("meeting_pipeline.py"))
+        out = segments.with_name("name-tags.json")
+        q = lambda v: "'" + str(v).replace("'", "'\\''") + "'"
+        job.report("Reading speaker names from the video")
+        try:
+            result = self.wsl(f"{q(python)} {q(script)} nametags {q(wsl_path(video))} {q(wsl_path(segments))} {q(wsl_path(out))}", job)
+            tags = json.loads(out.read_text(encoding="utf-8"))
+        except JobCancelled:
+            raise
+        except Exception as exc:  # noqa: BLE001 - names are a bonus
+            return {}, {"name_tags": f"failed: {str(exc)[:300]}"}
+        return {k: v["name"] for k, v in tags.items()}, {"name_tags_seconds": result.get("seconds"), "name_tag_frames": result.get("frames")}
 
     def nemotron(self, audio, segments, terms, job, script, q):
         o = self.options
@@ -291,7 +336,9 @@ def chat(model, prompt, max_tokens, thinking=True):
             "temperature": 0.2, "stream": False}
     body.update(model.get("sampling") or {})
     body["temperature"] = 0.2
-    if not thinking:
+    if not thinking and model.get("thinking_floor"):  # always thinks: ask for the least it will do
+        body["reasoning_effort"] = model["thinking_floor"]
+    elif not thinking:
         body["enable_thinking"] = False
         body["reasoning_effort"] = "none"
     request = urllib.request.Request(model["base_url"].rstrip("/") + "/v1/chat/completions",
@@ -341,14 +388,24 @@ def correct(model, segs, terms, job):
     return out, {"turns_corrected": changed, "corrections_refused": rejected, "chunks_not_corrected": failed_chunks}
 
 
+def stamp(seg):
+    return f"[{mmss(seg['start'])}] " if seg.get("start") is not None else ""
+
+
 def extract(model, segs, people):
-    transcript = "\n".join(f"[{mmss(s['start'])}] {s['speaker']}: {s['text']}" for s in segs)
+    transcript = "\n".join(f"{stamp(s)}{s['speaker']}: {s['text']}" for s in segs)
     prompt = EXTRACT.format(transcript=transcript,
                             people=f"The people in this meeting include: {people}.\n" if people else "")
+    if any(s.get("start") is None for s in segs):  # a transcript that came without times
+        prompt = (prompt.replace("[mm:ss] speaker: text", "speaker: text")
+                  .replace("Times must point at the line that supports the item.", "The transcript has no times: use null for every time."))
     error = None
     for _ in range(2):
         try:
-            notes = parse_json(chat(model, prompt, 8000))
+            # No thinking where the model allows it: on Qwen3.8-27B it spent all 8,000 tokens (498 s) reasoning before
+            # any JSON. A model that always thinks (Inkling) ignores the request.
+            # A model that always thinks (thinking_floor) spent 4,500 of 5,800 tokens on it for these notes: give it room.
+            notes = parse_json(chat(model, prompt, 16000 if model.get("thinking_floor") else 8000, thinking=False))
             for key in ("summary", "actions", "decisions"):
                 if not isinstance(notes.get(key), list):
                     raise TypeError(f"no {key} list")
@@ -365,28 +422,29 @@ def extract(model, segs, people):
 
 # ----- outputs ----------------------------------------------------------------------------------------------
 
-def label_speakers(segs):
-    """Speaker labels as Speaker 1, 2, ... in order of first appearance."""
-    order = {}
+def label_speakers(segs, names=None):
+    """Speaker labels as Speaker 1, 2, ... in order of first appearance; a speaker read off the video by name keeps the
+    name (two speakers with one name become one). The numbers count only the unnamed."""
+    names, order, numbered = names or {}, {}, 0
     for s in segs:
-        order.setdefault(s["speaker"], f"Speaker {len(order) + 1}")
+        who = s["speaker"]
+        if who in order:
+            continue
+        if names.get(who):
+            order[who] = names[who]
+        else:
+            numbered += 1
+            order[who] = f"Speaker {numbered}"
     return [dict(s, speaker=order[s["speaker"]]) for s in segs]
 
 
 def write_outputs(job, segs, notes, names, raw):
-    who = lambda label: f"{label} ({names[label]})" if names.get(label) else label
-    lines = ["# Transcript", ""]
-    for s in segs:
-        lines.append(f"**[{mmss(s['start'])}] {who(s['speaker'])}:** {s['text']}")
-        lines.append("")
-    job.output("transcript.md", "text/markdown").write_text("\n".join(lines), encoding="utf-8")
-    srt = []
-    for n, s in enumerate(segs, 1):
-        srt += [str(n), f"{srt_time(s['start'])} --> {srt_time(max(s['end'], s['start'] + 0.5))}", f"{who(s['speaker'])}: {s['text']}", ""]
-    job.output("transcript.srt", "application/x-subrip").write_text("\n".join(srt), encoding="utf-8")
+    mimes = {"transcript.md": "text/markdown", "transcript.srt": "application/x-subrip", "transcript.vtt": "text/vtt"}
+    for name, text in meeting_transcript.render(segs, names).items():
+        job.output(name, mimes[name]).write_text(text, encoding="utf-8")
     if raw is not None:
         job.output("transcript-raw.json", "application/json").write_text(json.dumps(raw, indent=1), encoding="utf-8")
-    record = {"speakers": names, "segments": segs}
+    record = {"speakers": names, "segments": segs, "revision": 1}
     if notes is not None:
         record.update({k: notes[k] for k in ("summary", "actions", "decisions")})
         md = ["# Meeting notes", "", "## Summary", ""] + [f"- {b}" for b in notes["summary"]]
@@ -423,25 +481,42 @@ def load(config, log=print):
 def generate(worker, inputs, job):
     recording = (inputs.get("recording") or [None])[0]
     if not recording:
-        raise ValueError("Add a recording.")
+        raise ValueError("Add a recording or a transcript.")
     terms = " ".join(str(inputs.get("terms") or "").split())[:500]
     people = " ".join(str(inputs.get("people") or "").split())[:500]
-    work = job.dir / "work"
-    work.mkdir(parents=True, exist_ok=True)
-    audio = work / "audio.wav"
-    job.report("Preparing the audio")
-    q = lambda v: "'" + str(v).replace("'", "'\\''") + "'"
-    worker.wsl(f"ffmpeg -nostdin -hide_banner -loglevel error -y -i {q(wsl_path(recording['path']))} -vn -ac 1 -ar 16000 "
-               f"-c:a pcm_s16le {q(wsl_path(audio))} && echo '{{\"ok\": true}}'", job)
-    started = time.time()
-    raw, stats = worker.transcribe(audio, work, terms, job)
-    stats["speech_seconds"] = round(time.time() - started, 1)
-    if not raw:
-        raise RuntimeError("No speech was found in the recording.")
-    segs = label_speakers(raw)
-    job.detail(engine=worker.options.get("engine", "qwen"), speakers=len({s["speaker"] for s in segs}),
-               segments=len(segs), audio_seconds=round(max(s["end"] for s in segs)), **stats)
-    notes, names = None, {}
+    raw = None
+    if recording.get("kind") == "transcript":  # already transcribed: skip the audio steps
+        job.report("Reading the transcript")
+        try:
+            segs, timed = meeting_transcript.parse(Path(recording["path"]).read_bytes().decode("utf-8-sig", errors="replace"))
+        except meeting_transcript.TranscriptError as exc:
+            raise ValueError(str(exc)) from exc
+        if not timed:
+            segs = [dict(s, start=None, end=None) for s in segs]
+        job.detail(engine="transcript", speakers=len({s["speaker"] for s in segs}), segments=len(segs), timed=timed)
+    else:
+        work = job.dir / "work"
+        work.mkdir(parents=True, exist_ok=True)
+        audio = work / "audio.wav"
+        job.report("Preparing the audio")
+        q = lambda v: "'" + str(v).replace("'", "'\\''") + "'"
+        worker.wsl(f"ffmpeg -nostdin -hide_banner -loglevel error -y -i {q(wsl_path(recording['path']))} -vn -ac 1 -ar 16000 "
+                   f"-c:a pcm_s16le {q(wsl_path(audio))} && echo '{{\"ok\": true}}'", job)
+        started = time.time()
+        raw, stats = worker.transcribe(audio, work, terms, job)
+        stats["speech_seconds"] = round(time.time() - started, 1)
+        if not raw:
+            raise RuntimeError("No speech was found in the recording.")
+        tags = {}
+        if recording.get("kind") == "video" and inputs.get("video_names", "yes") == "yes":
+            tags, tag_stats = worker.name_tags(Path(recording["path"]), work / "segments.json", job)
+            stats.update(tag_stats)
+        segs = label_speakers(raw, tags)
+        job.detail(engine=worker.options.get("engine", "qwen"), speakers=len({s["speaker"] for s in segs}),
+                   named_from_video=len(set(tags.values())), segments=len(segs),
+                   audio_seconds=round(max(s["end"] for s in segs)), **stats)
+        people = ", ".join(dict.fromkeys([p for p in [people, *tags.values()] if p]))[:500]
+    notes, names, corrected = None, {}, False
     if inputs.get("notes", "notes") == "notes":
         job.report("Waiting for a text model")
         model = job.need("text_model", {"model": inputs.get("text_model") or "auto", "gpu": worker.gpus[0]})
@@ -452,14 +527,19 @@ def generate(worker, inputs, job):
             t = time.time()
             if inputs.get("correct", "yes") == "yes" and model.get("can_correct", True):
                 segs, cstats = correct(model, segs, terms, job)
+                corrected = True
                 job.detail(correct_seconds=round(time.time() - t, 1), **cstats)
             job.report("Writing the summary, action items and decisions")
             t = time.time()
-            notes = extract(model, segs, people)
-            names = {k: v for k, v in (notes.get("speakers") or {}).items() if isinstance(v, str) and v.strip()}
-            job.detail(notes_seconds=round(time.time() - t, 1), actions=len(notes["actions"]),
-                       decisions=len(notes["decisions"]))
-    write_outputs(job, segs, notes, names, raw if notes is not None else None)
+            try:
+                notes = extract(model, segs, people)
+                names = {k: v.strip() for k, v in (notes.get("speakers") or {}).items()
+                         if isinstance(v, str) and v.strip() and v.strip() != k}  # a name the file already gave needs no second one
+                job.detail(notes_seconds=round(time.time() - t, 1), actions=len(notes["actions"]),
+                           decisions=len(notes["decisions"]))
+            except RuntimeError as exc:  # the transcript (corrected or not) is done and worth keeping
+                job.detail(notes_error=str(exc), notes_seconds=round(time.time() - t, 1))
+    write_outputs(job, segs, notes, names, raw if notes is not None or corrected else None)
 
 
 if __name__ == "__main__":

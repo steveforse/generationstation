@@ -41,7 +41,7 @@ class SettingSpec(BaseModel):
 class InputSpec(BaseModel):
     """One field of a generation form (what the person types to make a song, image, ...).
 
-    A "files" field takes uploads: `accept` names the kinds ("image", "video", "audio") and
+    A "files" field takes uploads: `accept` names the kinds ("image", "video", "audio", "transcript") and
     `max_count` how many. Its value is a list of upload IDs; the worker receives the files' paths.
     A "crop" field is the framing of the picture in the files field `target`, chosen on a preview when the
     shape (`shape_field`, whose options carry their proportions such as "16:9") differs from the picture's:
@@ -60,7 +60,7 @@ class InputSpec(BaseModel):
     placeholder: str | None = None
     help: str
     advanced: bool = False
-    accept: tuple[Literal["image", "video", "audio"], ...] = ()
+    accept: tuple[Literal["image", "video", "audio", "transcript"], ...] = ()
     max_count: int | None = Field(default=None, ge=1, le=12)
     target: str | None = None
     shape_field: str | None = None

@@ -25,7 +25,8 @@ def test_saves_a_picture_and_finds_it_again(tmp_path):
 
 
 @pytest.mark.parametrize("name, data, message", [
-    ("notes.txt", b"hello", "not accepted"),
+    ("notes.exe", b"hello", "not accepted"),
+    ("call.vtt", b"WEBVTT\n\x00\x01", "not a valid"),
     ("photo.png", b"GIF89a....", "not a valid PNG"),
     ("clip.mp4", b"\x00\x00\x00\x18notftyp", "not a valid MP4"),
     ("empty.wav", b"", "not a valid WAV"),
@@ -47,3 +48,12 @@ def test_ids_are_only_upload_ids(tmp_path):
     store = UploadStore(tmp_path)
     for bad in ("../runtimes", "a" * 31, None, 5, "A" * 32):
         assert store.get(bad) is None
+
+
+def test_a_transcript_is_kept_as_text_and_a_binary_one_is_refused(tmp_path):
+    store = UploadStore(tmp_path)
+    record = store.save("Standup.VTT", ["WEBVTT\n\n00:00.000 --> 00:02.000\nAnna: héllo\n".encode()])
+    assert record["kind"] == "transcript" and record["mime"] == "text/vtt"
+    assert store.save("notes.md", [b"# Notes\nAnna: hi"])["kind"] == "transcript"
+    with pytest.raises(UploadError):
+        store.save("call.txt", [b"\xff\xfe\x00\x00binary"])
