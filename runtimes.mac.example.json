@@ -282,6 +282,321 @@
           }
         }
       }
+    },
+    "qwen_image": {
+      "kind": "qwen_image",
+      "name": "Qwen Image pictures",
+      "workload": "image",
+      "description": "Pictures from a written description, with legible lettering.",
+      "python": "/Users/YOU/ai/envs/mflux/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/qwen-image",
+      "port": 8180,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Qwen Image 2.1 Turbo (MLX, 8-bit)",
+          "description": "8 steps, one picture every 15-25 s. Each picture runs in its own process (--low-ram), so memory is held only while one is being made.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/qwen-image-2-1-turbo-mflux-q8",
+            "steps": 8
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 10,
+            "gpu_min_free_gib": {}
+          }
+        },
+        "zimage": {
+          "name": "Z-Image Turbo (MLX, 8-bit)",
+          "description": "Tongyi-MAI's 6B distilled model, Apache-2.0. 9 steps, one picture in about 16-20 s; no negative prompt.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/z-image-turbo-mflux-q8",
+            "command": "mflux-generate-z-image-turbo",
+            "steps": 9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 9,
+            "gpu_min_free_gib": {}
+          }
+        },
+        "qwen2512": {
+          "name": "Qwen-Image 2512 (MLX, 8-bit; heavy)",
+          "description": "Qwen's December 2025 base model, Apache-2.0: 20 steps with a negative prompt. Needs about 37 GiB while a picture is made and takes 4-5 minutes, so only start it with the other models stopped.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/qwen-image-2512-mflux-q8",
+            "command": "mflux-generate-qwen",
+            "base_model": "qwen-image",
+            "steps": 20,
+            "guidance": 4.0,
+            "negative": true
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 38,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "worker_script": "qwen_image_mflux_worker.py"
+    },
+    "yue2": {
+      "kind": "yue2",
+      "name": "YuE2 songs",
+      "workload": "music",
+      "description": "Full songs with vocals from lyrics and a style description (the MLX port; non-commercial licence).",
+      "python": "/Users/YOU/ai/tools/mlx-Yue/.venv/bin/python",
+      "worker_script": "yue2_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/yue2",
+      "port": 8170,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "YuE2 3B (MLX, 8-bit)",
+          "description": "About real time: a three-minute song takes about three minutes. Language model in 8 bits, audio model in bf16.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/yue2-mlx/mlx-Yue2-3B",
+            "vae_dir": "/Users/YOU/ai/models/yue2-mlx/YuE2-Vae",
+            "precision": "8bit",
+            "memory_budget_gib": 16
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    },
+    "qwen3_tts": {
+      "kind": "qwen3_tts",
+      "name": "Qwen3-TTS speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "qwen3_tts_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/qwen3-tts",
+      "port": 8210,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Qwen3-TTS 1.7B (MLX, 8-bit)",
+          "description": "Qwen's Qwen3-TTS 12Hz 1.7B in 8 bits: CustomVoice, VoiceDesign and Base, one in memory at a time. Apache 2.0.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "custom_voice_dir": "/Users/YOU/ai/models/tts/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+            "voice_design_dir": "/Users/YOU/ai/models/tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+            "base_dir": "/Users/YOU/ai/models/tts/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+            "asr_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 8,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    },
+    "omnivoice": {
+      "kind": "omnivoice",
+      "name": "OmniVoice speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "omnivoice_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/omnivoice",
+      "port": 8200,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "OmniVoice (MLX, bf16)",
+          "description": "OmniVoice in 646+ languages, voice cloning or a described voice. The model is CC BY-NC: non-commercial use only.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/tts/OmniVoice-bf16",
+            "asr_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    },
+    "fish_drama3": {
+      "kind": "fish_drama3",
+      "name": "Drama 3 speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "fish_drama3_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/fish-drama3",
+      "port": 8220,
+      "ready_timeout_seconds": 600,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Drama 3 (MLX, 3-bit)",
+          "description": "Fish Audio's Drama 3 with speaker tags and scenes, 3-bit. Fish Audio Community License: free below USD 500,000 annual revenue, no hosted services.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/tts/fish-audio-drama-3-3bit",
+            "max_frames": 1024
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 26,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    },
+    "fish_s2": {
+      "kind": "fish_s2",
+      "name": "S2 Pro speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "fish_s2_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/fish-s2",
+      "port": 8240,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "S2 Pro (MLX, 8-bit)",
+          "description": "Fish Audio S2 Pro with [cue] tags. Fish Audio Research License: research and personal use only.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/tts/fish-audio-s2-pro-8bit",
+            "asr_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    },
+    "breeze_tts": {
+      "kind": "breeze_tts",
+      "name": "Breeze TTS 2 speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "breeze_tts_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/breeze-tts",
+      "port": 8250,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Breeze TTS 2 (MLX, 8-bit)",
+          "description": "English and Chinese speech from a described or cloned voice. BreezeBlue non-commercial licence.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/tts/Breeze-TTS-2-mlx-8bit",
+            "asr_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 9,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
+    },
+    "wan_video": {
+      "kind": "wan_video",
+      "name": "Wan 2.2 video",
+      "workload": "video",
+      "description": "Short clips from a description or a first picture (Apache-2.0).",
+      "python": "/Users/YOU/ai/envs/mlx-video/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/wan-video",
+      "port": 8260,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Wan 2.2 TI2V 5B (MLX, 8-bit)",
+          "description": "832x480, up to 1.4 s, about 100 s per clip. The model is loaded for each clip, and the clip needs about 29 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/wan/wan22-ti2v-5b-mlx-q8",
+            "memory_limit_gib": 26,
+            "steps": 20,
+            "tiling": "none"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 30,
+            "gpu_min_free_gib": {}
+          }
+        }
+      }
     }
   }
 }

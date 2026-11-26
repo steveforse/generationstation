@@ -30,6 +30,8 @@ class YuE2Plugin(WorkerPlugin):
     output_kind = "audio"
     # One measurement: 49 s of audio, verse and chorus, RTX 5090 (2026-11-12).
     timings: ClassVar[tuple[TimingSpec, ...]] = (
+        # Apple silicon (MLX port, 8-bit), M5 Max: a 185 s song took 190 s, about real time.
+        TimingSpec(preset="mlx", gpu=0, seconds=100, note="for a verse and chorus; about as long as the song itself"),
         TimingSpec(gpu=0, seconds=41, note="for a verse and chorus; longer lyrics take longer"),
     )
     settings: ClassVar[dict[str, SettingSpec]] = {

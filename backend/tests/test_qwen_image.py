@@ -67,3 +67,23 @@ def test_example_catalog_entry_is_valid():
     entry = catalog.runtimes["qwen_image"]
     assert set(entry.presets) == {"uncensored", "turbo"}
     assert entry.presets["turbo"].options["turbo"] is True
+
+
+def test_mac_entry_uses_the_mflux_worker_and_one_unified_memory_device():
+    catalog = parse_catalog(json.loads((ROOT / "runtimes.mac.example.json").read_text()))
+    entry = catalog.runtimes["qwen_image"]
+    assert set(entry.presets) == {"mlx", "zimage", "qwen2512"} and entry.default_preset == "mlx"
+    assert QWEN.script_path(entry) == ROOT / "workers" / "qwen_image_mflux_worker.py"
+    assert QWEN.script_path(entry).exists()
+    preset = entry.presets["mlx"]
+    assert preset.allowed_gpus == [0] and QWEN.estimate(entry, preset, {}, [0]) == (10, {})
+
+
+def test_mflux_worker_sizes_follow_the_shapes_and_snap_to_sixteen(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "workers"))
+    import qwen_image_mflux_worker as worker
+
+    assert worker._size("portrait") == (768, 1152) and worker._size(None) == (1024, 1024)
+    assert worker._size("1000x700") == (992, 688)
+    with pytest.raises(ValueError, match="between 256 and 2048"):
+        worker._size("4096x512")

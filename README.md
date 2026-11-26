@@ -7,7 +7,7 @@ It runs on two kinds of host:
 | Host | Models it runs | Guide |
 | --- | --- | --- |
 | Windows 11 desktop with an NVIDIA card | Pictures, songs, speech, video, text models, meeting notes | [docs/development.md](docs/development.md) |
-| Apple-silicon Mac (developed on an M5 Max, 64 GB) | Text models and meeting notes | [docs/setup-macos.md](docs/setup-macos.md) |
+| Apple-silicon Mac (developed on an M5 Max, 64 GB) | Text models, meeting notes, pictures, songs and speech | [docs/setup-macos.md](docs/setup-macos.md) |
 
 You can browse the dashboard from any other machine on your network or tailnet; only the host needs the models.
 

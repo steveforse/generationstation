@@ -1,13 +1,16 @@
 """Model plugin registry. Add a plugin by writing a module here and listing it below."""
 from .basalt import BasaltPlugin
 from .base import RuntimePlugin
+from .breeze_tts import BreezeTTSPlugin
 from .fish_drama3 import FishDrama3Plugin
+from .fish_s2 import FishS2Plugin
 from .llm import LLMPlugin
 from .meeting_notes import MeetingNotesPlugin
 from .minimax_h3 import MiniMaxH3Plugin
 from .omnivoice import OmniVoicePlugin
 from .qwen3_tts import Qwen3TTSPlugin
 from .qwen_image import QwenImagePlugin
+from .wan_video import WanVideoPlugin
 from .yue2 import YuE2Plugin
 
 _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
@@ -19,6 +22,9 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     OmniVoicePlugin(),
     Qwen3TTSPlugin(),
     FishDrama3Plugin(),
+    FishS2Plugin(),
+    BreezeTTSPlugin(),
+    WanVideoPlugin(),
     MeetingNotesPlugin(),
 )}
 

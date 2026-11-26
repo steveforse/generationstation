@@ -25,7 +25,7 @@ class WorkerRuntime(BaseRuntime):
     python: str = Field(min_length=1, description="python.exe of this model's own environment.")
     output_dir: str = Field(min_length=1, description="Where finished files are kept.")
     env: dict[str, str] = Field(default_factory=dict)
-    worker_script: str | None = Field(default=None, description="Override the plugin's worker; for tests.")
+    worker_script: str | None = Field(default=None, description="Use a different worker: a file name in workers/ (for example the Apple-silicon engine of a model) or an absolute path (tests).")
     ready_timeout_seconds: float = Field(default=900, gt=0, le=7200)
     presets: dict[str, WorkerPreset] = Field(min_length=1)
 
@@ -52,7 +52,8 @@ class WorkerPlugin(RuntimePlugin):
     worker_script: ClassVar[str]
 
     def script_path(self, runtime: WorkerRuntime) -> Path:
-        return Path(runtime.worker_script) if runtime.worker_script else WORKERS_DIR / self.worker_script
+        script = Path(runtime.worker_script or self.worker_script)
+        return script if script.is_absolute() else WORKERS_DIR / script
 
     def launch(self, runtime, preset, values, gpus, base_env, launch_dir: Path):
         config = {"port": runtime.port, "output_dir": str(self.output_dir(runtime)), "options": preset.options,

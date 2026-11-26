@@ -6,7 +6,11 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 
 | Works | Does not (needs an NVIDIA card) |
 | --- | --- |
-| Dashboard, API, database, chat, logs | Pictures (Qwen Image), songs (YuE2), video (MiniMax H3), speech (OmniVoice, Qwen3-TTS) |
+| Dashboard, API, database, chat, logs | Video with MiniMax H3 or HunyuanVideo 1.5 |
+| Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s | |
+| Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
+| Songs: YuE2 through the MLX port (mlx-Yue) | |
+| Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
 | Text models: Qwen3.8 27B, Qwen3.8 Flash-Next, Tencent Hy4-Flash, Inkling 2 Mini | The Basalt runtime and the Windows meeting engines (Nemotron, VibeVoice, DiariZen) |
 | Meeting notes: speaker detection, speech recognition, correction, notes, name reading from Zoom video, transcript editing | |
 | Web search for the chat through a local SearXNG | |
@@ -22,6 +26,16 @@ The Mac reports its shared memory as one pool (`apple-unified-memory`), counted 
 | `flash_next`, Qwen3.8 Flash-Next, Gyro-S / M / L (through Strata) | 34 / 38 / 38 GiB | 58.5 / 92 / 108 GB | 80-110 / 60-70 / 50-55 tok/s |
 | `hy4_flash`, Tencent Hy4-Flash, SQ-64 (through Strata) | 36 GiB | about 122 GiB | 14-18 tok/s |
 | `meeting_notes` speech steps | 6 GiB | about 3 GiB | about 4 minutes per hour of recording |
+| `qwen_image`, Qwen Image 2.1 Turbo (8-bit, through mflux) | 10 GiB, held only while a picture is made | 18 GB | 17-23 s for a 1024x1024 picture |
+| `yue2`, YuE2 3B (8-bit language model, through mlx-Yue) | 14 GiB | about 10 GB | 0.5-1.1 times the song's length |
+| `qwen_image` preset `zimage`, Z-Image Turbo (8-bit) | 9 GiB, while a picture is made | 10 GB | 16-22 s for 1024x1024 |
+| `qwen_image` preset `qwen2512`, Qwen-Image 2512 (8-bit) | 38 GiB, while a picture is made | 34 GB | about 3 min for 768x1152 |
+| `wan_video`, Wan 2.2 TI2V 5B (8-bit) | 30 GiB, while a clip is made | 18 GB | about 70-100 s for a 1.4 s clip |
+| `qwen3_tts` (8-bit, three 1.7B models, one at a time) | 8 GiB | 9 GB | a few seconds per sentence |
+| `omnivoice` (bf16) | 6 GiB | 1.5 GB | a few seconds per sentence |
+| `fish_drama3`, Drama 3 (3-bit) | 26 GiB | 18 GB | about real time |
+| `fish_s2`, S2 Pro (8-bit) | 14 GiB | 6 GB | about 0.6 times real time |
+| `breeze_tts`, Breeze TTS 2 (8-bit) | 9 GiB | 4 GB | a few seconds per sentence |
 
 The target is a 64 GB Mac, which runs one large text model beside the meeting worker. Smaller Macs have not been tried: compare the memory column with what your Mac has free (plus the headroom described below), and expect only the smaller models to fit. You do not need every model: install the ones you want and delete the others from your `runtimes.json`.
 
@@ -144,7 +158,85 @@ Gyro-L is not offered by Strata's Mac setup; it was installed by hand, and the r
 
 Hy4-Flash (220B mixture of experts, 12B active) runs on Strata's `strata-hy4` engine in the `SQ-64` build: a 62 GB model file plus a 67.6 GB lookup table that stays on the SSD, about 122 GiB in all. It reads experts from the SSD into a cache, so it is much slower (14-18 tok/s) than Flash-Next; try it only if you have the disk. Install it into its own checkout so the Flash-Next install is untouched; the exact environment variables are in the template's `hy4_flash` entry (`STRATA_METAL_EXP_CACHE_GB` sets the cache). Thinking is off with `reasoning_effort: "none"`; the model's own levels are `high` (default) and `max`.
 
-## 5. Web search for the chat
+## 5. Pictures and songs
+
+Both run as workers in their own environments, outside the repository, and are started from the Models page like any other model.
+
+### Qwen Image 2.1 Turbo (mflux)
+
+[mflux](https://github.com/filipstrand/mflux) runs Qwen Image on MLX. The worker starts one `mflux-generate-qwen-2.1 --low-ram` process per picture, so the model's memory (about 8.5 GiB at the peak) is held only while a picture is being made, and the process start adds a few seconds. Turbo has one quality and no negative prompt, so those form fields have no effect.
+
+```sh
+uv venv ~/ai/envs/mflux --python 3.12
+uv pip install --python ~/ai/envs/mflux/bin/python mflux pillow
+~/ai/envs/meeting-worker/bin/hf download mflux-community/qwen-image-2-1-turbo-mflux-q8 \
+  --local-dir ~/ai/models/qwen-image-mac/qwen-image-2-1-turbo-mflux-q8
+```
+
+The weights are Qwen's research licence, which is not a general commercial licence; read it before using pictures for anything but your own work. The template's `qwen_image` entry points at these folders and sets `worker_script` to `qwen_image_mflux_worker.py`.
+
+### YuE2 songs (mlx-Yue)
+
+[mlx-Yue](https://github.com/vanch007/mlx-Yue) is an MLX port of YuE2-3B. The worker keeps the 8-bit language model loaded, so a song starts at once, and runs one song at a time. A verse and a chorus (about 55 s of music) took about 30 s; a three-minute song took about as long as the song. The weights are CC BY-NC 4.0 (**non-commercial**).
+
+```sh
+git clone https://github.com/vanch007/mlx-Yue ~/ai/tools/mlx-Yue && cd ~/ai/tools/mlx-Yue
+uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python -e . soundfile
+.venv/bin/lyra prepare --output ~/ai/models/yue2-mlx/mlx-Yue2-3B --precision 8bit   # downloads the checkpoints and the decoder
+```
+
+`prepare` leaves the decoder in the Hugging Face cache; copy or point `vae_dir` at it. The port checks the model folder strictly and refuses stray files (a `.cache` folder, a `vae` folder, a `.gitattributes`), so keep only the files it wrote there. The worker sets `MLX_ENABLE_TF32=0`, as the port documents.
+
+### Z-Image Turbo and Qwen-Image 2512
+
+Both are presets of the same `qwen_image` model (pick one on the Models page); the worker passes the preset's `command`, `steps`, `guidance` and `base_model` to mflux.
+
+```sh
+HF=~/ai/envs/meeting-worker/bin/hf
+$HF download mflux-community/z-image-turbo-mflux-q8 --local-dir ~/ai/models/qwen-image-mac/z-image-turbo-mflux-q8
+$HF download mflux-community/qwen-image-2512-mflux-q8 --local-dir ~/ai/models/qwen-image-mac/qwen-image-2512-mflux-q8
+```
+
+Z-Image Turbo (Tongyi-MAI, Apache-2.0) is the fast alternative: 7.5 GiB peak, 16-22 s. Qwen-Image 2512 (Apache-2.0) is a base model with a negative prompt and 20 guided steps. Even at 8 bits it peaks near 37 GiB and takes about 3 minutes for a portrait picture (4.5 minutes for 1024x1024); the 4-bit conversion still peaked near 29 GiB and was slower, so only start it with the other large models stopped.
+
+### Wan 2.2 video (mlx-video)
+
+[mlx-video](https://github.com/Blaizzy/mlx-video) runs Wan 2.2 on MLX; the PyPI package of that name is a different project, so install from git. Wan 2.2 and its weights are Apache-2.0. Each clip is one process under a 26 GiB MLX memory limit and peaks near 29 GiB, so stop the large text models first. Clips are 832x480 (or 480x832, 640x640) and 17 or 33 frames at 24 fps: 81 frames peaked at 61 GiB and are not offered.
+
+```sh
+uv venv ~/ai/envs/mlx-video --python 3.12
+uv pip install --python ~/ai/envs/mlx-video/bin/python "git+https://github.com/Blaizzy/mlx-video.git" soundfile pillow torch
+~/ai/envs/meeting-worker/bin/hf download Wan-AI/Wan2.2-TI2V-5B --local-dir ~/ai/models/wan/wan22-ti2v-5b   # 32 GB
+~/ai/envs/mlx-video/bin/python -m mlx_video.models.wan_2.convert --checkpoint-dir ~/ai/models/wan/wan22-ti2v-5b \
+  --output-dir ~/ai/models/wan/wan22-ti2v-5b-mlx-q8 --quantize --bits 8   # peaks near 54 GB; run it with other models stopped
+```
+
+The worker needs `google/umt5-xxl`'s tokenizer in the Hugging Face cache (the first generation without `HF_HUB_OFFLINE` fetches it). HunyuanVideo 1.5 is not set up: the only MLX port found is gated, and a GGUF run through stable-diffusion.cpp took about 80 s per step at 480x272. Its licence also excludes the EU, UK and South Korea.
+
+## 6. Speech
+
+All five speech models run through [mlx-audio](https://github.com/Blaizzy/mlx-audio) (MIT) in one environment, in the worker process, with no server. **Check each model's licence before anyone but you uses it.**
+
+```sh
+uv venv ~/ai/envs/mlx-tts --python 3.12
+uv pip install --python ~/ai/envs/mlx-tts/bin/python mlx-audio soundfile pillow
+HF=~/ai/envs/meeting-worker/bin/hf; T=~/ai/models/tts
+for r in Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit Qwen3-TTS-12Hz-1.7B-Base-8bit \
+         OmniVoice-bf16 fish-audio-drama-3-3bit fish-audio-s2-pro-8bit Breeze-TTS-2-mlx-8bit; do
+  $HF download mlx-community/$r --local-dir $T/$r; done
+```
+
+| Model | Licence | Notes |
+| --- | --- | --- |
+| Qwen3-TTS | Apache-2.0 | Built-in voices, a voice from a description, cloning. About 3 GiB per model; only the tab in use stays loaded. |
+| Fish Drama 3 | Fish Audio Community License: free below USD 500,000 annual revenue (you and your affiliates), no hosted service for third parties | Scenes with several speakers, `[cue]` tags. 3-bit peaks near 22.6 GiB; the 4-bit near 26.4 GiB. |
+| Fish S2 Pro | Fish Audio Research License: **no commercial use, including a company's internal operations** | `[cue]` tags, cloning. |
+| OmniVoice | CC BY-NC (weights), plus a 100,000-user cap on its audio tokenizer | **Non-commercial.** The Mac model has no speed control, so that form field is ignored. |
+| Breeze TTS 2 (BreezeBlue's, not MediaTek's) | BreezeBlue research and non-commercial licence | **Non-commercial.** English and Chinese; one reference voice per take. |
+
+When you clone a voice without typing what the sample says, the worker writes it down with the Qwen3-ASR folder from the meeting setup (`asr_dir`). The MLX models need those exact words.
+
+## 7. Web search for the chat
 
 Without a search address the chat is not offered the `web_search` tool. Run SearXNG on this Mac, bound to loopback:
 
@@ -189,7 +281,7 @@ To stop: Ctrl+C in both terminals, then `docker compose down` (keeps the databas
 | Start refused with `HOST_ROLE_UNSUPPORTED` | `GS_HOST_ROLE=desktop` is missing from `.env`. Add it and restart the API. |
 | Start refused, "needs N GiB, M GiB free" | Not enough free memory after headroom. Quit apps, stop another model, or restart the container VM. A smaller preset (Gyro-S) or model needs less. |
 | A model you removed or added does not show | The API reads `runtimes.json` at start. Restart it. |
-| Chat says it cannot search the web | No search address is saved. See section 5. |
+| Chat says it cannot search the web | No search address is saved. See section 7. |
 | Inkling fails to load in oMLX | You downloaded the plain 4-bit checkpoint. Use the `oQ` build. |
 | Every speaker is "Speaker N" on a video | The OCR packages are missing from the meeting-worker environment, or the video is not a Zoom recording. The job still succeeds. |
 | Many speakers for one person | Lower `diar_threshold` splits more; raise it (0.9 is the template value) and restart the API. |
