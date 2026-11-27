@@ -378,10 +378,9 @@ uv pip install --python ~/ai/envs/decide-torchcast/bin/python torch "transformer
 ~/ai/envs/meeting-worker/bin/hf download torchcast-ai/torchcast-decision-4b --revision v1.3.1 --local-dir ~/ai/models/decision/torchcast-4b
 
 # Torchcast 31B (v1.0.0, 61 GB bf16) as a 33 GB 8-bit MLX copy. Needs mlx-lm 0.32.x, which the same environment has;
-# the conversion peaks near 40 GB, so run it alone. Delete the bf16 folder afterwards if you like.
+# the conversion peaks near 40 GB, so run it alone. Afterwards delete the folder's `model-*.safetensors` shards (61 GB) but keep the rest: the engine reads its prompt code, tokenizer and `decision_config.json` at run time.
 ~/ai/envs/meeting-worker/bin/hf download torchcast-ai/torchcast-decision-31b --revision v1.0.0 --local-dir ~/ai/models/decision/torchcast-31b
 ~/ai/envs/decide-torchcast/bin/python workers/torchcast31_convert.py ~/ai/models/decision/torchcast-31b ~/ai/models/decision/torchcast-31b-mlx-8bit
-# (the vendor folder is still needed at run time for its prompt code and tokenizer, but not its weights)
 
 # pplx-decider 27B (8-bit, 26 GB) and H2O-Lightning 4B (8.7 GB): both read pictures, through mlx-decision
 uv venv ~/ai/envs/decide-pplx --python 3.12
