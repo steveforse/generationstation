@@ -20,7 +20,7 @@ The speech models (Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2
 4. **Direction guidance** adapts to the loaded model: a style box with examples, cue chips that insert at the cursor, or a note that the model cannot act emotions and which ones can.
 5. **Switching models** carries over text, language, seed and a sample with its transcript; style, cues and OmniVoice's attributes do not. The page says what was dropped. Cues typed for one model are read aloud by a model without cues, so switching warns and offers "Remove cues"; Fish S2 and Drama 3 cue names are mapped.
 6. **Voice library** (in scope): saved voices, each with a name, the sample and its transcript, kept by the app on the host (`<runtime_dir>/voices/`). A voice can be picked on the Speech page for any model that clones, saved from a result's sample, and renamed or deleted. The transcript is read from the sample when the ASR model is configured. A note beside the sample field: only clone voices you have permission to use.
-7. **Licences.** Each option in the dropdown carries its licence badge (OmniVoice, Fish S2 and Breeze are personal use only, Drama 3 has a revenue cap), and a work-only filter hides the rest.
+7. **Licences.** Each option in the dropdown carries its licence badge (OmniVoice, Fish S2 and Breeze are personal use only, Drama 3 has a revenue cap); the Models page keeps the licence filter.
 8. **Chat and assistant.** The dozen per-model speech tools become one `speak` tool whose description carries the loaded model's direction guidance; the assistant guide is generated from the same capabilities.
 9. **No redirects.** Old per-model addresses are not kept; in-app links use `modelRoute`.
 

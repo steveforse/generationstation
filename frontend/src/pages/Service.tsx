@@ -18,7 +18,7 @@ import type { Job, JobFile, Operation, ReferenceModel, Runtime, RuntimeEstimate 
 const USE_FILTERS = [['', 'All'], ['work', 'Work use'], ['personal', 'Personal use only']] as const
 /** The uses a model's versions allow: a model with several versions counts under each use one of them allows. */
 const usesOf = (runtime: Runtime) => new Set(Object.values(runtime.presets).map((preset) => (preset.license ?? runtime.license)?.use))
-export const usable = (filter: string, runtime: Runtime) => {
+const usable = (filter: string, runtime: Runtime) => {
   const uses = usesOf(runtime)
   return !filter || (filter === 'work' ? uses.has('work') || uses.has('conditions') : uses.has('personal'))
 }

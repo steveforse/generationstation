@@ -8,7 +8,7 @@ import type { Job, Runtime, Voice } from '../types'
 import type { FileItem } from '../components/FilePicker'
 import { takeHandOff } from '../voiceSample'
 import { VoiceLibrary } from '../components/VoiceLibrary'
-import { ServicePage, usable } from './Service'
+import { ServicePage } from './Service'
 
 const insert = (cue: string) => (current: string, start: number | null, end: number | null) => {
   const at = start ?? current.length
@@ -21,7 +21,6 @@ const insert = (cue: string) => (current: string, start: number | null, end: num
 export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: SavedHost; modelId?: string }) {
   const state = useSession(host ? store.session(host.id) : undefined)
   const [pickedId, setPickedId] = useState<string | null>(modelId ?? null)
-  const [workOnly, setWorkOnly] = useState(false)
   const [draft, setDraft] = useState<Draft>(emptyDraft)
   const draftRef = useRef(draft)
   const [form, setForm] = useState<{ n: number; mode?: string }>({ n: 0 })
@@ -34,8 +33,7 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
   useEffect(() => { if (state.connection === 'connected') loadVoices() }, [state.connection, loadVoices])
   const speechRuntimes = (state.runtimes ?? []).filter((runtime) => runtime.workload === 'speech' && runtime.generation?.speech)
   const running = speechRuntimes.filter((runtime) => state.models?.find((model) => model.id === runtime.id)?.state === 'ready')
-  const offered = running.filter((runtime) => !workOnly || usable('work', runtime))
-  const chosen = offered.find((runtime) => runtime.id === pickedId) ?? offered[0] ?? speechRuntimes.find((runtime) => runtime.id === pickedId) ?? speechRuntimes[0]
+  const chosen = running.find((runtime) => runtime.id === pickedId) ?? running[0] ?? speechRuntimes.find((runtime) => runtime.id === pickedId) ?? speechRuntimes[0]
   const speech = chosen?.generation?.speech ?? undefined
   const chosenId = chosen?.id
   const mode = chosen?.generation?.modes?.some((item) => item.key === picked) ? picked : chosen?.generation?.modes?.[0]?.key ?? ''
@@ -100,10 +98,9 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
   const send = (apply: (current: string, start: number | null, end: number | null) => string) => textField && setCommand((current) => ({ n: (current?.n ?? 0) + 1, mode, field: textField, apply }))
 
   const picker = <div className="decide-picker-row">
-    {offered.length > 1 && <label className="decide-picker"><span>Model speaking</span>
+    {running.length > 1 && <label className="decide-picker"><span>Model speaking</span>
       <select aria-label="Model speaking" value={chosen?.id} onChange={(event) => setPickedId(event.target.value)}>
-        {offered.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.name} ({LICENSE_WORD[runtime.license?.use ?? 'personal'] ?? 'Licence not reviewed'})</option>)}</select></label>}
-    {running.length > 1 && running.some((runtime) => !usable('work', runtime)) && <label className="checkbox-row"><input type="checkbox" checked={workOnly} onChange={(event) => setWorkOnly(event.target.checked)} /> Work use only</label>}
+        {running.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.name} ({runtime.license ? LICENSE_WORD[runtime.license.use] : 'Licence not reviewed'})</option>)}</select></label>}
   </div>
 
   const canClone = !!speech?.voices.clone
