@@ -1525,6 +1525,56 @@
         "note": "H2O-Lightning 4B on JevBench, run at full precision as here."
       },
       "rankings": []
+    },
+    "decide_torchcast": {
+      "kind": "decide",
+      "name": "Torchcast 4B",
+      "workload": "decision",
+      "description": "Answers a question about a situation with a probability for each answer. Text only; small and fast.",
+      "python": "/Users/YOU/ai/envs/decide-torchcast/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8403,
+      "ready_timeout_seconds": 180,
+      "stop_timeout_seconds": 30,
+      "default_preset": "bf16",
+      "presets": {
+        "bf16": {
+          "name": "Torchcast 4B v1.3 (bf16, Mac GPU)",
+          "description": "About 0.15 s for a short situation, 1.5 s for 6,000 tokens. Needs about 14 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "torchcast",
+            "model_dir": "/Users/YOU/ai/models/decision/torchcast-4b",
+            "model_name": "Torchcast 4B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0 (v1.3.1 and later; v1.1 was CC BY-NC)",
+        "code": "Apache-2.0 (torchcast_decision package)",
+        "note": "Based on Qwen3.5-4B (Apache-2.0). Use the v1.3.1 release: earlier releases keep a non-commercial licence. The 12B and 27B Torchcast models are CC BY-NC, so personal use only.",
+        "url": "https://huggingface.co/torchcast-ai/torchcast-decision-4b"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 77.5,
+        "estimated": false,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "Torchcast 4B v1.3 on JevBench, run at bf16 as here."
+      },
+      "rankings": []
     }
   },
   "references": [
@@ -2025,6 +2075,20 @@
           "source": "https://benchmarkheaven.com/jev-models",
           "as_of": "2026-11-26",
           "note": "Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Torchcast 31B",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 89.5,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Apache-2.0. Runs on this Mac only as a custom 8-bit MLX build (about 37 GB at peak), not added here yet."
         }
       ]
     }

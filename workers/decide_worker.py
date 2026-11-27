@@ -5,6 +5,8 @@ Config options (from runtimes.json, per preset):
     engine     "karpo": the Karpo 31B MLX port (serve_karpo_31b_mlx.py lives in the model folder; text only).
                "mlx_decision": pplx-decider, H2O-Lightning and the other models the mlx-decision package loads; they
                also read pictures.
+               "torchcast": the vendor's torchcast_decision package on the Mac GPU (torch MPS, bf16); it keeps the
+               vendor's non-causal attention, which stock MLX and llama.cpp get wrong. Text only.
     reading    mlx_decision only: "two-way" (default) or "one-way" (H2O: questions share one pass over the situation).
     model_dir  The model folder.
 Inputs: state, question_type ("choose" | "yesno" | "score"), instructions, options (one per line, "name: meaning"),
@@ -33,7 +35,7 @@ def load(config):
     options = config["options"]
     engine = options.get("engine", "karpo")
     model_dir = Path(options["model_dir"])
-    if engine not in ("karpo", "mlx_decision"):
+    if engine not in ("karpo", "mlx_decision", "torchcast"):
         raise ValueError(f"Unknown decision engine {engine!r}")
     thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="decide")
     if engine == "karpo":
@@ -53,6 +55,27 @@ def load(config):
                 return answers, tokens, forward_ms
             return decide
         name = options.get("model_name", "Karpo 31B")
+    elif engine == "torchcast":
+        if not (model_dir / "torchcast_decision").is_dir():
+            raise FileNotFoundError(f"No torchcast_decision package in {model_dir}")
+
+        def build():
+            import os
+
+            os.environ.setdefault("TC_ALLOW_SLOW", "1")  # no flash-linear-attention on a Mac: the plain torch path is used
+            sys.path.insert(0, str(model_dir))
+            from torchcast_decision.model import TorchcastDecision
+
+            engine_object = TorchcastDecision(str(model_dir), device="mps", images=False, graphs=False)
+
+            def decide(state, questions, images):
+                if images:
+                    raise ValueError("This model reads text only. Start pplx-decider or H2O-Lightning to use a picture.")
+                started = time.perf_counter()
+                answers, usage = engine_object.decide(state, questions)
+                return answers, usage.get("input_tokens"), (time.perf_counter() - started) * 1000
+            return decide
+        name = options.get("model_name", "Torchcast")
     else:
         def build():
             import mlx_decision

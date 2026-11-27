@@ -10,7 +10,7 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Waiting for a decision
 
-- **Decide tool: Karpo 31B, pplx-decider 27B (8-bit) and H2O-Lightning 4B built and tested through the app (pplx read a receipt picture). Torchcast 31B and 4B: a Mac route is still being checked; if it is wrong, they become reference bars.** Also open: a calibration note on the result page (Karpo's probabilities are near 0 or 1), pplx v1.3, an ordering test.
+- **Decide tool: Karpo 31B, pplx-decider 27B (8-bit) and H2O-Lightning 4B built and tested through the app (pplx read a receipt picture). Torchcast 4B added (vendor package on torch MPS, 0.15 s). Torchcast 31B has a correct Mac route (custom 8-bit MLX build, 37 GB peak, harness in `~/ai/models/decision/scripts/mlx31.py`) but is not added yet and is a reference bar; adding it needs the harness moved into `workers/`. Leftovers: `torchcast-31b-untied` (convert input) and the arinltte 4B MLX copies (20 GB) can go.** Also open: a calibration note on the result page (Karpo's probabilities are near 0 or 1), pplx v1.3, an ordering test.
 
 - **Decision models (like TypeSafe's Jev) as a "Decide" tool.** Research done (see `docs/context.md`): Apache-2.0 shortlist is karpo-decision-31B (community MLX, 16.4 GB), pplx-decider 27B / flash 4B through `mlx-decision`, then H2O-Lightning-4B. Waiting for your go-ahead and which to start with; none measured on this Mac yet.
 
