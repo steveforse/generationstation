@@ -1623,8 +1623,9 @@ test('with two chat models running, a dropdown picks which one answers and the c
 test('every decision model is used from one Decide page, with a dropdown over those running', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { decide: true })
   await go(page, '#/hosts/local/decide')
-  // One entry in the sidenav, not one per model.
-  await expect(page.getByRole('group', { name: 'Decide' }).getByRole('link')).toHaveCount(1)
+  // One entry in the sidenav, under Text, not one per model.
+  await expect(page.getByRole('group', { name: 'Text' }).getByRole('link', { name: /^Decide/ })).toHaveCount(1)
+  await expect(page.getByRole('link', { name: /Karpo|Small decider/ })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()
   const picker = page.getByRole('combobox', { name: 'Model answering' })
   await expect(picker.locator('option')).toHaveText(['Karpo 31B', 'Small decider'])
@@ -1636,4 +1637,12 @@ test('every decision model is used from one Decide page, with a dropdown over th
   await expect(decision.getByText('Answer: billing')).toBeVisible()
   await expect(decision.getByRole('cell', { name: '94.1%' })).toBeVisible()
   await expect(decision.getByText('Confidence: 88.2%')).toBeVisible()
+})
+
+test('Decide sits in the Text group after Chat and the other text tools', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, meeting: true, decide: true })
+  await go(page, '#/overview')
+  const links = page.getByRole('group', { name: 'Text' }).getByRole('link')
+  const names = (await links.allInnerTexts()).map((text) => text.split('\n')[0].trim())
+  expect(names).toEqual(['Chat', 'Meeting notes', 'Decide'])
 })

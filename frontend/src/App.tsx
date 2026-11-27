@@ -135,7 +135,13 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const runtimes = state.runtimes ?? []
   const running = runtimes.filter((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready').length
   const name = hostName(host, state)
-  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation), (runtime) => runtime.workload, (runtime) => runtime.name)
+  // Decision models sit under Text, as one Decide entry (they all share a page).
+  const decisionRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'decision')
+  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation && runtime.workload !== 'decision'), (runtime) => runtime.workload, (runtime) => runtime.name)
+  const decideOn = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+  const decideLoading = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
+  const decideLink = decisionRuntimes.length > 0 ? <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><WorkloadIcon workload="decision" /></span>} label="Decide"
+    title={decideOn ? 'Decide: a model is running' : 'Decide'} badge={<NavState state={decideOn ? 'ready' : decideLoading ? 'loading' : undefined} />} /> : null
   // Chat sits first under Text: it talks to the text model, which can use every other running model.
   const chatRuntimes = runtimes.filter((runtime) => runtime.chat)
   const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? chatRuntimes[0]
@@ -158,19 +164,14 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
           icon={<span className="nav-rail-icon"><FileText size={20} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
           badge={<NavState state={model?.state} />} />
       })}
+      {decideLink}
+    </div>}
+    {!chatRuntime && decideLink && !groups.some((group) => group.key === 'text') && <div className="nav-group" role="group" aria-labelledby={chatId}>
+      <div className="nav-group-label" id={chatId}><WorkloadIcon workload="text" size={18} /><span>Text</span></div>
+      {decideLink}
     </div>}
     {groups.filter((group) => group.key !== 'text' || !chatRuntime).map((group) => {
       const id = `nav-${host.id}-${group.key}`
-      // Every decision model is used from one page, like Chat: the nav shows one entry, on while any of them runs.
-      if (group.key === 'decision') {
-        const anyOn = group.items.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
-        const loading = group.items.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
-        return <div className="nav-group" role="group" aria-labelledby={id} key={group.key}>
-          <div className="nav-group-label" id={id}><WorkloadIcon workload="decision" size={18} /><span>{group.label}</span></div>
-          <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><WorkloadIcon workload="decision" /></span>} label="Decide"
-            title={anyOn ? 'Decide: a model is running' : 'Decide'} badge={<NavState state={anyOn ? 'ready' : loading ? 'loading' : undefined} />} />
-        </div>
-      }
       return <div className="nav-group" role="group" aria-labelledby={id} key={group.key}>
         <div className="nav-group-label" id={id}><WorkloadIcon workload={group.key} size={18} /><span>{group.label}</span></div>
         {group.items.map((runtime) => {
@@ -180,6 +181,7 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
             icon={<span className="nav-rail-icon"><WorkloadIcon workload={runtime.workload} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
             badge={<NavState state={model?.state} />} />
         })}
+        {group.key === 'text' && decideLink}
       </div>
     })}
     {state.connection !== 'connected' && state.connection !== 'connecting' && state.connection !== 'reconnecting' && <a className="nav-item nav-muted" href={href({ page: 'connections' })} title={state.connection === 'error' ? 'Connection issue' : 'Not connected'}><Plug size={20} /><span className="nav-item-label">{state.connection === 'error' ? 'Connection issue' : 'Not connected'}</span></a>}
