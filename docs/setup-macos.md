@@ -392,7 +392,7 @@ export HF_HOME=~/ai/models/decision/.hf-cache
 | pplx-decider v1.2 27B (8-bit) | about 30 GB at peak | 0.5 s for 300 words, 3.7 s for 3,000 | Reads pictures (cold first call 7 s). Does not fit in bf16 (52 GB). The v1.3 release adds span extraction; not tested here. |
 | H2O-Lightning 4B (bf16) | about 10 GB at peak | 0.15 s for 300 words, 1 s for 3,000 | Reads pictures. The 31B is non-commercial; this is the 4B. |
 
-Inputs are capped at 20,000 characters and 255 options. The worker keeps every MLX call on one thread, because MLX streams belong to the thread that made them. Karpo 31B (a community 4-bit MLX port) was tried and removed: Torchcast 31B scores higher and Torchcast 4B and pplx-decider cover the lighter and picture cases. Rankings come from JevBench, the Decision Index and Artificial Analysis; the hosted Jev is the baseline, and personal-use models appear as reference bars.
+Inputs are capped at 20,000 characters and 255 options. The worker keeps every MLX call on one thread, because MLX streams belong to the thread that made them. Karpo 31B (a community 4-bit MLX port) was tried and removed: Torchcast 31B scores higher and Torchcast 4B and pplx-decider cover the lighter and picture cases. Rankings come from JevBench, the Decision Index and Artificial Analysis; the hosted Jev is the baseline, and a few other open models (two of them personal-use only) are reference bars. The full survey is in `docs/context.md`.
 
 ## 7. Web search for the chat
 
