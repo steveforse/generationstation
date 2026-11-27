@@ -1639,10 +1639,10 @@ test('every decision model is used from one Decide page, with a dropdown over th
   await expect(decision.getByText('Confidence: 88.2%')).toBeVisible()
 })
 
-test('Decide sits in the Text group after Chat and the other text tools', async ({ page }) => {
+test('the Text group in the sidenav is alphabetical, with Decide as one entry', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { llm: true, meeting: true, decide: true })
   await go(page, '#/overview')
   const links = page.getByRole('group', { name: 'Text' }).getByRole('link')
   const names = (await links.allInnerTexts()).map((text) => text.split('\n')[0].trim())
-  expect(names).toEqual(['Chat', 'Meeting notes', 'Decide'])
+  expect(names).toEqual(['Chat', 'Decide', 'Meeting notes'])
 })

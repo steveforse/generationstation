@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, FileText, Loader2, Menu, MessagesSquare, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { AssistantBubble } from './components/Assistant'
 import { hostName, StatusDot, stateText } from './components/HostBits'
@@ -147,30 +147,29 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? chatRuntimes[0]
   const chatState = state.models?.find((item) => item.id === chatRuntime?.id)?.state
   const chatId = `nav-${host.id}-chat`
+  // The Text section, alphabetical: Chat, Decide (every decision model, one entry) and the other text tools (meeting notes).
+  const textEntries = [
+    ...(chatRuntime ? [{ label: 'Chat', node: <NavLink key="chat" route={{ page: 'chat', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><MessagesSquare size={20} /></span>} label="Chat"
+      title={navStatus(chatState) ? `Chat: ${chatRuntime.name} ${navStatus(chatState)?.toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} /> }] : []),
+    ...(decideLink ? [{ label: 'Decide', node: <Fragment key="decide">{decideLink}</Fragment> }] : []),
+    ...(groups.find((group) => group.key === 'text')?.items ?? []).map((runtime) => {
+      const model = state.models?.find((item) => item.id === runtime.id)
+      const status = navStatus(model?.state)
+      return { label: runtime.name, node: <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
+        icon={<span className="nav-rail-icon"><FileText size={20} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
+        badge={<NavState state={model?.state} />} /> }
+    }),
+  ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
   return <div className="nav-host" aria-label={`Host ${name}`}>
     <div className="nav-host-label"><StatusDot state={state} /><span className="nav-host-name">{name}</span></div>
     {runtimes.length > 0 && <NavLink route={{ page: 'models', hostId: host.id }} current={current} icon={<Server size={20} />} label="Models"
       title={running ? `Models: ${running} running` : 'Models'}
       badge={running ? <span className="nav-state" title={`${running} running`}><span className="nav-state-dot" aria-hidden="true" /><span className="nav-state-text">{running} on</span></span> : undefined} />}
-    {chatRuntime && <div className="nav-group" role="group" aria-labelledby={chatId}>
+    {textEntries.length > 0 && <div className="nav-group" role="group" aria-labelledby={chatId}>
       <div className="nav-group-label" id={chatId}><WorkloadIcon workload="text" size={18} /><span>Text</span></div>
-      <NavLink route={{ page: 'chat', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><MessagesSquare size={20} /></span>} label="Chat"
-        title={navStatus(chatState) ? `Chat: ${chatRuntime.name} ${navStatus(chatState)?.toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} />
-      {/* The other text tools (meeting notes) sit under Chat, in the same group. */}
-      {(groups.find((group) => group.key === 'text')?.items ?? []).map((runtime) => {
-        const model = state.models?.find((item) => item.id === runtime.id)
-        const status = navStatus(model?.state)
-        return <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
-          icon={<span className="nav-rail-icon"><FileText size={20} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
-          badge={<NavState state={model?.state} />} />
-      })}
-      {decideLink}
+      {textEntries.map((entry) => entry.node)}
     </div>}
-    {!chatRuntime && decideLink && !groups.some((group) => group.key === 'text') && <div className="nav-group" role="group" aria-labelledby={chatId}>
-      <div className="nav-group-label" id={chatId}><WorkloadIcon workload="text" size={18} /><span>Text</span></div>
-      {decideLink}
-    </div>}
-    {groups.filter((group) => group.key !== 'text' || !chatRuntime).map((group) => {
+    {groups.filter((group) => group.key !== 'text').map((group) => {
       const id = `nav-${host.id}-${group.key}`
       return <div className="nav-group" role="group" aria-labelledby={id} key={group.key}>
         <div className="nav-group-label" id={id}><WorkloadIcon workload={group.key} size={18} /><span>{group.label}</span></div>
@@ -181,7 +180,6 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
             icon={<span className="nav-rail-icon"><WorkloadIcon workload={runtime.workload} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
             badge={<NavState state={model?.state} />} />
         })}
-        {group.key === 'text' && decideLink}
       </div>
     })}
     {state.connection !== 'connected' && state.connection !== 'connecting' && state.connection !== 'reconnecting' && <a className="nav-item nav-muted" href={href({ page: 'connections' })} title={state.connection === 'error' ? 'Connection issue' : 'Not connected'}><Plug size={20} /><span className="nav-item-label">{state.connection === 'error' ? 'Connection issue' : 'Not connected'}</span></a>}
