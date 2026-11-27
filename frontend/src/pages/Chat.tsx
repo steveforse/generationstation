@@ -18,7 +18,6 @@ type Pick = ChatAttachment & { key: string; job?: Job; preview?: string; uploadi
 const FILE_TYPES = '.png,.jpg,.jpeg,.webp,.pdf,.txt,.md,.csv,.json,.log,.yaml,.yml,.toml,.xml,.html,.css,.sql,.sh,.py,.js,.ts,.tsx,.jsx,.java,.c,.h,.cpp,.rs,.go,.rb,.ini'
 
 const MAX_ATTACHMENTS = 6
-const THINKING_KEY = 'generation-station.chat-thinking' // the older on/off choice: "off" carries over
 const LEVELS_KEY = 'generation-station.chat-thinking-levels' // {model id: level}, per device
 
 const LEVEL_NAMES: Record<string, string> = { off: 'Off', none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' }
@@ -28,15 +27,12 @@ function readLevels(): Record<string, string> {
   try { const saved = JSON.parse(localStorage.getItem(LEVELS_KEY) ?? '{}'); return saved && typeof saved === 'object' ? saved : {} } catch { return {} }
 }
 
-/** The level to send: the one chosen for this model if it still takes it, else its default (off if thinking was turned off before levels). */
+/** The level to send: the one chosen for this model if it still takes it, else its default. */
 function chosenLevel(thinking: Thinking | null | undefined, modelId: string | undefined, saved: Record<string, string>): string | null {
   if (!thinking || thinking.levels.length === 0 || !modelId) return null
   const valid = (level?: string) => !!level && (thinking.levels.includes(level) || (level === 'off' && thinking.off))
   const mine = saved[modelId]
   if (valid(mine)) return mine
-  let legacy: string | null = null
-  try { legacy = localStorage.getItem(THINKING_KEY) } catch { /* no storage */ }
-  if (legacy === 'off' && thinking.off) return 'off'
   return thinking.default ?? thinking.levels[thinking.levels.length - 1]
 }
 

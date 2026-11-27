@@ -367,9 +367,6 @@ export class HostSession {
       return await requestApi(ctx.base, ctx.token, path, init, ctx.signal)
     } catch (error) {
       if (this.handleAuthError(error)) throw new Error('Not connected to the host.')
-      if (error instanceof ApiError && error.status === 404 && error.body.detail === 'API route not found') {
-        throw new Error('This host’s service is older than this page. Restart the Generation Station service to update it.')
-      }
       throw error
     }
   }
@@ -525,18 +522,9 @@ export class HostSession {
   async estimateRuntime(runtime: Runtime, launch: Launch, signal?: AbortSignal): Promise<RuntimeEstimate> {
     const ctx = this.context()
     if (!ctx) throw new Error('Not connected.')
-    let body: unknown
-    try {
-      body = await requestApi(ctx.base, ctx.token, `/api/runtimes/${encodeURIComponent(runtime.id)}/estimate`, {
-        method: 'POST', body: JSON.stringify({ preset: launch.preset, settings: launch.settings, gpus: launch.gpus }),
-      }, signal ?? ctx.signal)
-    } catch (error) {
-      // A service started before this feature existed has no estimate route.
-      if (error instanceof ApiError && error.status === 404 && error.body.detail === 'API route not found') {
-        throw new Error('This host’s service is older than this page, so it can’t preview a start. Restart the Generation Station service to update it.')
-      }
-      throw error
-    }
+    const body = await requestApi(ctx.base, ctx.token, `/api/runtimes/${encodeURIComponent(runtime.id)}/estimate`, {
+      method: 'POST', body: JSON.stringify({ preset: launch.preset, settings: launch.settings, gpus: launch.gpus }),
+    }, signal ?? ctx.signal)
     if (!isEstimate(body)) throw new Error('The host returned an invalid estimate.')
     return body
   }

@@ -10,6 +10,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Waiting for a decision
 
+- **One Speech page and a saved voice library** (plan in `docs/speech-consolidation.md`, agreed 2026-11-27): not started; waiting for the go-ahead on phase 1 (capabilities and roles on the five models, then the shared page, then the library).
+
 - **Decide tool: Karpo 31B, pplx-decider 27B (8-bit) and H2O-Lightning 4B built and tested through the app (pplx read a receipt picture). Torchcast 4B (vendor package on torch MPS) and 31B (8-bit MLX, `workers/torchcast_mlx.py`) added and run through the app. Disk cleaned 2026-11-27 (about 344 GB: Wan A14B conversions, LongCat q4, Qwen-Image 2512 q4, the community Torchcast 4B copies, the Torchcast 31B bf16 shards, duplicate cache copies, /tmp scratch).** Also open: a calibration note on the result page (Karpo's probabilities are near 0 or 1), pplx v1.3, an ordering test.
 
 - **Decision models (like TypeSafe's Jev) as a "Decide" tool.** Research done (see `docs/context.md`): Apache-2.0 shortlist is karpo-decision-31B (community MLX, 16.4 GB), pplx-decider 27B / flash 4B through `mlx-decision`, then H2O-Lightning-4B. Waiting for your go-ahead and which to start with; none measured on this Mac yet.

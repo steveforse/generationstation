@@ -922,14 +922,6 @@ test('shows each running model\'s share of RAM and VRAM in the bars and on its c
   await page.screenshot({ path: 'test-results/screenshots/model-memory.png' })
 })
 
-test('explains when the host service is too old to preview a start', async ({ page }) => {
-  await connectFixtures(page, 'Fixture desktop', false, { songs: true, songState: 'unloaded' })
-  await page.route('**/api/runtimes/*/estimate', (route) => route.fulfill({ status: 404, json: { detail: 'API route not found' } }))
-  await go(page, '#/hosts/local/models')
-  await openCard(page, 'YuE2 songs')
-  await expect(page.getByRole('status').filter({ hasText: 'Restart the Generation Station service' })).toBeVisible()
-})
-
 test('keeps host memory pinned beside the model list while scrolling on a wide screen', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 700 })
   await connectFixtures(page, 'Fixture desktop', false, { runtime: true, songs: true, songState: 'unloaded' })
