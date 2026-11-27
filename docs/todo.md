@@ -4,15 +4,22 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## In progress
 
-- **Video engines still to add: Wan 2.2 A14B (mlx-video) and LongCat-Video (MIT, single-developer MLX port).** Their agents are still measuring (Wan A14B has been slow under shared load). Each needs a plugin, worker, catalog entry, quality score, docs, tests and an end-to-end clip.
+- **LongCat-Video: plugin, driver, worker, docs written; text-to-video tested through the app (66 s for 0.6 s). Image-to-video produced garbage for a mismatched first picture; the worker now crops it to 832x480 and a re-test is queued (the direct driver run with an exact-size picture was fine). Commit after that passes.**
+- **Wan 2.2 A14B: measured, recommend not adding.** 19 minutes for a 17-frame clip, 33 GiB resident floor, and image-to-video is broken in mlx-video at this commit. Converted weights (80 GB) are kept on disk; delete them if you agree.
 - **LLM benchmarks and Claude reference bars: committed** (GPQA Diamond, Terminal-Bench 4.0 and 2.1, plus the earlier rankings; Claude Haiku, Sonnet and Opus 5.5 as references). Open: Fable 5.2 as a fourth reference (offered); Terminal-Bench 4.0 has no independent score for Qwen3.8 27B and Flash-Next; AIME 2025 is not published for any of the models.
 
 ## Waiting for a decision
+
+- **Decision models (like TypeSafe's Jev) as a "Decide" tool.** Research done (see `docs/context.md`): Apache-2.0 shortlist is karpo-decision-31B (community MLX, 16.4 GB), pplx-decider 27B / flash 4B through `mlx-decision`, then H2O-Lightning-4B. Waiting for your go-ahead and which to start with; none measured on this Mac yet.
 
 - **Speech-to-text as a standalone tool.** Research is done (see `docs/context.md` once recorded). Proposed first models: Qwen3-ASR 1.7B (already works here) and Nemotron 3.5 Transcribe (mlx-audio has it natively, about 24-27 GB). Then Cohere Transcribe (gated repo, read the card), Parakeet TDT v3 (fast, attribution needed), Whisper large-v3-turbo (99 languages). Optional "who spoke" toggle using the sherpa-onnx turns the meeting pipeline already uses. Not started.
 - **Project Maya (Mac).** Answered: it has an experimental Metal path for GLM-5.3-Flash only, untested by its author on the real model, and the smallest Mac-relevant quant is 73.4 GB (it expects 64 GB of RAM plus a 24 GB card), so it does not fit this 64 GB Mac. Hy4-Flash and Inkling 2 Mini run on it only on NVIDIA and AMD. Worth revisiting for the Windows RTX 5090 desktop, not the Mac.
 
 ## Later / offered
+
+- **Two frontend tests fail since this evening, on old commits too, so not caused by recent changes:** "reconnects after a stream outage..." (second stream does not open within 20 s) and "chats with the text model..." (the song card does not finish within 20 s). Both wait on real timers (stream reconnect backoff, 3 s job polls). They passed all day until about 21:30 MST 2026-11-26 (a few hours after the UTC date rolled to Nov 27). Not the real API, not display sleep, not background-timer throttling (all tried). Next step: run them again tomorrow and, if they still fail, trace one (`npx playwright show-trace`).
+
+- Clean re-timing of the video models: done 2026-11-26 (see `docs/context.md`); a few cells are scaled rather than measured.
 
 - Add HeartMuLa 3B as a fourth music model (Apache-2.0, Llama tokenizer file caveat, PyTorch only).
 - Quality scores for the Windows template (`runtimes.example.json`), which has none yet.

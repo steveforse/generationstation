@@ -20,7 +20,7 @@ SHAPE = InputSpec(label="Shape", kind="choice", options=("landscape", "portrait"
                   help="Landscape is wide, portrait is tall.")
 QUALITY = InputSpec(label="Detail", kind="choice", options=("quick", "sharp"), default="quick",
                     option_labels={"quick": "Quick (about 700 pixels wide)", "sharp": "Sharp (about 1280 pixels wide)"},
-                    help="Quick takes about a minute for a 4 second clip. Sharp is about 2.5 times slower.")
+                    help="Quick takes about half a minute for a 4 second clip. Sharp is about 5 times slower.")
 LENGTH = InputSpec(label="Length", kind="choice", options=("2 seconds", "4 seconds", "5 seconds"), default="4 seconds",
                    help="Longer clips take longer. The clip comes with sound.")
 SEED = InputSpec(label="Seed", kind="seed", minimum=0, maximum=2**31 - 1, advanced=True,
@@ -43,15 +43,15 @@ class LtxVideoPlugin(WorkerPlugin):
     output_kind = "video"
     make_label = "Make a clip"
     result_noun = "clip"
-    # Apple silicon (MLX, 4-bit distilled, 24 fps), M5 Max (2026-11-26), including the model load. Measured: quick 49
-    # frames 28 s, 97 frames 53 s; sharp 97 frames 147 s. The other lengths are scaled from those.
+    # Apple silicon (MLX, 4-bit distilled, 24 fps), M5 Max (2026-11-26), including the model load, one clip at a time on
+    # an idle machine. Measured: quick 2 s 21 s, 4 s 32 s, 5 s 39 s; sharp 4 s 149 s. Sharp 2 s and 5 s are scaled.
     timings: ClassVar[tuple[TimingSpec, ...]] = (
-        TimingSpec(preset="mlx", gpu=0, when={"quality": "quick", "length": "2 seconds"}, seconds=30),
-        TimingSpec(preset="mlx", gpu=0, when={"quality": "quick", "length": "4 seconds"}, seconds=55),
-        TimingSpec(preset="mlx", gpu=0, when={"quality": "quick", "length": "5 seconds"}, seconds=70),
+        TimingSpec(preset="mlx", gpu=0, when={"quality": "quick", "length": "2 seconds"}, seconds=21),
+        TimingSpec(preset="mlx", gpu=0, when={"quality": "quick", "length": "4 seconds"}, seconds=32),
+        TimingSpec(preset="mlx", gpu=0, when={"quality": "quick", "length": "5 seconds"}, seconds=39),
         TimingSpec(preset="mlx", gpu=0, when={"quality": "sharp", "length": "2 seconds"}, seconds=80),
-        TimingSpec(preset="mlx", gpu=0, when={"quality": "sharp", "length": "4 seconds"}, seconds=150),
-        TimingSpec(preset="mlx", gpu=0, when={"quality": "sharp", "length": "5 seconds"}, seconds=190),
+        TimingSpec(preset="mlx", gpu=0, when={"quality": "sharp", "length": "4 seconds"}, seconds=149),
+        TimingSpec(preset="mlx", gpu=0, when={"quality": "sharp", "length": "5 seconds"}, seconds=185),
     )
     modes: ClassVar[dict[str, ModeSpec]] = {
         "text": ModeSpec(label="From a description", help="LTX imagines the clip and its sound from your words.",

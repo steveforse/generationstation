@@ -16,12 +16,12 @@ class FastMetalRuntime(WorkerRuntime):
     presets: dict[str, FastMetalPreset] = Field(min_length=1)
 
 
-# Measured on an M5 Max (2026-11-26), warm prompt, whole process including Python start-up:
-#   5B 1280x704:  81 frames 72 s (fast 41 s), 121 frames 121 s.  14B 832x480: 81 frames 338 s (fast 135 s).
-# Other lengths are scaled from those; a new description adds 5-25 s for the text encoder.
+# Measured on an M5 Max (2026-11-26), one clip at a time on an idle machine, whole process including start-up (the first
+# 5B clip also encoded a new description). 5B 1280x704: short 38 s, medium 64 s (fast 35 s), long 112 s. 14B 832x480:
+# short 92 s, medium 152 s (fast 67 s). The other cells are scaled from those.
 _SECONDS = {
-    "5b": {"full": {"short": 50, "medium": 75, "long": 125}, "fast": {"short": 30, "medium": 42, "long": 65}},
-    "14b": {"full": {"short": 150, "medium": 220, "long": 340}, "fast": {"short": 70, "medium": 95, "long": 140}},
+    "5b": {"full": {"short": 38, "medium": 64, "long": 112}, "fast": {"short": 25, "medium": 35, "long": 62}},
+    "14b": {"full": {"short": 92, "medium": 152, "long": 250}, "fast": {"short": 45, "medium": 67, "long": 110}},
 }
 
 
@@ -51,7 +51,7 @@ class FastMetalVideoPlugin(WorkerPlugin):
                             help="Longer clips take longer."),
         "speed": InputSpec(label="Speed", kind="choice", options=("full", "fast"), default="full",
                            option_labels={"full": "Full quality", "fast": "Faster (makes half the frames, then fills in the rest)"},
-                           help="Faster takes about 40-60% of the time; fast motion can look a little smoother than it should."),
+                           help="Faster takes about half the time; fast motion can look a little smoother than it should."),
         "seed": InputSpec(label="Seed", kind="seed", minimum=0, maximum=2**31 - 1, advanced=True,
                           help="Reuse a seed to get the same clip again. Leave empty for a new one."),
     }

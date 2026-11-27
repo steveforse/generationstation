@@ -8,6 +8,7 @@ from .fish_drama3 import FishDrama3Plugin
 from .fish_s2 import FishS2Plugin
 from .h3_video import H3VideoPlugin
 from .llm import LLMPlugin
+from .longcat_video import LongCatVideoPlugin
 from .ltx_video import LtxVideoPlugin
 from .meeting_notes import MeetingNotesPlugin
 from .minimax_h3 import MiniMaxH3Plugin
@@ -35,6 +36,7 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     WanVideoPlugin(),
     LtxVideoPlugin(),
     FastMetalVideoPlugin(),
+    LongCatVideoPlugin(),
     MeetingNotesPlugin(),
 )}
 

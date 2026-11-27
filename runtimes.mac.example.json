@@ -1211,7 +1211,7 @@
       "presets": {
         "mlx": {
           "name": "LTX-2.5 distilled (MLX, 4-bit)",
-          "description": "Up to 1280x704 and 5 s with sound. About 1 minute for a 4 s quick clip, 2.5 minutes sharp. Needs about 14 GiB while it runs.",
+          "description": "Up to 1280x704 and 5 s with sound. About half a minute for a 4 s quick clip, 2.5 minutes sharp. Needs about 14 GiB while it runs.",
           "gpus": [
             0
           ],
@@ -1260,7 +1260,7 @@
       "presets": {
         "5b": {
           "name": "FastMetal 5B (1280x704)",
-          "description": "Wan 2.2 5B distilled. Up to 5 s at 1280x704; a 3 s clip takes about 75 s. Needs about 26 GiB while a new description is encoded, 12 GiB after.",
+          "description": "Wan 2.2 5B distilled. Up to 5 s at 1280x704; a 3 s clip takes about a minute (35 s in faster mode). Needs about 26 GiB while a new description is encoded, 12 GiB after.",
           "gpus": [
             0
           ],
@@ -1280,7 +1280,7 @@
         },
         "14b": {
           "name": "FastMetal 14B (832x480)",
-          "description": "Wan 2.1 14B distilled. Up to 5 s at 832x480; a 5 s clip takes about 6 minutes (about 2 in faster mode). About 22 GiB while it runs.",
+          "description": "Wan 2.1 14B distilled. Up to 5 s at 832x480; a 3 s clip takes about 2.5 minutes (67 s in faster mode). About 22 GiB while it runs.",
           "gpus": [
             0
           ],
@@ -1306,6 +1306,48 @@
         "code": "FastVideo: Apache-2.0 (TAEHV and RIFE decoders: MIT)",
         "note": "Distilled from Wan 2.2 TI2V 5B and Wan 2.1 T2V 14B, both Apache-2.0. The first run downloads a small TAEHV decoder file from GitHub once.",
         "url": "https://huggingface.co/FastVideo/FastMetal-14B-QAD"
+      }
+    },
+    "longcat_video": {
+      "kind": "longcat_video",
+      "name": "LongCat video",
+      "workload": "video",
+      "description": "Short clips from a description, without sound (MIT). Slow: under a minute for the shortest clip.",
+      "python": "/Users/YOU/ai/envs/longcat/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/longcat-video",
+      "port": 8320,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "q8",
+      "presets": {
+        "q8": {
+          "name": "LongCat-Video 13.6B (MLX, 8-bit)",
+          "description": "832x480 at 15 fps, 0.6 to 4 seconds, from a description. About 45 seconds for the shortest clip, 6 minutes for four seconds. Needs 19 to 37 GiB while a clip is made.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "weights_dir": "/Users/YOU/ai/models/video/longcat-layout",
+            "variant": "q8",
+            "repo_dir": "/Users/YOU/ai/tools/longcat-video-mlx",
+            "memory_limit_gib": 40
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 40,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "MIT",
+        "code": "longcat-video-mlx: MIT (declared in its pyproject.toml and README; the repository has no LICENSE file)",
+        "note": "Meituan's LongCat-Video is MIT. The MLX port needs two fixes that the worker's driver applies without editing it: merging the fast LoRA into the quantised weights, and giving the first-frame latents timestep 0.",
+        "url": "https://huggingface.co/mlx-community/LongCat-Video-q8"
       }
     }
   },

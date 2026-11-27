@@ -7,7 +7,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Works | Does not (needs an NVIDIA card) |
 | --- | --- |
 | Dashboard, API, database, chat, logs | HunyuanVideo 1.5 |
-| Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s; FastMetal-QAD (distilled Wan, up to 5 s at 1280x704 or 832x480); LTX-2.5 with sound, up to 5 s at 1280x704 (personal use) | |
+| Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s; FastMetal-QAD (distilled Wan, up to 5 s at 1280x704 or 832x480); LongCat-Video (832x480, up to 4 s, slow); LTX-2.5 with sound, up to 5 s at 1280x704 (personal use) | |
 | Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
 | Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
 | Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use while the app stays internal) | |
@@ -35,8 +35,9 @@ The Mac reports its shared memory as one pool (`apple-unified-memory`), counted 
 | `z_image`, Z-Image Turbo (8-bit) | 9 GiB, while a picture is made | 10 GB | 16-22 s for 1024x1024 |
 | `qwen_image_2512`, Qwen-Image 2512 (8-bit) | 38 GiB, while a picture is made | 34 GB | about 3 min for 768x1152 |
 | `h3_video`, MiniMax H3 (BF16 streamed from the SSD) | 14 GiB, while a clip is made | 134 GB | 5 s at 480p: about 3 min as a draft, 16 min at standard |
-| `fastmetal_video`, FastMetal-QAD 5B / 14B (INT8) | 26 GiB / 30 GiB (a new description briefly needs 24 GiB for the text encoder) | 18 GB / 39 GB | 5B: 3 s clip in about 75 s (about 40 s faster mode); 14B: 5 s clip in about 6 min (about 2 min faster mode) |
-| `ltx_video`, LTX-2.5 distilled (4-bit) | 22 GiB (14 GiB at the peak up to 1280x704) | 26 GB | 4 s clip: about 55 s quick, 150 s sharp |
+| `fastmetal_video`, FastMetal-QAD 5B / 14B (INT8) | 26 GiB / 30 GiB (a new description briefly needs 24 GiB for the text encoder) | 18 GB / 39 GB | 5B: 3 s clip in about 64 s (35 s faster mode); 14B: 3 s clip in about 2.5 min (67 s faster mode) |
+| `longcat_video`, LongCat-Video 13.6B (8-bit) | 40 GiB (19 to 37 GiB while a clip is made) | 31 GB | 0.6 s clip in about 43 s, 1.1 s in 80 s; 2.2 s and 4 s take about 3 and 6 minutes |
+| `ltx_video`, LTX-2.5 distilled (4-bit) | 22 GiB (14 GiB at the peak up to 1280x704) | 26 GB | 4 s clip: about 32 s quick, 150 s sharp |
 | `wan_video`, Wan 2.2 TI2V 5B (8-bit) | 30 GiB, while a clip is made | 18 GB | about 70-100 s for a 1.4 s clip |
 | `qwen3_tts` (8-bit, three 1.7B models, one at a time) | 8 GiB | 9 GB | a few seconds per sentence |
 | `omnivoice` (bf16) | 6 GiB | 1.5 GB | a few seconds per sentence |
@@ -50,7 +51,7 @@ A start is refused unless its estimate fits in the memory the Mac has available,
 
 ## Personal and work models
 
-The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2, FastMetal, ACE-Step, MiniMax Music 3 and meeting notes are work use; Qwen Image 2.1, LTX-2.5, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
+The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2, FastMetal, LongCat-Video, ACE-Step, MiniMax Music 3 and meeting notes are work use; Qwen Image 2.1, LTX-2.5, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
 
 ## Models page: sections and quality chart
 
@@ -292,11 +293,27 @@ VIRTUAL_ENV=~/ai/envs/fastmetal uv pip install -e ".[mlx]"     # large: the base
 
 Set `python` to `~/ai/envs/fastmetal/bin/python`, and each preset's `model_dir` and `repo_dir` (the FastVideo checkout) in the `fastmetal_video` entry. The first clip downloads a small TAEHV decoder file from GitHub into `~/.cache/fastvideo/taehv/`; after that the worker runs offline.
 
+### LongCat-Video (MLX port)
+
+[LongCat-Video](https://huggingface.co/meituan-longcat/LongCat-Video) (Meituan, 13.6B, MIT) makes clips from a description at 832x480 and 15 fps, without sound. It runs through the community MLX port [xocialize/longcat-video-mlx](https://github.com/xocialize/longcat-video-mlx) (`mlx-community/LongCat-Video-q8` and `-q4`). It is slow: the 50-step default took 15 minutes for 9 frames, so the worker uses the 8-step fast LoRA, which still takes about 43 s for 0.6 s of video, 80 s for 1.1 s, and about 3 and 6 minutes for 2.2 and 4 s (4-bit is no faster than 8-bit and only saves about 6 GiB). Peaks of the MLX memory: 18.5 GiB at 9 frames, 26 at 17, 28 at 33, 37 at 61.
+
+The port needs fixes that `workers/longcat_driver.py` makes without editing it: the fast LoRA cannot merge into 4- or 8-bit weights (`longcat_qlora_patch.py` dequantizes, adds and requantizes, which is slightly lossy), the first-frame and continuation pipelines never give the clean reference latents timestep 0 (the output is rainbow garbage without that), and it keeps the text encoder and the DiT in memory through decoding (the driver frees them, which brings a 33-frame peak from 44 GiB to 28). The repository has no LICENSE file; its `pyproject.toml` and README say MIT. The driver also does image-to-video and video continuation, but the app offers neither: with the 8-step path image-to-video garbled about half of the clips (seeds 3, 7 and 8 of six were wrong, 1, 2 and 42 were clean, with the same picture), and continuation needs a prior clip.
+
+```sh
+uv venv ~/ai/envs/longcat --python 3.12
+git clone https://github.com/xocialize/longcat-video-mlx ~/ai/tools/longcat-video-mlx   # tested at commit 3ce48c9
+uv pip install --python ~/ai/envs/longcat/bin/python -e ~/ai/tools/longcat-video-mlx transformers sentencepiece av
+~/ai/envs/meeting-worker/bin/hf download mlx-community/LongCat-Video-q8 --local-dir ~/ai/models/video/longcat-q8   # 31 GB
+mkdir -p ~/ai/models/video/longcat-layout && ln -s ~/ai/models/video/longcat-q8 ~/ai/models/video/longcat-layout/LongCat-Video-q8
+```
+
+The port wants a folder holding `LongCat-Video-q8/`, hence the symlink folder. Set `python` to `~/ai/envs/longcat/bin/python`, and `weights_dir` (that folder) and `repo_dir` (the checkout) in the `longcat_video` entry.
+
 ### LTX-2.5 video (ltx-2-mlx)
 
 [LTX-2.5](https://huggingface.co/Lightricks) makes clips with a sound track, from a description or a first picture. It is personal use only here: the LTX-2.x Community License needs a paid licence for any use by an entity with US$10M or more annual revenue (affiliates included), apart from a company's testing and evaluation in a non-production environment. The code (ltx-2-mlx) is MIT.
 
-It runs from a fork of `dgrauet/ltx-2-mlx` pinned to the tag below, because the ungated 4-bit pack (Phosphene's conversion, by `Mrbizarro`) will not load in mainline. The `dgrauet` weights themselves are gated: accept the licence on their page and log in with `hf auth login` if you want them instead. Only the distilled pack exists here, so there is no negative prompt and no guidance setting. Each clip is one process under a 26 GiB MLX limit (a soft limit). Sizes are multiples of 64 (quick 704x448, sharp 1280x704) and clips are 2, 4 or 5 s at 24 fps. On an M5 Max a 4 s quick clip took 53 s and a sharp one 147 s, both peaking at 13.8 GiB; 1920x1088 at 5 s took 595 s at 29.8 GiB and is not offered. The sound is quiet ambience.
+It runs from a fork of `dgrauet/ltx-2-mlx` pinned to the tag below, because the ungated 4-bit pack (Phosphene's conversion, by `Mrbizarro`) will not load in mainline. The `dgrauet` weights themselves are gated: accept the licence on their page and log in with `hf auth login` if you want them instead. Only the distilled pack exists here, so there is no negative prompt and no guidance setting. Each clip is one process under a 26 GiB MLX limit (a soft limit). Sizes are multiples of 64 (quick 704x448, sharp 1280x704) and clips are 2, 4 or 5 s at 24 fps. On an M5 Max a 4 s quick clip took 32 s and a sharp one 149 s, both peaking at 13.8 GiB; 1920x1088 at 5 s took 595 s at 29.8 GiB and is not offered. The sound is quiet ambience.
 
 ```sh
 git clone --branch "v0.14.19+ltx25.9" --depth 1 https://github.com/mrbizarro/ltx-2-mlx ~/ai/src/ltx-2-mlx-fork
