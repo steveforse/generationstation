@@ -47,19 +47,19 @@ function ModelGroup({ id, label, items, references, children }: { id: string; la
   return <section className="models-group" aria-labelledby={`models-group-${id}`}>
     <div className="models-group-bar">
       <h2 className="models-group-heading" id={`models-group-${id}`}><WorkloadIcon workload={id} size={20} /><span>{label}</span><span className="models-group-count">{items.length}</span></h2>
-      {items.length > 1 && <div className="models-sort">
-        <label>Sort <select value={key} onChange={(event) => choose(event.target.value as SortKey)}>
-          <option value="default">Default order</option>
-          <option value="name">Name</option>
-          {chart && <option value="quality">Quality ({chart[0]})</option>}
-        </select></label>
-        {key !== 'default' && <button type="button" className="button button-small button-secondary" aria-label={`Order: ${descending ? descendingWord : ascendingWord}. Reverse it`} title="Reverse the order" onClick={() => setDescending(!descending)}>
-          {descending ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" />}{descending ? descendingWord : ascendingWord}
-        </button>}
-      </div>}
     </div>
-    <QualityChart runtimes={items} references={references} metric={metric} onMetric={setMetric} />
+    {items.length > 1 && <div className="models-sort">
+      <label>Sort <select value={key} onChange={(event) => choose(event.target.value as SortKey)}>
+        <option value="default">Default order</option>
+        <option value="name">Name</option>
+        {chart && <option value="quality">Quality ({chart[0]})</option>}
+      </select></label>
+      {key !== 'default' && <button type="button" className="button button-small button-secondary" aria-label={`Order: ${descending ? descendingWord : ascendingWord}. Reverse it`} title="Reverse the order" onClick={() => setDescending(!descending)}>
+        {descending ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" />}{descending ? descendingWord : ascendingWord}
+      </button>}
+    </div>}
     {sorted.map(children)}
+    <QualityChart runtimes={items} references={references} metric={metric} onMetric={setMetric} />
   </section>
 }
 
