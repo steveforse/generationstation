@@ -1349,6 +1349,182 @@
         "note": "Meituan's LongCat-Video is MIT. The MLX port needs two fixes that the worker's driver applies without editing it: merging the fast LoRA into the quantised weights, and giving the first-frame latents timestep 0.",
         "url": "https://huggingface.co/mlx-community/LongCat-Video-q8"
       }
+    },
+    "decide_karpo": {
+      "kind": "decide",
+      "name": "Karpo 31B",
+      "workload": "decision",
+      "description": "Answers a question about a situation with a probability for each answer. Text only; the most accurate of the three here.",
+      "python": "/Users/YOU/ai/envs/decide-karpo/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8400,
+      "ready_timeout_seconds": 180,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mxfp4",
+      "presets": {
+        "mxfp4": {
+          "name": "Karpo 31B (MLX, mxfp4)",
+          "description": "About 0.25 s for a short situation, 3 s for 2,000 tokens. Needs about 20 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/decision/karpo-31b-mxfp4",
+            "engine": "karpo",
+            "model_name": "Karpo 31B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 22,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Apache-2.0 (MLX port by audreyt, derived from Gemma 4, also Apache-2.0)",
+        "note": "The weights and inference code are Apache-2.0; attribution is requested but not required. This is a community MLX port of the official model, text only (the picture tower is removed).",
+        "url": "https://huggingface.co/MachinePulseAI/karpo-decision-31B"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 87.2,
+        "estimated": true,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "Karpo 31B on JevBench, a measurement of the full-precision model; this is the 4-bit mxfp4 port, which is not rated itself."
+      },
+      "rankings": [
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 73.86,
+          "estimated": true,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Karpo 31B on the Decision Index 0.4.1 Full; this is the 4-bit port."
+        }
+      ]
+    },
+    "decide_pplx": {
+      "kind": "decide",
+      "name": "pplx-decider 27B",
+      "workload": "decision",
+      "description": "Answers a question about a situation, with pictures, with a probability for each answer. Perplexity's decision model on Qwen3.8 27B.",
+      "python": "/Users/YOU/ai/envs/decide-pplx/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8401,
+      "ready_timeout_seconds": 180,
+      "stop_timeout_seconds": 30,
+      "default_preset": "q8",
+      "presets": {
+        "q8": {
+          "name": "pplx-decider v1.2 (MLX, 8-bit)",
+          "description": "About 0.5 s for a short situation, 3.7 s for 3,000 words. Reads pictures. Needs about 30 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/decision/pplx-decider",
+            "engine": "mlx_decision",
+            "model_name": "pplx-decider 27B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 32,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Apache-2.0 (mlx-decision: MIT)",
+        "note": "Derived from Qwen3.8 27B (Apache-2.0). No use restrictions on the card.",
+        "url": "https://huggingface.co/perplexity-ai/pplx-decider-v1.2"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 80.8,
+        "estimated": true,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "pplx-decider v1.2 on JevBench at full precision; this is the 8-bit build."
+      },
+      "rankings": [
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 67.98,
+          "estimated": true,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "pplx-decider v1.2 on the Decision Index 0.4.1 Full; this is the 8-bit build."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 69.8,
+          "estimated": true,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "pplx-decider v1.2 on the Artificial Analysis decision index (as shown by benchlm.ai); this is the 8-bit build."
+        }
+      ]
+    },
+    "decide_h2o": {
+      "kind": "decide",
+      "name": "H2O-Lightning 4B",
+      "workload": "decision",
+      "description": "A small, fast decision model that also reads pictures, with a probability for each answer.",
+      "python": "/Users/YOU/ai/envs/decide-pplx/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8402,
+      "ready_timeout_seconds": 180,
+      "stop_timeout_seconds": 30,
+      "default_preset": "bf16",
+      "presets": {
+        "bf16": {
+          "name": "H2O-Lightning 4B (MLX, bf16)",
+          "description": "About 0.15 s for a short situation, 1 s for 3,000 words. Reads pictures. Needs about 12 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/decision/h2o-lightning-4b",
+            "engine": "mlx_decision",
+            "model_name": "H2O-Lightning 4B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 12,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Apache-2.0 (mlx-decision: MIT)",
+        "note": "The 4B is Apache-2.0. H2O-Lightning 31B is a different licence (non-commercial), so do not swap it in.",
+        "url": "https://huggingface.co/h2oai/h2o-lightning-4b"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 75.0,
+        "estimated": false,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "H2O-Lightning 4B on JevBench, run at full precision as here."
+      },
+      "rankings": []
     }
   },
   "references": [
@@ -1551,6 +1727,304 @@
           "source": "https://www.vals.ai/benchmarks/terminal-bench-2-1",
           "as_of": "2026-11-26",
           "note": "Vals AI, Terminus 2. A hosted model that is not run here. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models."
+        }
+      ]
+    },
+    {
+      "name": "Jev 1.14 (hosted)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 75.0,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "TypeSafe's hosted model, the baseline; no open weights. Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 60.24,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "TypeSafe's hosted model, the baseline; no open weights. Not run here."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 66.2,
+          "estimated": false,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "TypeSafe's hosted model, the baseline; no open weights. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Jev 1.13 (hosted)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 77.1,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "TypeSafe's hosted model, the baseline; no open weights. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "MetaDecision-31B-Rain (licence not checked)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 88.3,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Licence not reviewed. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "H2O-Lightning 31B (personal use only)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 87.9,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Non-commercial licence. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "mammoth-1",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 85.2,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "MIT over Apache-2.0. Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 68.44,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "MIT over Apache-2.0. Not run here."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 71.4,
+          "estimated": false,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "MIT over Apache-2.0. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "GLiDE 1.2 (personal use only)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 84.9,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Written agreement needed above US$10M revenue. Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 73.37,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Written agreement needed above US$10M revenue. Not run here."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 72.5,
+          "estimated": false,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Written agreement needed above US$10M revenue. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "d3",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 82.1,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 67.15,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Kev 27B",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 78.9,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 59.56,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Clef",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 75.3,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 54.92,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 60.3,
+          "estimated": false,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        }
+      ]
+    },
+    {
+      "name": "d3-mini",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 68.8,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 49.97,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        }
+      ]
+    },
+    {
+      "name": "JevK5 4B",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 64.2,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        }
+      ]
+    },
+    {
+      "name": "pplx-decider flash 4B",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 61.7,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "v1.2. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "OpenJev 4B (personal use only)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 55.4,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. CC-BY-NC. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Liquid d1 3B (personal use only)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 49.5,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Free below US$10M revenue. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Laya",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 17.0,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
         }
       ]
     }

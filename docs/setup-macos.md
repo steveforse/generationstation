@@ -11,6 +11,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
 | Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
 | Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use while the app stays internal) | |
+| Decide: Karpo 31B (text), pplx-decider 27B and H2O-Lightning 4B (read pictures), all Apache-2.0 and work use; one probability per answer in well under a second | |
 | Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
 | Text models: Qwen3.8 27B, Qwen3.8 Flash-Next, Tencent Hy4-Flash, Inkling 2 Mini | The Basalt runtime and the Windows meeting engines (Nemotron, VibeVoice, DiariZen) |
 | Meeting notes: speaker detection, speech recognition, correction, notes, name reading from Zoom video, transcript editing | |
@@ -359,6 +360,32 @@ for r in Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit Qwen3-TTS-12Hz-1.7B-VoiceDesign-8b
 | Breeze TTS 2 (BreezeBlue's, not MediaTek's) | BreezeBlue research and non-commercial licence | **Non-commercial.** English and Chinese; one reference voice per take. |
 
 When you clone a voice without typing what the sample says, the worker writes it down with the Qwen3-ASR folder from the meeting setup (`asr_dir`). The MLX models need those exact words.
+
+## 6a. Decide (decision models)
+
+A decision model reads a situation once and gives a probability for each answer to a multiple-choice, yes/no or scored question, in one pass (about a quarter of a second for a short text). It is the open-weight counterpart of TypeSafe's hosted Jev. All three below are Apache-2.0, so they are work use.
+
+```sh
+# Karpo 31B (text only; a community MLX port, 16 GB)
+uv venv ~/ai/envs/decide-karpo --python 3.12
+uv pip install --python ~/ai/envs/decide-karpo/bin/python mlx-lm safetensors huggingface_hub numpy
+~/ai/envs/meeting-worker/bin/hf download audreyt/karpo-decision-31B-mxfp4 --local-dir ~/ai/models/decision/karpo-31b-mxfp4
+
+# pplx-decider 27B (8-bit, 26 GB) and H2O-Lightning 4B (8.7 GB): both read pictures, through mlx-decision
+uv venv ~/ai/envs/decide-pplx --python 3.12
+uv pip install --python ~/ai/envs/decide-pplx/bin/python mlx-decision pillow
+export HF_HOME=~/ai/models/decision/.hf-cache
+~/ai/envs/decide-pplx/bin/mlx-decision download h2oai/h2o-lightning-4b --local-dir ~/ai/models/decision/h2o-lightning-4b --yes
+~/ai/envs/decide-pplx/bin/mlx-decision download perplexity-ai/pplx-decider-v1.2 --local-dir ~/ai/models/decision/pplx-decider --bits 8 --yes
+```
+
+| Model | Memory while running | Latency (warm) | Notes |
+| --- | --- | --- | --- |
+| Karpo 31B (mxfp4) | about 18.5 GB at peak | 0.25 s for a short text, 3 s for 2,000 tokens | Text only. Probabilities are very peaked (near 0 or 1) and the maker says they are not calibrated. 256 options crash it, so the form stops at 255. |
+| pplx-decider v1.2 27B (8-bit) | about 30 GB at peak | 0.5 s for 300 words, 3.7 s for 3,000 | Reads pictures (cold first call 7 s). Does not fit in bf16 (52 GB). The v1.3 release adds span extraction; not tested here. |
+| H2O-Lightning 4B (bf16) | about 10 GB at peak | 0.15 s for 300 words, 1 s for 3,000 | Reads pictures. The 31B is non-commercial; this is the 4B. |
+
+Inputs are capped at 20,000 characters and 255 options. The worker keeps every MLX call on one thread, because MLX streams belong to the thread that made them. Rankings come from JevBench, the Decision Index and Artificial Analysis; the hosted Jev is the baseline, and personal-use models appear as reference bars.
 
 ## 7. Web search for the chat
 

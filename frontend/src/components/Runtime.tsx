@@ -270,7 +270,7 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
 }
 
 export function jobTitle(job: Job) {
-  const text = typeof job.inputs.prompt === 'string' ? job.inputs.prompt : typeof job.inputs.style === 'string' ? job.inputs.style : ''
+  const text = typeof job.inputs.prompt === 'string' ? job.inputs.prompt : typeof job.inputs.style === 'string' ? job.inputs.style : typeof job.inputs.instructions === 'string' ? job.inputs.instructions : ''
   // A meeting has no prompt: it is named after the recording it was made from.
   const recording = Array.isArray(job.inputs.recording) ? job.inputs.recording[0]?.original : undefined
   return text.trim() || recording?.trim() || 'Untitled'
@@ -562,7 +562,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
   const media = files.filter((output) => /^(audio|image|video)\//.test(output.mime))
   const others = files.filter((output) => !media.includes(output))
   // Documents shown on the page as well as offered for download: the notes open, the transcript folded away.
-  const shown = ['notes.md', 'transcript.md'].filter((name) => others.some((output) => output.name === name))
+  const shown = ['notes.md', 'transcript.md', 'result.md'].filter((name) => others.some((output) => output.name === name))
   const [docs, setDocs] = useState<Record<string, string>>({})
   useEffect(() => {
     setDocs({})
@@ -574,7 +574,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     return () => { cancelled = true }
     // Read each shown document once its file link is ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job.id, urls['notes.md'], urls['transcript.md']])
+  }, [job.id, urls['notes.md'], urls['transcript.md'], urls['result.md']])
 
   useEffect(() => { setEditing(false); setEditingNotes(false) }, [job.id])
   useEffect(() => {
@@ -636,6 +636,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
         : output.mime.startsWith('image/') ? <img src={urls[output.name]} alt={title} />
           : <video controls src={urls[output.name]} aria-label={`Play ${title}`} />) : <div className="job-media-loading"><small>Loading…</small></div>}
     </div>)}
+    {docs['result.md'] && <section className="job-section job-document" aria-label="Decision"><Markdown text={docs['result.md']} /></section>}
     {docs['notes.md'] && (editingNotes && urls['meeting.json'] && onEditNotes
       ? <NotesEditor url={urls['meeting.json']} onSave={(edit) => onEditNotes(job, edit)} onClose={(saved) => { setEditingNotes(false); if (saved) setRevision((count) => count + 1) }} />
       : <section className="job-section job-document" aria-label="Notes"><Markdown text={docs['notes.md']} /></section>)}

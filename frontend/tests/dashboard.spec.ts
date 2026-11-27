@@ -163,7 +163,20 @@ function meetingRuntimeFixture() {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean } = {}) {
+function decideRuntimeFixture() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const inputs = [field('state', 'Situation', 'textarea', { required: true, max_length: 20000 }),
+    field('question_type', 'Question', 'choice', { options: ['choose', 'yesno', 'score'], default: 'choose', option_labels: { choose: 'Choose between options', yesno: 'Yes or no', score: 'Place on a scale' } })]
+  return {
+    id: 'decide_karpo', kind: 'decide', plugin: 'Decide', name: 'Karpo 31B', description: 'Answers a question with a probability for each answer.', workload: 'decision', port: 8400, default_preset: 'mxfp4', last_launch: null, max_gpus: 1,
+    presets: { mxfp4: { name: 'Karpo 31B', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 22, gpu_min_free_gib: { 0: 1, 1: 1 } }, settings: [] } },
+    generation: { output_kind: 'document', inputs, modes: [], make_label: 'Decide', result_noun: 'decision', timings: [] },
+  }
+}
+
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -173,7 +186,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture()] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/estimate', (route) => {
@@ -201,6 +214,14 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   })
   if (options.songs) models.push({ id: 'yue2', name: 'YuE2 songs', workload: 'music', state: options.songState ?? 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   const jobs: Array<Record<string, unknown>> = []
+  if (options.decide) {
+    models.push({ id: 'decide_karpo', name: 'Karpo 31B', workload: 'decision', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+    jobs.push({ id: 'job-00000088', model_id: 'decide_karpo', status: 'done', progress: 'Done', error_message: null,
+      inputs: { state: 'I was charged twice.', question_type: 'choose', instructions: 'Which team should handle this?', options: 'billing\nshipping' },
+      outputs: ['decision.json', 'result.md'].map((name) => ({ name, mime: name.endsWith('.md') ? 'text/markdown' : 'application/json', bytes: 100 })),
+      created_at: '2026-11-27T10:00:00Z', finished_at: '2026-11-27T10:00:01Z', details: { seconds: 0.3, model: 'Karpo 31B' }, launch: { preset: 'mxfp4', settings: {}, gpus: [1] } })
+    await page.route('**/api/jobs/*/files/result.md', (route) => route.fulfill({ status: 200, contentType: 'text/markdown', body: '**Which team should handle this?**\n\nAnswer: **billing**\n\n| Option | Probability | |\n| --- | ---: | --- |\n| billing | 94.1% | `###` |\n| shipping | 5.9% | `#` |\n\nConfidence: **88.2%**\n' }))
+  }
   if (options.meeting) {
     models.push({ id: 'meeting_notes', name: 'Meeting notes', workload: 'text', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
     jobs.push({ id: 'job-00000077', model_id: 'meeting_notes', status: 'done', progress: 'Writing the summary, action items and decisions', error_message: null,
@@ -1596,4 +1617,15 @@ test('with two chat models running, a dropdown picks which one answers and the c
   await page.getByLabel('Message').press('Enter')
   await expect.poll(() => sent.length).toBe(1)
   expect(sent[0]).toEqual({ created: { model_id: 'inkling2' } })
+})
+
+test('a decision shows its answer and probabilities, and Decide has its own section', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { decide: true })
+  await go(page, '#/hosts/local/services/decide_karpo')
+  await expect(page.getByRole('group', { name: 'Decide' })).toBeVisible()
+  await page.getByRole('button', { name: /Which team|charged twice|job-0000/i }).first().click()
+  const decision = page.getByRole('region', { name: 'Decision' })
+  await expect(decision.getByText('Answer: billing')).toBeVisible()
+  await expect(decision.getByRole('cell', { name: '94.1%' })).toBeVisible()
+  await expect(decision.getByText('Confidence: 88.2%')).toBeVisible()
 })

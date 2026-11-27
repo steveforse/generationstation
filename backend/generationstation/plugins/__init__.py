@@ -3,6 +3,7 @@ from .ace_step import AceStepPlugin
 from .basalt import BasaltPlugin
 from .base import RuntimePlugin
 from .breeze_tts import BreezeTTSPlugin
+from .decide import DecidePlugin
 from .fastmetal_video import FastMetalVideoPlugin
 from .fish_drama3 import FishDrama3Plugin
 from .fish_s2 import FishS2Plugin
@@ -35,6 +36,7 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     BreezeTTSPlugin(),
     WanVideoPlugin(),
     LtxVideoPlugin(),
+    DecidePlugin(),
     FastMetalVideoPlugin(),
     LongCatVideoPlugin(),
     MeetingNotesPlugin(),

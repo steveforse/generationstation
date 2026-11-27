@@ -1,6 +1,6 @@
 # Running TODO
 
-Things asked for or noticed, newest first within each section. Move an item to Done when it is committed and tested. Last updated 2026-11-26.
+Things asked for or noticed, newest first within each section. Move an item to Done when it is committed and tested. Last updated 2026-11-27.
 
 ## In progress
 
@@ -10,6 +10,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Waiting for a decision
 
+- **Decide tool: Karpo 31B, pplx-decider 27B (8-bit) and H2O-Lightning 4B built and tested through the app (pplx read a receipt picture). Torchcast 31B and 4B: a Mac route is still being checked; if it is wrong, they become reference bars.** Also open: a calibration note on the result page (Karpo's probabilities are near 0 or 1), pplx v1.3, an ordering test.
+
 - **Decision models (like TypeSafe's Jev) as a "Decide" tool.** Research done (see `docs/context.md`): Apache-2.0 shortlist is karpo-decision-31B (community MLX, 16.4 GB), pplx-decider 27B / flash 4B through `mlx-decision`, then H2O-Lightning-4B. Waiting for your go-ahead and which to start with; none measured on this Mac yet.
 
 - **Speech-to-text as a standalone tool.** Research is done (see `docs/context.md` once recorded). Proposed first models: Qwen3-ASR 1.7B (already works here) and Nemotron 3.5 Transcribe (mlx-audio has it natively, about 24-27 GB). Then Cohere Transcribe (gated repo, read the card), Parakeet TDT v3 (fast, attribution needed), Whisper large-v3-turbo (99 languages). Optional "who spoke" toggle using the sherpa-onnx turns the meeting pipeline already uses. Not started.
@@ -17,7 +19,7 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Later / offered
 
-- **Two frontend tests fail since this evening, on old commits too, so not caused by recent changes:** "reconnects after a stream outage..." (second stream does not open within 20 s) and "chats with the text model..." (the song card does not finish within 20 s). Both wait on real timers (stream reconnect backoff, 3 s job polls). They passed all day until about 21:30 MST 2026-11-26 (a few hours after the UTC date rolled to Nov 27). Not the real API, not display sleep, not background-timer throttling (all tried). Next step: run them again tomorrow and, if they still fail, trace one (`npx playwright show-trace`).
+- Two frontend tests that failed overnight (stream reconnect, song card in chat) passed again on 2026-11-27; the cause was never found (not the code). Watch for it.
 
 - Clean re-timing of the video models: done 2026-11-26 (see `docs/context.md`); a few cells are scaled rather than measured.
 
