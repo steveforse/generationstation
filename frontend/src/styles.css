@@ -1133,8 +1133,8 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .notes-block legend em { font-style: normal; font-weight: 400; color: var(--text-2) }
 .notes-block .button { justify-self: start }
 .notes-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2); align-items: start }
-.notes-row-action { grid-template-columns: minmax(12rem, 3fr) minmax(6rem, 1.2fr) minmax(7rem, 1.6fr) minmax(4.5rem, .7fr) auto }
-.notes-row-decision { grid-template-columns: minmax(12rem, 3fr) minmax(6rem, 1fr) minmax(4rem, 1fr) auto }
+.notes-row-action { grid-template-columns: minmax(12rem, 3fr) minmax(6rem, 1.2fr) minmax(7rem, 1.6fr) 5.5rem auto }
+.notes-row-decision { grid-template-columns: minmax(12rem, 3fr) minmax(6rem, 1fr) 5.5rem auto }
 .notes-row textarea, .notes-row input { font: inherit; color: var(--text); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px var(--sp-2); min-width: 0 }
 @media (max-width: 720px) { .notes-row-action, .notes-row-decision { grid-template-columns: minmax(0, 1fr) auto } .notes-row-fields .notes-wide { grid-column: 1 / -1 } }
 .history-entries { display: grid; gap: var(--sp-3); margin: var(--sp-3) 0 0; padding: 0; list-style: none }
