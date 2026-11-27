@@ -88,6 +88,7 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
     // A tab was opened by hand: rebuild so it starts from what the other tab held.
     onMode: (next) => { modeRef.current = next; setMode(next); setForm((current) => ({ n: current.n + 1, mode: next })) },
     command,
+    transcribe: session && chosenId ? (uploadId) => session.transcribe(chosenId, uploadId) : undefined,
   }
   const textField = speech?.roles[mode]?.text
   const text = draft.values.text ?? ''

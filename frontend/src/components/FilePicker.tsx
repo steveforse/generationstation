@@ -60,7 +60,8 @@ export function FilePicker({ id, field, items, onChange, upload, record = false 
     onDrop={(event) => { event.preventDefault(); setDragging(false); add([...event.dataTransfer.files]) }}>
     {items.map((item, index) => <figure key={item.key} className={`file-tile file-${item.status}`}>
       {item.kind === 'image' ? <img src={item.url} alt={item.name} /> : item.kind === 'video' ? <video src={item.url} muted preload="metadata" aria-label={item.name} />
-        : <span className="file-icon">{item.kind === 'audio' ? <Music size={28} /> : item.kind === 'transcript' ? <FileText size={28} /> : <Film size={28} />}</span>}
+        : item.kind === 'audio' && item.url ? <audio src={item.url} controls preload="metadata" aria-label={`Play ${item.name}`} />
+          : <span className="file-icon">{item.kind === 'audio' ? <Music size={28} /> : item.kind === 'transcript' ? <FileText size={28} /> : <Film size={28} />}</span>}
       {max > 1 && <span className="file-index" aria-hidden="true">{index + 1}</span>}
       {item.status === 'uploading' && <span className="file-state"><Loader2 size={20} className="spin" /></span>}
       {item.status === 'error' && <span className="file-state file-state-error" title={item.error}><AlertCircle size={20} /></span>}

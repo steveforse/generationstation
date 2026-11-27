@@ -1201,3 +1201,4 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 @keyframes file-pulse { 50% { opacity: .35 } }
 .file-problem { flex-basis: 100%; margin: 0; color: var(--danger, #b42318) }
 @media (prefers-reduced-motion: reduce) { .file-recording svg { animation: none } }
+.file-tile audio { width: 100%; max-width: 260px; margin: var(--sp-2) 0 }

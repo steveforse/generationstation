@@ -544,6 +544,19 @@ export class HostSession {
     return body as UploadRecord
   }
 
+  /** What a voice sample says, written down by the speech model's transcriber. Throws when none is set up or it fails. */
+  async transcribe(runtimeId: string, uploadId: string): Promise<string> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    const response = await fetch(apiUrl(ctx.base, `/api/runtimes/${encodeURIComponent(runtimeId)}/transcribe`), {
+      method: 'POST', signal: ctx.signal, body: JSON.stringify({ upload_id: uploadId }),
+      headers: { Authorization: `Bearer ${ctx.token}`, 'Content-Type': 'application/json' },
+    })
+    const body = await response.json().catch(() => null) as { text?: unknown; detail?: unknown } | null
+    if (!response.ok || typeof body?.text !== 'string') throw new Error(typeof body?.detail === 'string' ? body.detail : 'The sample could not be written down.')
+    return body.text
+  }
+
   /** The saved voices on the host. */
   async listVoices(): Promise<Voice[]> {
     const ctx = this.context()

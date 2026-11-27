@@ -41,6 +41,7 @@ from .runtimes import load_catalog
 from .storage import Store
 from .telemetry import Monitor
 from .text_models import TextModelBroker
+from .transcribe import TranscribeError, Transcriber
 from .uploads import UploadError, UploadStore
 from .voices import VoiceError, VoiceLibrary, VoiceNotFound
 
@@ -229,6 +230,12 @@ class VoiceCreate(BaseModel):
     upload_id: str
 
 
+class TranscribeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    upload_id: StrictStr = Field(min_length=1, max_length=64)
+    language: StrictStr = Field(default="English", max_length=40)
+
+
 class VoiceUpdate(BaseModel):
     name: str = Field(max_length=200)
     sample_text: str = Field(default="", max_length=5000)
@@ -309,6 +316,7 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         monitor.watch_processes(lifecycle.owned_processes, lifecycle.helper_processes)
     uploads = UploadStore(settings.runtime_dir)
     voices = VoiceLibrary(settings.runtime_dir)
+    transcriber = Transcriber(catalog, uploads)
     generation = GenerationManager(store, catalog, uploads)
     host_settings = HostSettings(store, settings.searxng_url)
     web_tools = WebTools(host_settings.searxng_url)
@@ -475,6 +483,16 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
 
     def voice_view(record: dict):
         return {key: record[key] for key in ("id", "name", "sample_text", "mime", "bytes")}
+
+    @api.post("/runtimes/{runtime_id}/transcribe")
+    def transcribe_sample(runtime_id: str, request: TranscribeRequest):
+        """What a voice sample says, written down with the transcriber a speech model is set up with."""
+        try:
+            return {"text": transcriber.transcribe(runtime_id, request.upload_id, request.language)}
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except TranscribeError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     @api.get("/voices")
     def list_voices():

@@ -1854,6 +1854,9 @@ test('a voice sample can be recorded from the microphone, and the sidebar rules 
     ;(window as unknown as { MediaRecorder: unknown }).MediaRecorder = FakeRecorder
   }, tone)
   const api = await connectFixtures(page, 'Fixture desktop', false, { speech: true, songs: true })
+  const heard: string[] = []
+  const lines = ['Welcome home, it has been far too long.', 'A second take.', 'Never used.']
+  await page.route('**/api/runtimes/*/transcribe', async (route) => { heard.push(route.request().url()); await route.fulfill({ json: { text: lines[heard.length - 1] } }) })
   await go(page, '#/hosts/local/speech')
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
   await expect(nav.getByRole('separator')).toHaveCount(1)
@@ -1865,7 +1868,23 @@ test('a voice sample can be recorded from the microphone, and the sidebar rules 
   await expect(panel.getByRole('button', { name: /Stop recording/ })).toBeVisible()
   await panel.getByRole('button', { name: /Stop recording/ }).click()
   await expect(panel.getByRole('button', { name: /^Remove recording-.*\.wav$/ })).toBeVisible()
+  // The recording can be played back, and what it says is written down into the field.
+  await expect(panel.getByLabel(/^Play recording-/)).toBeVisible()
+  await expect(panel.getByRole('textbox', { name: /^what the sample says/i })).toHaveValue('Welcome home, it has been far too long.')
+  expect(heard).toHaveLength(1)
   await page.screenshot({ path: 'test-results/screenshots/record-sample.png', fullPage: true })
+  // A new take replaces words this wrote, but never words the person typed.
+  await panel.getByRole('button', { name: /^Remove recording-/ }).click()
+  await panel.getByRole('button', { name: /Record from the microphone/ }).click()
+  await panel.getByRole('button', { name: /Stop recording/ }).click()
+  await expect(panel.getByRole('textbox', { name: /^what the sample says/i })).toHaveValue('A second take.')
+  await panel.getByRole('textbox', { name: /^what the sample says/i }).fill('My own words.')
+  await panel.getByRole('button', { name: /^Remove recording-/ }).click()
+  await panel.getByRole('button', { name: /Record from the microphone/ }).click()
+  await panel.getByRole('button', { name: /Stop recording/ }).click()
+  await expect(panel.getByRole('button', { name: /^Remove recording-/ })).toBeVisible()
+  await expect(panel.getByRole('textbox', { name: /^what the sample says/i })).toHaveValue('My own words.')
+  expect(heard).toHaveLength(2)
   expect(api.uploads.at(-1)).toMatchObject({ type: 'audio/wav' })
   expect(api.uploads.at(-1)?.name).toMatch(/^recording-\d{6}\.wav$/)
   expect(api.uploads.at(-1)?.head).toMatch(/^RIFF.{4}WAVE$/s)

@@ -116,6 +116,8 @@ export type FieldCommand = { n: number; mode: string; field: string; apply: (cur
 export type FormHooks = {
   starts?: Record<string, FormStart>; onValues?: (mode: string, values: Record<string, string>, files: Record<string, FileItem[]>) => void
   onMode?: (mode: string) => void; command?: FieldCommand
+  /** Write down a voice sample (by its upload ID); the form pre-fills "what the sample says" with it. Speech models only. */
+  transcribe?: (uploadId: string) => Promise<string>
 }
 
 /** The generation form; with several modes, one tab per mode, each keeping its own entries. */
@@ -160,6 +162,30 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
   // A tab that has just become the open one is not heard until its values change, so its blank fields do not overwrite what the page holds.
   const wasActive = useRef(active)
   useEffect(() => { if (active && wasActive.current) hooks?.onValues?.(mode ?? '', values, files); wasActive.current = !!active }, [values, files, active]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A voice sample that has just been recorded or chosen is written down, and the words fill "what the sample says" unless the
+  // person has typed their own there; a later sample replaces words this wrote, never words the person typed.
+  const speechRoles = generation.speech && mode !== generation.speech.scene ? generation.speech.roles[mode ?? ''] : undefined
+  const sampleKey = speechRoles?.sample, wordsKey = speechRoles?.sample_text
+  const sampleId = sampleKey ? files[sampleKey]?.find((item) => item.status === 'ready')?.id : undefined
+  const [listening, setListening] = useState(false)
+  const written = useRef('')
+  const valuesNow = useRef(values)
+  valuesNow.current = values
+  const transcribe = hooks?.transcribe
+  useEffect(() => {
+    if (!sampleId || !wordsKey || !transcribe) return
+    const typed = valuesNow.current[wordsKey] ?? ''
+    if (typed && typed !== written.current) return  // the person's own words (or a saved voice's): keep them
+    let stale = false
+    setListening(true)
+    transcribe(sampleId).then((text) => {
+      if (stale || !text) return
+      const before = written.current
+      written.current = text
+      setValues((current) => { const now = current[wordsKey] ?? ''; return !now || now === before ? { ...current, [wordsKey]: text } : current })
+    }, () => undefined).finally(() => { if (!stale) setListening(false) })
+    return () => { stale = true; setListening(false) }
+  }, [sampleId]) // eslint-disable-line react-hooks/exhaustive-deps
   const lastCommand = useRef(hooks?.command?.n)
   useEffect(() => {
     const command = hooks?.command
@@ -263,6 +289,7 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
         : field.kind === 'textarea' ? <textarea id={id} className="text-input generate-textarea" rows={10} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? undefined} value={value} onChange={(event) => set(event.target.value)} />
         : field.kind === 'choice' ? <select id={id} className="text-input" value={value} onChange={(event) => set(event.target.value)}>{field.options.map((option) => <option key={option} value={option}>{optionLabel(option, field.option_labels)}</option>)}</select>
           : <input id={id} className="text-input" type={field.kind === 'text' ? 'text' : 'number'} step={field.kind === 'text' ? undefined : 1} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? (field.kind === 'seed' ? 'Random' : undefined)} value={value} onChange={(event) => set(event.target.value)} />}
+      {listening && field.key === wordsKey && <p className="field-help" role="status"><Loader2 size={14} className="spin" aria-hidden="true" /> Writing down what the sample says…</p>}
       {field.guide && field.guide.length > 0 && <details className="field-guide disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Writing guide</summary><ul>
         {field.guide.map((tip) => { const [head, ...rest] = tip.split(': '); return <li key={tip}>{rest.length ? <><strong>{head}:</strong> {rest.join(': ')}</> : tip}</li> })}
       </ul></details>}
