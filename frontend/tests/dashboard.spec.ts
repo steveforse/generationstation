@@ -1653,7 +1653,7 @@ test('the Text group in the sidenav is alphabetical, with Decide as one entry', 
 test('Decide shows the model own address and a snippet for the tool picked', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { decide: true })
   await go(page, '#/hosts/local/decide')
-  await page.getByText('Connect a tool to Karpo 31B').click()
+  await page.getByRole('button', { name: 'Connect a tool' }).click()
   await expect(page.getByText('http://127.0.0.1:8400/v1/systemone', { exact: true })).toBeVisible()
   await expect(page.getByText('listens on this computer only')).toBeVisible()
   await expect(page.locator('.connect-code code')).toContainText("curl http://127.0.0.1:8400/v1/systemone")
@@ -1661,7 +1661,7 @@ test('Decide shows the model own address and a snippet for the tool picked', asy
   await expect(page.locator('.connect-code code')).toContainText('requests.post("http://127.0.0.1:8400/v1/systemone"')
   // The choice is kept for next time.
   await page.reload()
-  await page.getByText('Connect a tool to Karpo 31B').click()
+  await page.getByRole('button', { name: 'Connect a tool' }).click()
   await expect(page.getByRole('combobox', { name: 'Tool' })).toHaveValue('Python (requests)')
 })
 
@@ -1670,7 +1670,8 @@ test('Chat names the running model for the tool picked', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, chatReady: true })
   await go(page, '#/hosts/local/chat')
   await page.getByRole('combobox', { name: 'Model answering' }).selectOption({ label: 'Inkling 2 Mini' })
-  await page.getByText('Connect a tool to Inkling 2 Mini').click()
+  await page.getByRole('button', { name: 'Connect a tool' }).click()
+  await expect(page.getByRole('dialog', { name: 'Connect a tool to Inkling 2 Mini' })).toBeVisible()
   await page.getByRole('combobox', { name: 'Tool' }).selectOption('Aider')
   await expect(page.locator('.connect-code code')).toContainText('aider --model openai/inkling-2-mini')
   await expect(page.locator('.connect-code code')).toContainText('OPENAI_API_BASE=http://127.0.0.1:')

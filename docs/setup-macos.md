@@ -400,7 +400,7 @@ The paperclip attaches files from your computer: pictures (up to 12 MB; the mode
 
 ## Connecting your own tools to a model
 
-Chat and Decide each have a "Connect a tool" fold-out under the model's name. It shows the running model's own address (this API does not sit in between) and the settings of the tool you pick:
+Chat and Decide each have a "Connect a tool" link (left of the model dropdown) that opens a window with the running model's address and the settings of the tool you pick. It shows the running model's own address (this API does not sit in between) and the settings of the tool you pick:
 
 - **Chat models** speak the OpenAI chat API at `http://127.0.0.1:<port>/v1`; no key is needed, so any text works. The picker offers Aider, OpenCode, Open WebUI, curl and the Python OpenAI SDK, filled in with the model's name. Claude Code is not offered: it needs an Anthropic-style endpoint and these servers speak the OpenAI style (not checked beyond that).
 - **Decision models** answer TypeSafe's System One API on their own port: `POST http://127.0.0.1:<port>/v1/systemone` with `{"state", "questions", "images"?}`, and `GET /healthz`. The picker offers curl, Python and JavaScript. Pictures go in `images` as data URLs (only pplx-decider and H2O-Lightning read them).

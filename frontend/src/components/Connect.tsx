@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, Plug } from 'lucide-react'
+import { JobModal } from './Runtime'
 import type { SavedHost } from '../hosts'
 import type { HostSession } from '../session'
 import type { Runtime } from '../types'
@@ -50,25 +51,27 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   }}>{copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}</button>
 }
 
-/** How to reach a running model directly from a tool on the host: its own address, and the settings of the tool picked. */
-export function ConnectPanel({ kind, runtime, host, session }: { kind: Kind; runtime: Runtime; host: SavedHost; session: HostSession }) {
+/** A link that opens how to reach a running model directly from a tool on the host: its own address, and the settings of the tool picked. */
+export function ConnectLink({ kind, runtime, host, session }: { kind: Kind; runtime: Runtime; host: SavedHost; session: HostSession }) {
+  const [open, setOpen] = useState(false)
   const [model, setModel] = useState<string | null>(null)
   const [tool, setTool] = useState(() => { try { return localStorage.getItem(`${KEY}.${kind}`) ?? '' } catch { return '' } })
   useEffect(() => {
-    if (kind !== 'chat') return
+    if (kind !== 'chat' || !open) return
     let live = true
     setModel(null)
     session.connection(runtime).then((answer) => { if (live) setModel(answer.model) }).catch(() => { if (live) setModel(null) })
     return () => { live = false }
-  }, [kind, runtime.id, session]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, open, runtime.id, session]) // eslint-disable-line react-hooks/exhaustive-deps
   const address = addressOf(runtime, host)
   const snippets = kind === 'chat' ? chatSnippets(address, model ?? 'default', runtime.name) : decideSnippets(address)
   const names = Object.keys(snippets)
   const chosen = names.includes(tool) ? tool : names[0]
   const snippet = snippets[chosen]
   const local = runtime.bind !== '0.0.0.0'
-  return <details className="connect-panel">
-    <summary>Connect a tool to {runtime.name}</summary>
+  return <>
+    <button type="button" className="text-button connect-link" onClick={() => setOpen(true)} title={`How to connect a tool to ${runtime.name}`}><Plug size={16} aria-hidden="true" />Connect a tool</button>
+    <JobModal open={open} onClose={() => setOpen(false)} title={`Connect a tool to ${runtime.name}`}>
     <div className="connect-body">
       <p className="connect-address"><span>Address</span><code>{kind === 'chat' ? `${address}/v1` : `${address}/v1/systemone`}</code>
         <CopyButton text={kind === 'chat' ? `${address}/v1` : `${address}/v1/systemone`} label="Copy the address" /></p>
@@ -82,5 +85,6 @@ export function ConnectPanel({ kind, runtime, host, session }: { kind: Kind; run
       {snippet.where && <p className="connect-where">{snippet.where}</p>}
       <div className="connect-code"><pre><code>{snippet.code}</code></pre><CopyButton text={snippet.code} label={`Copy the ${snippet.title} settings`} /></div>
     </div>
-  </details>
+    </JobModal>
+  </>
 }

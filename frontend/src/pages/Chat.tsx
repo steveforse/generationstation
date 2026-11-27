@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowUp, ArrowUpRight, Bot, Brain, Check, FileText, Image as
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
 import { DraftView, KIND_WORD, mainOutput, MessageView, resultKind, thumbKind, useChatTurn, usePinnedScroll } from '../components/ChatParts'
 import { JobDetail, JobModal, jobTitle, ResultThumb, when } from '../components/Runtime'
-import { ConnectPanel } from '../components/Connect'
+import { ConnectLink } from '../components/Connect'
 import { StatePill } from '../components/StatePill'
 import { handOff } from '../voiceSample'
 import type { SavedHost } from '../hosts'
@@ -184,6 +184,7 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
         <header className="chat-head">
           <a className="icon-button chat-back" href={href({ page: 'chat', hostId: host.id })} aria-label="All conversations"><ArrowLeft size={18} /></a>
           <ChatTitle key={loaded?.conversation.id ?? 'new'} title={title} editable={!!loaded && !!conversationId} onRename={rename} />
+          {chatRuntime && <ConnectLink kind="chat" runtime={chatRuntime} host={host} session={session} />}
           {chatRuntime && (running.length > 1
             ? <label className="chat-model chat-model-pick"><span className="sr-only">Model</span>
               <select value={chatRuntime.id} disabled={busy} onChange={(event) => setPickedId(event.target.value)} aria-label="Model answering">
@@ -191,7 +192,6 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
               </select></label>
             : <span className="chat-model"><span>{chatRuntime.name}</span><StatePill state="ready">{stateText.ready ?? 'Running'}</StatePill></span>)}
         </header>
-        {chatRuntime && session && host && <ConnectPanel kind="chat" runtime={chatRuntime} host={host} session={session} />}
         {state.runtimes && !state.runtimes.some((runtime) => runtime.chat) && <p className="chat-notice">{hostName(host, state)} has no text model to chat with.</p>}
         {state.runtimes?.some((runtime) => runtime.chat) && !ready && state.models && <p className="chat-notice">No text model is running. <a href={href({ page: 'models', hostId: host.id })}>Start one on the Models page</a>, then come back.</p>}
         <div className="chat-thread" ref={thread} aria-live="polite" aria-busy={busy}><div className="chat-thread-body" ref={threadBody}>

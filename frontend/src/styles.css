@@ -1158,9 +1158,10 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .decide-picker { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-meta); color: var(--text-3); margin-bottom: var(--sp-3) }
 .decide-picker select { font: inherit; color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px; max-width: 16rem }
 
-.connect-panel { margin: var(--sp-3) 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-surface) }
-.connect-panel > summary { cursor: pointer; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-meta); color: var(--text-2) }
-.connect-body { display: grid; gap: var(--sp-2); padding: 0 var(--sp-3) var(--sp-3) }
+.connect-link { display: inline-flex; align-items: center; gap: var(--sp-1, 4px); white-space: nowrap }
+.decide-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3) }
+.decide-bar .decide-picker { margin-bottom: 0 }
+.connect-body { display: grid; gap: var(--sp-2); padding: var(--sp-4) var(--sp-5) var(--sp-5) }
 .connect-address { display: flex; align-items: center; gap: var(--sp-2); margin: 0; flex-wrap: wrap }
 .connect-address > span, .connect-tool > span { font-size: var(--fs-meta); color: var(--text-3) }
 .connect-address code, .connect-note code { font-family: var(--mono, ui-monospace, monospace); word-break: break-all }
@@ -1173,5 +1174,3 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .chat-chip-name { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .chat-chip-failed { border-color: var(--danger, #c0392b) }
 
-.chat-main > .connect-panel { margin: var(--sp-2) var(--sp-5) 0 }
-@media (max-width: 720px) { .chat-main > .connect-panel { margin: var(--sp-2) var(--sp-3) 0 } }
