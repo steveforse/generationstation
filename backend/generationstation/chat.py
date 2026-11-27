@@ -17,7 +17,9 @@ from pathlib import Path
 
 from .chatfiles import MAX_DOC_CHARS, ChatFileError, ChatFiles
 from .lifecycle import LifecycleError
+from .speak import SpeakTool
 from .uploads import UploadError, kind_of
+from .voices import VoiceNotFound
 
 NEW_TITLE = "New conversation"
 MAX_ROUNDS = 8            # model answers per turn: check, start, make, reply, and a search or two
@@ -116,7 +118,8 @@ class Turn:
 
 class ChatManager:
     def __init__(self, store, catalog, generation, uploads, opener=None, host_tools=None, web_tools=None,
-                 job_tools=None):
+                 job_tools=None, voices=None):
+        self.speak_tool = SpeakTool(voices)
         self.host_tools = host_tools
         self.job_tools = job_tools
         self.web_tools = web_tools
@@ -627,6 +630,12 @@ class ChatManager:
             group = GROUPS.get(runtime.workload, runtime.workload or "Other")
             about = runtime.description or plugin.description or ""
             lines.append(f"- **{runtime.name}** (menu: {group}; now {word}; id {model_id}): {about}")
+            if plugin.speech:
+                info = plugin.speech
+                lines.append("  - Used from the **Speak** page, shared by every speech model. Voices: " + ", ".join(info.voices) + f". {info.direction.text}")
+                if info.direction.cues:
+                    lines.append(f"  - Cues in the text: {info.direction.cues.text} {', '.join(info.direction.cues.examples)}")
+                continue
             modes = list(plugin.modes.items()) or ([(None, None)] if plugin.generates else [])
             for key, mode in modes:
                 specs = mode.inputs if mode else plugin.inputs
@@ -656,9 +665,13 @@ class ChatManager:
         """One tool per way of making something on each running generator."""
         states = self.store.runtime_states()
         tools, handlers = [], {}
+        speaking = []
         for model_id, runtime in self.catalog.runtimes.items():
             plugin = self.catalog.plugin(model_id)
             if not plugin.generates or states.get(model_id, {}).get("state") != "ready":
+                continue
+            if plugin.speech:  # every speech model is reached through the one speak tool
+                speaking.append((model_id, runtime, plugin))
                 continue
             modes = [(key, mode.label, mode.help, mode.inputs) for key, mode in plugin.modes.items()] or \
                 [(None, None, None, plugin.inputs)]
@@ -679,6 +692,10 @@ class ChatManager:
                     "parameters": {"type": "object", "properties": properties, "required": required}}})
                 handlers[name] = {"model_id": model_id, "runtime": runtime, "plugin": plugin, "mode": mode,
                                   "specs": specs}
+        speak = self.speak_tool.schema(speaking)
+        if speak:
+            tools.append(speak)
+            handlers["speak"] = {"speak": speaking}
         for source in (self.host_tools, self.job_tools, self.web_tools):
             for schema in source.schemas() if source else []:
                 tools.append(schema)
@@ -733,6 +750,14 @@ class ChatManager:
             return {"text": "The arguments were not a JSON object. Call the tool again."}
         if handler.get("builtin"):
             return self._builtin(call["name"], arguments, conversation, turn)
+        if handler.get("speak"):
+            try:
+                model_id, runtime, inputs, notes = self.speak_tool.plan(arguments, handler["speak"], self.uploads)
+                job = self.generation.create(model_id, inputs)
+            except (LifecycleError, UploadError, ValueError, VoiceNotFound) as exc:
+                return {"text": f"Not started: {getattr(exc, 'message', None) or exc}"}
+            left = f" Left out: {'; '.join(notes)}." if notes else ""
+            return {"text": f"Started job {job['id'][:8]} on {runtime.name}. It will appear in the chat when it is done.{left}", "job_id": job["id"], "job": job}
         inputs = {}
         try:
             for key, value in arguments.items():

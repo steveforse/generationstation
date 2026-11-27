@@ -316,7 +316,7 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     logs = LogStore(settings.runtime_dir, store)
     host_tools = HostTools(store, catalog, lifecycle, lambda: snapshot())
     chat = ChatManager(store, catalog, generation, uploads, host_tools=host_tools, web_tools=web_tools,
-                       job_tools=JobTools(store, catalog, generation, logs))
+                       job_tools=JobTools(store, catalog, generation, logs), voices=voices)
     # Text models for worker jobs that ask for one (meeting notes); polls only plugins that declare text_model_jobs.
     broker = TextModelBroker(store, catalog, host_tools, chat)
     access_logger = _access_logger()

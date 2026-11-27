@@ -1,4 +1,4 @@
-# One Speech page (plan agreed 2026-11-27; capabilities and the shared page built, library and `speak` tool next)
+# One Speech page (plan agreed 2026-11-27; capabilities, shared page, voice library and `speak` chat tool built; listening checks left)
 
 The speech models (Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 on the Mac; OmniVoice, Qwen3-TTS and Drama 3 on the Windows template) get one shared page, as Decide does for decision models and Chat does for text models: one sidenav entry under Speech, a dropdown over the running speech models, and a form built from the chosen model. Other generators (pictures, video, music) follow later, once this has settled.
 

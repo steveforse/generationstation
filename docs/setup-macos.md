@@ -365,6 +365,8 @@ All five models share one **Speak** page (sidebar, Speech section). A dropdown l
 
 **Saved voices** (folded section on the page) are kept on the host under `runtime/voices/`: a name, the sample and the words it says. Save the sample on the form, or choose **Save as voice** on a finished result (a speech recording, or a video clip's soundtrack); **Use** puts a voice on the clone tab of any model that clones. The API: `GET/POST /api/voices`, `PUT/DELETE /api/voices/{id}`, `GET /api/voices/{id}/sample`. Only keep voices you have permission to use.
 
+In the chat, every running speech model is reached through one `speak` tool (text, and optionally a saved voice by name, a voice description, a built-in speaker, a direction, language, speed, seed, and which model). The chat picks a running model that can do what was asked, fills that model's own fields, leaves out what it cannot take (said in the result) and removes cues the model would read aloud. The tool's description and the assistant's model guide are generated from each running model's capabilities.
+
 When you clone a voice without typing what the sample says, the worker writes it down with the Qwen3-ASR folder from the meeting setup (`asr_dir`). The MLX models need those exact words.
 
 ## 6a. Decide (decision models)

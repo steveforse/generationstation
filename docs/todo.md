@@ -10,7 +10,7 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Waiting for a decision
 
-- **One Speech page and a saved voice library** (plan in `docs/speech-consolidation.md`, agreed and approved 2026-11-27): capabilities on the five models, the shared Speak page and the voice library are built and tested with fixtures; next the single `speak` chat tool, then a listening check per model on the Mac.
+- **One Speech page and a saved voice library** (plan in `docs/speech-consolidation.md`, agreed and approved 2026-11-27): capabilities on the five models, the shared Speak page and the voice library are built and tested with fixtures; the single `speak` chat tool is built too; left: a listening check per model on the Mac (fixtures and unit tests cover the logic, not the sound).
 
 - **Decide tool: Karpo 31B, pplx-decider 27B (8-bit) and H2O-Lightning 4B built and tested through the app (pplx read a receipt picture). Torchcast 4B (vendor package on torch MPS) and 31B (8-bit MLX, `workers/torchcast_mlx.py`) added and run through the app. Disk cleaned 2026-11-27 (about 344 GB: Wan A14B conversions, LongCat q4, Qwen-Image 2512 q4, the community Torchcast 4B copies, the Torchcast 31B bf16 shards, duplicate cache copies, /tmp scratch).** Also open: a calibration note on the result page (Karpo's probabilities are near 0 or 1), pplx v1.3, an ordering test.
 
