@@ -1148,3 +1148,4 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .history-change ins { text-decoration: none; background: color-mix(in srgb, var(--accent, #6d5bd0) 14%, transparent); border-radius: 3px; padding: 0 2px }
 .notes-row-fields input { height: 36px }
 .notes-row-fields .icon-button { margin-top: 0 }
+.chat-model-pick select { font: inherit; color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px; max-width: 16rem }

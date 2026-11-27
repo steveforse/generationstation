@@ -9,7 +9,7 @@ import type { ChatAttachment, ChatMessage, Job, JobOutput, Runtime } from '../ty
 /** What the model is writing right now, before it is saved. */
 export type Draft = { content: string; reasoning: string; tool: string }
 /** thinking: a level the model takes, "off", or true for the model's default. */
-export type MessageBody = { text: string; attachments: ChatAttachment[]; thinking: boolean | string; where?: string }
+export type MessageBody = { text: string; attachments: ChatAttachment[]; thinking: boolean | string; where?: string; model_id?: string }
 
 const THUMBNAIL = 'thumbnail.jpg'
 export const mainOutput = (job: Job): JobOutput | undefined => job.outputs.find((output) => output.name !== THUMBNAIL && output.name !== job.details?.thumbnail)

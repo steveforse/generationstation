@@ -417,6 +417,34 @@ def test_the_assistant_runs_on_the_model_marked_for_it(setup, tmp_path):
     assert chat.assistant()["conversation"]["model_id"] == "helper"
 
 
+def test_a_message_can_move_the_conversation_to_another_running_chat_model(setup, tmp_path):
+    store, _, generation, uploads = setup
+    entry = {"kind": "basalt", "workload": "text", "executable": "basalt.exe", "default_preset": "fn", "presets": {"fn": {
+        "name": "FN", "alias": "FN", "model_path": "D:/fn.basalt", "gpus": [0], "settings": {},
+        "estimate": {"ram_gib": 4, "gpu_min_free_gib": {"0": 4}}}}}
+    cat = parse_catalog({"runtimes": {"big": {**entry, "name": "Big model", "port": 8160},
+                                      "helper": {**entry, "name": "Helper", "port": 8161},
+                                      "off": {**entry, "name": "Stopped", "port": 8162}}})
+    store.states = {"big": {"state": "ready"}, "helper": {"state": "ready"}, "off": {"state": "unloaded"}}
+    server = Server(*[[({"content": "ok"}, "stop")] for _ in range(3)])
+    chat = ChatManager(store, cat, generation, uploads, opener=server)
+    conversation = chat.create("big")
+    assert conversation["model_id"] == "big"
+    # A model that is not running, or is not a chat model, is refused and the conversation stays where it was.
+    for target, code in [("off", "MODEL_NOT_READY"), ("nowhere", "MODEL_NOT_FOUND")]:
+        with pytest.raises(LifecycleError) as refused:
+            chat.start(conversation["id"], "hi", [], model_id=target)
+        assert refused.value.code == code
+    assert chat.get(conversation["id"])["conversation"]["model_id"] == "big" and chat.get(conversation["id"])["messages"] == []
+    follow(chat.start(conversation["id"], "hi", [], model_id="helper"))
+    assert chat.get(conversation["id"])["conversation"]["model_id"] == "helper"
+    # Naming the model it is already on changes nothing, and the help assistant keeps its own model.
+    follow(chat.start(conversation["id"], "again", [], model_id="helper"))
+    assistant = chat.assistant()["conversation"]
+    chat.start(assistant["id"], "hello", [], model_id="big")
+    assert chat.get(assistant["id"])["conversation"]["model_id"] == assistant["model_id"]
+
+
 def leveled_chat(tmp_path, levels=("minimal", "low", "high", "max"), default="low", off=True):
     """A chat with a text model whose card declares its thinking levels."""
     card = {"engine": "basalt", "executable": "basalt.exe", "alias": "Ink", "model_path": "D:/ink.basalt",

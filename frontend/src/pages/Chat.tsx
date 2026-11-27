@@ -53,12 +53,15 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
   const [openJob, setOpenJob] = useState<string | null>(null)
   const streaming = useRef<string | null>(null)
   const connected = state.connection === 'connected'
-  // The conversation's own model; for a new one, a chat model that is running (else the first there is).
-  const chatRuntime = state.runtimes?.find((runtime) => runtime.chat && runtime.id === loaded?.conversation.model_id)
-    ?? state.runtimes?.find((runtime) => runtime.chat && state.models?.find((model) => model.id === runtime.id)?.state === 'ready')
-    ?? state.runtimes?.find((runtime) => runtime.chat)
-  const chatModel = state.models?.find((model) => model.id === chatRuntime?.id)
-  const ready = chatModel?.state === 'ready'
+  // Only running chat models are offered or named. The one answering: the one picked here, else the conversation's own,
+  // else the first running. A conversation whose model has stopped moves to a running one when the next message is sent.
+  const [pickedId, setPickedId] = useState<string | null>(null)
+  useEffect(() => { setPickedId(null) }, [conversationId])
+  const running = (state.runtimes ?? []).filter((runtime) => runtime.chat && state.models?.find((model) => model.id === runtime.id)?.state === 'ready')
+  const chatRuntime = running.find((runtime) => runtime.id === pickedId)
+    ?? running.find((runtime) => runtime.id === loaded?.conversation.model_id)
+    ?? running[0]
+  const ready = !!chatRuntime
   const thinkingOptions = chatRuntime?.thinking
   const level = chosenLevel(thinkingOptions, chatRuntime?.id, savedLevels)
   const chooseLevel = (next: string) => {
@@ -113,7 +116,8 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
       }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'The conversation could not be started.'); return }
     streaming.current = id
-    const body = { text: message, attachments: attached.map(({ job_id, name }) => ({ job_id, name })), thinking: level ?? true }
+    const model = chatRuntime && loaded && chatRuntime.id !== loaded.conversation.model_id ? { model_id: chatRuntime.id } : {}
+    const body = { text: message, attachments: attached.map(({ job_id, name }) => ({ job_id, name })), thinking: level ?? true, ...model }
     setText(''); setAttached([])
     await sendTurn(id, body, (saved) => setLoaded((current) => current && { ...current, messages: [...current.messages.filter((other) => other.id !== saved.id), saved] }))
     streaming.current = null
@@ -159,10 +163,15 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
         <header className="chat-head">
           <a className="icon-button chat-back" href={href({ page: 'chat', hostId: host.id })} aria-label="All conversations"><ArrowLeft size={18} /></a>
           <ChatTitle key={loaded?.conversation.id ?? 'new'} title={title} editable={!!loaded && !!conversationId} onRename={rename} />
-          {chatRuntime && <span className="chat-model"><span>{chatRuntime.name}</span><StatePill state={chatModel?.state ?? 'unknown'}>{stateText[chatModel?.state ?? ''] ?? 'Unknown'}</StatePill></span>}
+          {chatRuntime && (running.length > 1
+            ? <label className="chat-model chat-model-pick"><span className="sr-only">Model</span>
+              <select value={chatRuntime.id} disabled={busy} onChange={(event) => setPickedId(event.target.value)} aria-label="Model answering">
+                {running.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.name}</option>)}
+              </select></label>
+            : <span className="chat-model"><span>{chatRuntime.name}</span><StatePill state="ready">{stateText.ready ?? 'Running'}</StatePill></span>)}
         </header>
-        {state.runtimes && !chatRuntime && <p className="chat-notice">{hostName(host, state)} has no text model to chat with.</p>}
-        {chatRuntime && chatModel && !ready && <p className="chat-notice">{chatRuntime.name} is not running. <a href={href({ page: 'models', hostId: host.id })}>Start it on the Models page</a>, then come back.</p>}
+        {state.runtimes && !state.runtimes.some((runtime) => runtime.chat) && <p className="chat-notice">{hostName(host, state)} has no text model to chat with.</p>}
+        {state.runtimes?.some((runtime) => runtime.chat) && !ready && state.models && <p className="chat-notice">No text model is running. <a href={href({ page: 'models', hostId: host.id })}>Start one on the Models page</a>, then come back.</p>}
         <div className="chat-thread" ref={thread} aria-live="polite" aria-busy={busy}><div className="chat-thread-body" ref={threadBody}>
           {loadError && <p className="operation-error" role="alert">{loadError}</p>}
           {!conversationId && <ChatWelcome runtimes={state.runtimes ?? []} models={state.models ?? []} />}

@@ -432,7 +432,7 @@ export class HostSession {
    * message), start, delta ({content?, reasoning?, tool?}), error and done. The host finishes and saves the
    * answer even if this stream is dropped.
    */
-  async sendMessage(id: string, body: { text: string; attachments: ChatAttachment[]; thinking: boolean | string; where?: string },
+  async sendMessage(id: string, body: { text: string; attachments: ChatAttachment[]; thinking: boolean | string; where?: string; model_id?: string },
     onEvent: (event: string, data: unknown) => void, signal?: AbortSignal) {
     const ctx = this.context()
     if (!ctx) throw new Error('Not connected to the host.')

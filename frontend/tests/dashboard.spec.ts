@@ -175,7 +175,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let startBody: Record<string, unknown> | null = null
   await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : [])] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
-  if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/estimate', (route) => {
     const body = route.request().postDataJSON() as { preset: string; settings: Record<string, unknown>; gpus: number[] }
     const url = route.request().url()
@@ -1559,4 +1559,32 @@ test('models within a section sort by name or by the chosen ranking, either way'
   await speech.getByRole('button', { name: /Naturalness MOS/ }).click()
   await expect(speech.getByLabel('Sort')).toContainText('Quality (Naturalness MOS)')
   expect(await names()).toEqual(['Voice C', 'Voice A', 'Voice B'])
+})
+
+test('chat names no model that is not running, and offers a choice between those that are', async ({ page }) => {
+  // Nothing running: the page says so without naming a model.
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true })
+  await go(page, '#/hosts/local/chat')
+  await expect(page.getByText('No text model is running.')).toBeVisible()
+  await expect(page.locator('.chat-main').getByText(/Basalt|Inkling/)).toHaveCount(0)
+})
+
+test('with two chat models running, a dropdown picks which one answers and the choice is sent', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, chatReady: true })
+  await keepFresh(page)
+  const conversation = { id: 'conv-2', title: 'New conversation', model_id: 'basalt', created_at: '2026-11-22T10:00:00Z', updated_at: '2026-11-22T10:00:00Z', busy: false }
+  const sent: Record<string, unknown>[] = []
+  await page.route('**/api/conversations', async (route) => {
+    if (route.request().method() === 'POST') { sent.push({ created: route.request().postDataJSON() }); await route.fulfill({ status: 201, json: { ...conversation, model_id: (route.request().postDataJSON() as { model_id: string }).model_id } }); return }
+    await route.fulfill({ json: { conversations: [] } })
+  })
+  await go(page, '#/hosts/local/chat')
+  const pick = page.getByRole('combobox', { name: 'Model answering' })
+  await expect(pick.locator('option')).toHaveText(['Basalt', 'Inkling 2 Mini'])
+  await expect(pick).toHaveValue('basalt')
+  await pick.selectOption('inkling2')
+  await page.getByLabel('Message').fill('Hello')
+  await page.getByLabel('Message').press('Enter')
+  await expect.poll(() => sent.length).toBe(1)
+  expect(sent[0]).toEqual({ created: { model_id: 'inkling2' } })
 })

@@ -201,8 +201,9 @@ class ChatManager:
 
     # ----- a turn ------------------------------------------------------------------------------
 
-    def start(self, conversation_id, text, attachments, thinking=True, where=None):
-        """Check and save the user's message, then answer it in a thread. Returns the turn to follow."""
+    def start(self, conversation_id, text, attachments, thinking=True, where=None, model_id=None):
+        """Check and save the user's message, then answer it in a thread. Returns the turn to follow. `model_id` moves
+        the conversation to another chat model first (not the help assistant's, which has its own)."""
         conversation = self._conversation(conversation_id)
         text = (text or "").strip()
         if not text and not attachments:
@@ -211,7 +212,10 @@ class ChatManager:
             raise LifecycleError("MESSAGE_TOO_LONG", f"Messages are limited to {MAX_TEXT:,} characters.", 422)
         if len(attachments) > MAX_ATTACHMENTS:
             raise LifecycleError("TOO_MANY_ATTACHMENTS", f"Attach at most {MAX_ATTACHMENTS} results.", 422)
-        model_id = conversation["model_id"]
+        switch = bool(model_id) and model_id != conversation["model_id"] and conversation.get("kind") != "assistant"
+        if switch and model_id not in self.chat_models():
+            raise LifecycleError("MODEL_NOT_FOUND", "That model cannot chat.", 404)
+        model_id = model_id if switch else conversation["model_id"]
         runtime = self.catalog.runtimes.get(model_id)
         if runtime is None:
             raise LifecycleError("MODEL_NOT_FOUND", "This conversation's model is no longer configured.", 404)
@@ -225,6 +229,8 @@ class ChatManager:
             turn = self.turns[conversation_id] = Turn()
             turn.where = " ".join(str(where or "").split())[:200] or None
         try:
+            if switch:
+                self.store.update_conversation(conversation_id, model_id=model_id)
             user = self.store.add_message(conversation_id, role="user", content=text, attachments=attached)
             if conversation["title"] in (NEW_TITLE, ASSISTANT_TITLE) and conversation.get("kind") != "assistant":
                 title = " ".join(text.split())[:60] or "Attached results"

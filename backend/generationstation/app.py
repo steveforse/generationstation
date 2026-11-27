@@ -201,6 +201,8 @@ class ChatMessageRequest(BaseModel):
     thinking: StrictBool | Annotated[StrictStr, Field(max_length=20)] = True  # a level the model takes, "off", or true/false
     # The page the person is on, for the help assistant ("MiniMax H3 videos & pictures, tab A picture").
     where: StrictStr | None = Field(default=None, max_length=200)
+    # Answer with this chat model instead of the conversation's, and keep it for the conversation from now on.
+    model_id: StrictStr | None = Field(default=None, min_length=1, max_length=64)
 
 
 class SettingsUpdate(BaseModel):
@@ -494,7 +496,7 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         """Answer a message as server-sent events: message (each saved message), start, delta, error, done.
         The answer finishes and is saved even if the browser disconnects."""
         turn = chat.start(conversation_id, payload.text, [a.model_dump() for a in payload.attachments],
-                          payload.thinking, payload.where)
+                          payload.thinking, payload.where, payload.model_id)
 
         async def stream():
             while True:
