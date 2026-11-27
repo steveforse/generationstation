@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, ArrowUpRight, Bot, ChevronDown, Loader2, MessageCircleQuestion, Power, RotateCcw, Square } from 'lucide-react'
+import { ArrowUp, ArrowUpRight, Bot, ChevronDown, Loader2, MessageCircleQuestion, RotateCcw, Square } from 'lucide-react'
 import { DraftView, MessageView, useChatTurn, usePinnedScroll } from './ChatParts'
 import type { SavedHost } from '../hosts'
 import { href } from '../routes'
@@ -34,13 +34,12 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
   const input = useRef<HTMLTextAreaElement>(null)
   const connected = state.connection === 'connected'
   // Like the Chat page: only a running text model is named or used. The thread's own model if it is running, else the one
-  // marked for the assistant, else any other that is running. With none running, the button starts the assistant's model
-  // (the marked one, else the first) without naming it.
+  // marked for the assistant, else any other that is running. With none running, no model is named: a link goes to the
+  // Models page to start one.
   const chats = state.runtimes?.filter((item) => item.chat) ?? []
   const isReady = (id: string) => state.models?.find((model) => model.id === id)?.state === 'ready'
   const running = chats.filter((item) => isReady(item.id))
   const runtime = running.find((item) => item.id === loaded?.conversation.model_id) ?? running.find((item) => item.assistant) ?? running[0]
-  const target = runtime ?? chats.find((item) => item.assistant) ?? chats[0]
   const ready = !!runtime
   const starting = chats.some((item) => state.pendingModelId === item.id || state.models?.find((model) => model.id === item.id)?.state === 'loading')
   const conversationId = loaded?.conversation.id
@@ -96,7 +95,6 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
   </button>
 
   const busy = sending || !!loaded?.conversation.busy
-  const refusal = target ? state.refusals[target.id] : undefined
   return <section ref={panel} className="assistant-panel" aria-label="Assistant"
     onKeyDown={(event) => { if (event.key === 'Escape') setOpenSaved(false) }}>
     <header className="assistant-head">
@@ -110,12 +108,12 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
     </header>
     <div className="assistant-thread" ref={thread} aria-live="polite" aria-busy={busy}><div className="chat-thread-body" ref={body}>
       {!connected && <p className="assistant-note">This browser is not connected to the desktop. <a href={href({ page: 'connections' })}>Open Connections</a></p>}
-      {connected && state.runtimes && !target && <p className="assistant-note">This desktop has no text model for the assistant.</p>}
-      {connected && target && !ready && <div className="assistant-off">
+      {connected && state.runtimes && chats.length === 0 && <p className="assistant-note">This desktop has no text model for the assistant.</p>}
+      {connected && chats.length > 0 && !ready && <div className="assistant-off">
         <p>{starting ? 'A text model is starting.' : 'No text model is running.'}</p>
-        <button type="button" className="button button-primary" disabled={starting} onClick={() => void session.runRuntime(target, 'start')}>
-          {starting ? <Loader2 size={16} className="spin" aria-hidden="true" /> : <Power size={16} aria-hidden="true" />}{starting ? 'Starting…' : 'Start a text model'}</button>
-        {refusal && !starting && <p className="operation-error" role="alert">{refusal.message}</p>}
+        {starting
+          ? <p className="assistant-starting"><Loader2 size={16} className="spin" aria-hidden="true" /> Starting…</p>
+          : <a className="button button-primary" href={href({ page: 'models', hostId: host.id })} onClick={() => setOpenSaved(false)}>Start one on the Models page <ArrowUpRight size={16} aria-hidden="true" /></a>}
       </div>}
       {loadError && <p className="operation-error" role="alert">{loadError}</p>}
       {connected && loaded && loaded.messages.length === 0 && !draft && <div className="assistant-welcome">

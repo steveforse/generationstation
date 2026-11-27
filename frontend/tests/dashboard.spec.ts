@@ -1458,8 +1458,8 @@ test('a model that also paints pictures labels each tab and result by what it ma
   await expect(page.getByRole('heading', { name: 'Your results' })).toBeVisible()
 })
 
-test('the assistant bubble opens on every page but Chat, offers to start its model, and keeps one thread', async ({ page }) => {
-  // Nothing running: the bubble offers to start a text model (the one marked for the assistant) without naming any.
+test('the assistant bubble opens on every page but Chat, points to the Models page when no text model runs, and keeps one thread', async ({ page }) => {
+  // Nothing running: the bubble names no model and links to the Models page to start one.
   await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, songs: true })
   const thread = (id: string) => ({ conversation: { id, title: 'Assistant', kind: 'assistant', model_id: 'inkling2', created_at: '2026-11-23T10:00:00Z', updated_at: '2026-11-23T10:00:00Z', busy: false }, messages: [] })
   await page.route('**/api/assistant', (route) => route.fulfill({ json: thread('help-1') }))
@@ -1469,9 +1469,10 @@ test('the assistant bubble opens on every page but Chat, offers to start its mod
   await expect(panel.getByText('No text model is running.')).toBeVisible()
   await expect(panel.getByText(/Inkling|Basalt/)).toHaveCount(0)
   await expect(panel.getByLabel('Ask the assistant')).toBeDisabled()
-  const start = page.waitForRequest((request) => request.url().includes('/api/runtimes/inkling2/start') && request.method() === 'POST')
-  await panel.getByRole('button', { name: 'Start a text model' }).click()
-  await start
+  await panel.getByRole('link', { name: /Start one on the Models page/ }).click()
+  await expect(page).toHaveURL(/#\/hosts\/local\/models/)
+  await expect(panel).toHaveCount(0)
+  await page.getByRole('button', { name: 'Open the assistant' }).click()
   await panel.getByRole('button', { name: 'Close the assistant' }).click()
   await expect(panel).toHaveCount(0)
   await go(page, '#/hosts/local/chat')
