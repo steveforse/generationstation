@@ -189,6 +189,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
+  await page.route('**/api/runtimes/*/connection', (route) => route.fulfill({ json: { bind: '127.0.0.1', port: 8000, model: route.request().url().includes('/inkling2/') ? 'inkling-2-mini' : null } }))
   await page.route('**/api/runtimes/*/estimate', (route) => {
     const body = route.request().postDataJSON() as { preset: string; settings: Record<string, unknown>; gpus: number[] }
     const url = route.request().url()
@@ -1645,4 +1646,30 @@ test('the Text group in the sidenav is alphabetical, with Decide as one entry', 
   const links = page.getByRole('group', { name: 'Text' }).getByRole('link')
   const names = (await links.allInnerTexts()).map((text) => text.split('\n')[0].trim())
   expect(names).toEqual(['Chat', 'Decide', 'Meeting notes'])
+})
+
+test('Decide shows the model own address and a snippet for the tool picked', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { decide: true })
+  await go(page, '#/hosts/local/decide')
+  await page.getByText('Connect a tool to Karpo 31B').click()
+  await expect(page.getByText('http://127.0.0.1:8400/v1/systemone', { exact: true })).toBeVisible()
+  await expect(page.getByText('listens on this computer only')).toBeVisible()
+  await expect(page.locator('.connect-code code')).toContainText("curl http://127.0.0.1:8400/v1/systemone")
+  await page.getByRole('combobox', { name: 'Tool' }).selectOption('Python (requests)')
+  await expect(page.locator('.connect-code code')).toContainText('requests.post("http://127.0.0.1:8400/v1/systemone"')
+  // The choice is kept for next time.
+  await page.reload()
+  await page.getByText('Connect a tool to Karpo 31B').click()
+  await expect(page.getByRole('combobox', { name: 'Tool' })).toHaveValue('Python (requests)')
+})
+
+test('Chat names the running model for the tool picked', async ({ page }) => {
+  await page.route('**/api/conversations', (route) => route.fulfill({ json: { conversations: [] } }))
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, chatReady: true })
+  await go(page, '#/hosts/local/chat')
+  await page.getByRole('combobox', { name: 'Model answering' }).selectOption({ label: 'Inkling 2 Mini' })
+  await page.getByText('Connect a tool to Inkling 2 Mini').click()
+  await page.getByRole('combobox', { name: 'Tool' }).selectOption('Aider')
+  await expect(page.locator('.connect-code code')).toContainText('aider --model openai/inkling-2-mini')
+  await expect(page.locator('.connect-code code')).toContainText('OPENAI_API_BASE=http://127.0.0.1:')
 })

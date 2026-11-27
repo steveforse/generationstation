@@ -35,6 +35,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 - Decide: Karpo 31B removed (weights, environment and catalog entry; kept as a reference bar); every decision model now shares one Decide page with a dropdown over those running, like Chat.
 
+- Connect a tool (Chat and Decide): address and per-tool settings built; the chat half is tested against the fixture API only (needs a real chat model run to confirm the served-model name). Not offered: Claude Code and Codex CLI (they need other API styles).
+
 ## Done this session (all on PR #2 unless noted)
 
 - Models page: default sort is alphabetical, sidenav and Overview lists are alphabetical, margin under the sort control.

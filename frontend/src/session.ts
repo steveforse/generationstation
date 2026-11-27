@@ -513,6 +513,14 @@ export class HostSession {
     }
   }
 
+  /** Where a running model listens and, for a chat model, the name it answers to (for a tool that connects to it directly). */
+  async connection(runtime: Runtime): Promise<{ bind: string; port: number; model: string | null }> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected.')
+    const body = await requestApi(ctx.base, ctx.token, `/api/runtimes/${encodeURIComponent(runtime.id)}/connection`, {}, ctx.signal) as { bind: string; port: number; model: string | null }
+    return body
+  }
+
   /** Ask the host what a start with these choices would need. Display only; Start is checked again. */
   async estimateRuntime(runtime: Runtime, launch: Launch, signal?: AbortSignal): Promise<RuntimeEstimate> {
     const ctx = this.context()

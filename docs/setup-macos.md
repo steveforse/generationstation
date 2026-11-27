@@ -394,6 +394,14 @@ export HF_HOME=~/ai/models/decision/.hf-cache
 
 Inputs are capped at 20,000 characters and 255 options. The worker keeps every MLX call on one thread, because MLX streams belong to the thread that made them. Karpo 31B (a community 4-bit MLX port) was tried and removed: Torchcast 31B scores higher and Torchcast 4B and pplx-decider cover the lighter and picture cases. Rankings come from JevBench, the Decision Index and Artificial Analysis; the hosted Jev is the baseline, and a few other open models (two of them personal-use only) are reference bars. The full survey is in `docs/context.md`.
 
+## Connecting your own tools to a model
+
+Chat and Decide each have a "Connect a tool" fold-out under the model's name. It shows the running model's own address (this API does not sit in between) and the settings of the tool you pick:
+
+- **Chat models** speak the OpenAI chat API at `http://127.0.0.1:<port>/v1`; no key is needed, so any text works. The picker offers Aider, OpenCode, Open WebUI, curl and the Python OpenAI SDK, filled in with the model's name. Claude Code is not offered: it needs an Anthropic-style endpoint and these servers speak the OpenAI style (not checked beyond that).
+- **Decision models** answer TypeSafe's System One API on their own port: `POST http://127.0.0.1:<port>/v1/systemone` with `{"state", "questions", "images"?}`, and `GET /healthz`. The picker offers curl, Python and JavaScript. Pictures go in `images` as data URLs (only pplx-decider and H2O-Lightning read them).
+- **Same computer by default.** Each model's server listens on `127.0.0.1`. To reach one from another machine, set `"host": "0.0.0.0"` on its entry in `runtimes.json` and restart it; the page then shows the address under the name this dashboard uses for the host. These servers have no login, so only do that on a network you trust.
+
 ## 7. Web search for the chat
 
 Without a search address the chat is not offered the `web_search` tool. Run SearXNG on this Mac, bound to loopback:

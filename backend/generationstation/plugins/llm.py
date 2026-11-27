@@ -217,7 +217,7 @@ class LLMPlugin(RuntimePlugin):
             env.setdefault("HF_HUB_OFFLINE", "1")
             env.setdefault("PYTHONUNBUFFERED", "1")
             data = setup.data_dir or str(Path(launch_dir) / "omlx-data")  # never ~/.omlx: that is the person's own
-            argv = [setup.executable, "serve", "--model-dir", setup.model_dir, "--host", "127.0.0.1",
+            argv = [setup.executable, "serve", "--model-dir", setup.model_dir, "--host", runtime.host,
                     "--port", str(runtime.port), "--base-path", data]
             return LaunchSpec(argv=argv, env=env, cwd=setup.working_dir, files={})
         if setup.engine == "strata_mac":
@@ -225,14 +225,14 @@ class LLMPlugin(RuntimePlugin):
             config.update({"port": runtime.port, "log": str(Path(launch_dir) / "engine.log"), "open_browser": False})
             path = Path(launch_dir) / "strata-config.json"
             argv = [setup.python, str(Path(setup.server_dir) / "serve" / "server.py"), "--engine", "strata",
-                    "--config", str(path), "--port", str(runtime.port), "--host", "127.0.0.1",
+                    "--config", str(path), "--port", str(runtime.port), "--host", runtime.host,
                     "--parallel", "1", "--no-api-key"]
             return LaunchSpec(argv=argv, env=env, cwd=setup.server_dir,
                               files={"strata-config.json": json.dumps(config, indent=2)})
         if setup.engine == "mlx":
             env.setdefault("HF_HUB_OFFLINE", "1")  # the model is a folder on this disk; never fetch anything
             env.setdefault("PYTHONUNBUFFERED", "1")
-            argv = [setup.python, "-m", "mlx_lm", "server", "--model", setup.model_path, "--host", "127.0.0.1",
+            argv = [setup.python, "-m", "mlx_lm", "server", "--model", setup.model_path, "--host", runtime.host,
                     "--port", str(runtime.port), "--temp", str(setup.sampling.get("temperature", 0.2))]
             if setup.sampling.get("top_p") is not None:
                 argv += ["--top-p", str(setup.sampling["top_p"])]
@@ -242,7 +242,7 @@ class LLMPlugin(RuntimePlugin):
         server = [str(WORKERS_DIR / "strata_inkling_thinking.py"), setup.server_dir] if setup.inkling_thinking \
             else [str(Path(setup.server_dir) / "serve" / "server.py")]
         argv = [setup.python, *server, "--engine", "strata",
-                "--config", str(path), "--port", str(runtime.port), "--host", "127.0.0.1",
+                "--config", str(path), "--port", str(runtime.port), "--host", runtime.host,
                 "--gpu", card_key(gpus), "--parallel", "1", "--no-api-key", "--tokenizer", setup.tokenizer]
         return LaunchSpec(argv=argv, env=env, cwd=setup.server_dir,
                           files={"strata-config.json": json.dumps(config, indent=2)})
@@ -258,7 +258,7 @@ class LLMPlugin(RuntimePlugin):
                 entry["vision"] = BASALT_VISION.get(value, "off")
             elif key in BASALT_KEYS:
                 entry[BASALT_KEYS[key]] = value
-        return {"version": 2, "server": {"host": "127.0.0.1", "port": runtime.port}, "models": [entry]}
+        return {"version": 2, "server": {"host": runtime.host, "port": runtime.port}, "models": [entry]}
 
     @staticmethod
     def strata_config(runtime, setup: CardSetup, values: dict, gpus, launch_dir: Path) -> dict:

@@ -6,7 +6,7 @@ imports Generation Station. A model worker supplies two functions:
     load(config) -> model            called once at start, in a background thread
     generate(model, inputs, job)     called for each job; writes files with job.output(...)
 
-Protocol (127.0.0.1 only):
+Protocol (127.0.0.1 unless the config's `host` says 0.0.0.0):
 
     GET  /health          {"status": "loading" | "loaded" | "failed", "error": str | null}
     POST /generate        {"job_id": str, "inputs": {...}}  -> 202 {"job_id", "status": "queued"}
@@ -135,9 +135,12 @@ class Job:
                 "details": self.details}
 
 
-def serve(load, generate, argv=None, cleanup=None):
+def serve(load, generate, argv=None, cleanup=None, api=None):
     """Run the worker. `cleanup(model)`, if given, runs after every job, finished, failed or cancelled,
-    once the job's own references are gone (for example to hand cached GPU memory back)."""
+    once the job's own references are gone (for example to hand cached GPU memory back).
+    `api(model, method, path, body)`, if given, answers requests of the model's own public API on the same port (for
+    example POST /v1/systemone): it returns (status, payload) for a path it handles and None for any other. `model` is None
+    until the model has loaded. Bodies up to 32 MB; the job protocol's own paths are never offered to it."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     args = parser.parse_args(argv)
@@ -210,7 +213,34 @@ def serve(load, generate, argv=None, cleanup=None):
             self.end_headers()
             self.wfile.write(body)
 
+        def public(self, method):
+            """The model's own API, if there is one and the path is its: True when the request was answered."""
+            if api is None or self.path in ("/health", "/generate") or self.path.startswith("/jobs/"):
+                return False
+            body = None
+            if method == "POST":
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if length > 32_000_000:
+                        raise ValueError("request too large")
+                    body = self.rfile.read(length)
+                except ValueError as exc:
+                    self.send_json(400, {"error": {"message": str(exc)}})
+                    return True
+            try:
+                answer = api(state["model"], method, self.path, body)
+            except Exception as exc:  # noqa: BLE001 - a bad request must not take the server down
+                log("public API failed:\n" + traceback.format_exc())
+                self.send_json(500, {"error": {"message": f"{type(exc).__name__}: {exc}"[:500]}})
+                return True
+            if answer is None:
+                return False
+            self.send_json(*answer)
+            return True
+
         def do_GET(self):
+            if self.public("GET"):
+                return
             if self.path == "/health":
                 self.send_json(200, {"status": state["status"], "error": state["error"]})
                 return
@@ -222,6 +252,8 @@ def serve(load, generate, argv=None, cleanup=None):
             self.send_json(200, job.as_dict())
 
         def do_POST(self):
+            if self.public("POST"):
+                return
             provide = re.fullmatch(r"/jobs/([A-Za-z0-9-]{8,64})/provide", self.path)
             if provide:
                 job = jobs.get(provide.group(1))
@@ -291,8 +323,9 @@ def serve(load, generate, argv=None, cleanup=None):
 
     threading.Thread(target=load_model, name="load", daemon=True).start()
     threading.Thread(target=run_jobs, name="jobs", daemon=True).start()
-    log(f"listening on 127.0.0.1:{port}")
+    bind = config.get("host", "127.0.0.1")
+    log(f"listening on {bind}:{port}")
     try:
-        ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+        ThreadingHTTPServer((bind, port), Handler).serve_forever()
     except KeyboardInterrupt:
         sys.exit(0)

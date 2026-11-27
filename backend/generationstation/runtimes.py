@@ -193,7 +193,7 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
                       "timings": [timing.model_dump() for timing in plugin.timings]}
     return {"id": model_id, "kind": runtime.kind, "plugin": plugin.title, "name": runtime.name,
             "description": runtime.description or plugin.description or None,
-            "workload": runtime.workload, "port": runtime.port, "default_preset": runtime.default_preset,
+            "workload": runtime.workload, "port": runtime.port, "bind": runtime.host, "default_preset": runtime.default_preset,
             "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation, "chat": plugin.chats,
             "assistant": bool(runtime.assistant and plugin.chats),
             "license": runtime.license.model_dump() if runtime.license else None,

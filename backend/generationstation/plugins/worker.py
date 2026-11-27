@@ -56,7 +56,7 @@ class WorkerPlugin(RuntimePlugin):
         return script if script.is_absolute() else WORKERS_DIR / script
 
     def launch(self, runtime, preset, values, gpus, base_env, launch_dir: Path):
-        config = {"port": runtime.port, "output_dir": str(self.output_dir(runtime)), "options": preset.options,
+        config = {"port": runtime.port, "host": runtime.host, "output_dir": str(self.output_dir(runtime)), "options": preset.options,
                   "settings": values, "gpus": gpus, "launch_dir": str(launch_dir)}
         env = dict(base_env)
         env.update(runtime.env)

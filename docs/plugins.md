@@ -100,3 +100,8 @@ The core API: `POST /api/models/{id}/jobs` with `{"inputs": {...}}` (the model m
 The generation page lists every result of the model in a sidebar with its thumbnail; jobs wait in the worker's queue, and the sidebar shows which one is being made (with its step) and each queued one's place in line, each with a cancel button. Choosing a result opens a modal that shows the file, everything that was typed, what the model actually used, the time it took and the model settings, with "Use these settings" (refills the form), download and delete.
 
 `tests/stub_worker.py` is a stand-in worker (writes a one-second tone) used to test the whole path without a model.
+
+
+## A worker's own API
+
+`gs_worker.serve(load, generate, api=fn)` lets a worker answer a public API on its port besides the job protocol (the decision worker serves `POST /v1/systemone` this way). `fn(model, method, path, body)` returns `(status, payload)` for a path it handles and `None` for any other; `model` is `None` until the model has loaded. A runtime's `"host"` (`127.0.0.1`, the default, or `0.0.0.0`) is passed to the worker as `config["host"]` and used for the listening address.

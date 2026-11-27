@@ -168,6 +168,9 @@ class BaseRuntime(BaseModel):
     description: str | None = Field(default=None, max_length=500, description="Overrides the plugin's description.")
     workload: str = Field(min_length=1, max_length=40)
     port: int = Field(ge=1024, le=65535)
+    host: Literal["127.0.0.1", "0.0.0.0"] = Field(
+        default="127.0.0.1", description="Where the model's own server listens: this computer only, or every network interface "
+        "(for tools on other machines; the model's server has no login of its own, so only on a network you trust).")
     ready_timeout_seconds: float = Field(default=1500, gt=0, le=7200)
     stop_timeout_seconds: float = Field(default=30, gt=0, le=600)
     default_preset: str

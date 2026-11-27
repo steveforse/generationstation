@@ -406,6 +406,17 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         return lifecycle.create_runtime_load(model_id, payload.preset, payload.settings, payload.gpus,
                                              idempotency_key, snapshot())
 
+    @api.get("/runtimes/{model_id}/connection")
+    def runtime_connection(model_id: str):
+        """What a tool on the host needs to talk to a running model directly: where it listens, and for a chat model the
+        name it answers to. The model's own server is used as it is; this API does not sit in between."""
+        runtime = catalog.runtimes.get(model_id)
+        if runtime is None:
+            raise HTTPException(404, "Unknown model")
+        plugin = catalog.plugin(model_id)
+        return {"bind": runtime.host, "port": runtime.port,
+                "model": chat._served_model(runtime) if plugin.chats else None}
+
     @api.post("/runtimes/{model_id}/estimate")
     def estimate_runtime(model_id: str, payload: RuntimeStartRequest):
         return lifecycle.estimate_runtime(model_id, payload.preset, payload.settings, payload.gpus, snapshot())

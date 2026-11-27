@@ -17,6 +17,7 @@ Writes decision.json (the answer in TypeSafe's System One shape) and result.md (
 import json
 import sys
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -149,5 +150,48 @@ def generate(model, inputs, job):
     job.report("Done")
 
 
+MAX_QUESTIONS = 64
+
+
+def systemone(model, method, path, body):
+    """TypeSafe's System One API on the worker's own port: POST /v1/systemone {state, questions, images?} ->
+    {id, model, answers, usage}, and GET /healthz. Questions are {type: choice|noul|score, instructions?, criteria?}."""
+    if path == "/healthz" and method == "GET":
+        return 200, {"ok": model is not None, "model": model["name"] if model else None}
+    if path != "/v1/systemone":
+        return None
+    if method != "POST":
+        return 405, {"error": {"message": "use POST"}}
+    if model is None:
+        return 503, {"error": {"message": "the model is still loading"}}
+
+    def refuse(message):
+        return 400, {"error": {"message": message}}
+    try:
+        request = json.loads(body or b"")
+    except ValueError:
+        return refuse("the body must be JSON")
+    if not isinstance(request, dict) or "state" not in request:
+        return refuse("state is required")
+    questions = request.get("questions")
+    if not isinstance(questions, dict) or not 1 <= len(questions) <= MAX_QUESTIONS:
+        return refuse(f"questions must be an object of 1 to {MAX_QUESTIONS} questions")
+    for key, question in questions.items():
+        if not isinstance(question, dict) or question.get("type", "choice") not in ("choice", "noul", "score"):
+            return refuse(f"questions.{key}.type must be choice, noul or score")
+        criteria = question.get("criteria")
+        if question.get("type", "choice") == "choice" and (not isinstance(criteria, dict) or not 1 <= len(criteria) <= MAX_OPTIONS):
+            return refuse(f"questions.{key}.criteria: a choice needs 1 to {MAX_OPTIONS} options as {{name: description}}")
+    state = request["state"] if isinstance(request["state"], str) else json.dumps(request["state"])
+    images = request.get("images") or []
+    if not isinstance(images, list) or not all(isinstance(item, str) for item in images):
+        return refuse("images must be a list of data URLs or base64 strings")
+    try:
+        answers, tokens, _ms = model["decide"](state, questions, images)
+    except ValueError as exc:
+        return refuse(str(exc))
+    return 200, {"id": uuid.uuid4().hex, "model": model["name"], "answers": answers, "usage": {"input_tokens": tokens, "output_tokens": 0}}
+
+
 if __name__ == "__main__":
-    serve(load, generate)
+    serve(load, generate, api=systemone)

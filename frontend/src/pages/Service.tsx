@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Activity, ArrowDown, ArrowUp, ArrowUpRight, ChevronDown, MemoryStick } from 'lucide-react'
+import { ConnectPanel } from '../components/Connect'
 import { StatePill } from '../components/StatePill'
 import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
 import { chosenChart, QualityChart, qualityCharts, scoresOn } from '../components/QualityChart'
@@ -184,6 +185,7 @@ function Workbench({ store, host, modelId, group }: { store: HostStore; host?: S
     {runtime?.generation && <div className="service-layout"><div className="service-main"><article className="profile-card service-panel">
       <div className="service-status" aria-live="polite"><StatePill state={modelState}>{stateText[modelState] ?? 'Unknown'}</StatePill><span>{status}</span><a className="text-button" href={modelsHref}>{ready ? 'Model settings' : 'Go to Models'} <ArrowUpRight size={16} /></a></div>
       {group?.picker}
+      {group && ready && <ConnectPanel kind="decide" runtime={runtime} host={host} session={session} />}
       {ready && <GenerateForm key={reuse.n} runtime={runtime} generation={runtime.generation} initial={reuse.start} error={state.jobErrors[runtime.id]}
         upload={(file) => session.uploadFile(file)}
         ahead={jobs.filter((job) => job.status === 'queued' || job.status === 'running').length}

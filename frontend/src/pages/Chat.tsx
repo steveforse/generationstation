@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowUp, ArrowUpRight, Bot, Brain, Check, Loader2, Paperclip
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
 import { DraftView, KIND_WORD, kindOf, mainOutput, MessageView, useChatTurn, usePinnedScroll } from '../components/ChatParts'
 import { JobDetail, JobModal, jobTitle, ResultThumb, when } from '../components/Runtime'
+import { ConnectPanel } from '../components/Connect'
 import { StatePill } from '../components/StatePill'
 import { handOff } from '../voiceSample'
 import type { SavedHost } from '../hosts'
@@ -170,6 +171,7 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
               </select></label>
             : <span className="chat-model"><span>{chatRuntime.name}</span><StatePill state="ready">{stateText.ready ?? 'Running'}</StatePill></span>)}
         </header>
+        {chatRuntime && session && host && <ConnectPanel kind="chat" runtime={chatRuntime} host={host} session={session} />}
         {state.runtimes && !state.runtimes.some((runtime) => runtime.chat) && <p className="chat-notice">{hostName(host, state)} has no text model to chat with.</p>}
         {state.runtimes?.some((runtime) => runtime.chat) && !ready && state.models && <p className="chat-notice">No text model is running. <a href={href({ page: 'models', hostId: host.id })}>Start one on the Models page</a>, then come back.</p>}
         <div className="chat-thread" ref={thread} aria-live="polite" aria-busy={busy}><div className="chat-thread-body" ref={threadBody}>

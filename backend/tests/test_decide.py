@@ -52,3 +52,25 @@ def test_result_page_marks_close_calls():
     assert "Close call" in close and "52.0%" in close
     sure = render.render(question, {"type": "choice", "choice": "a", "confidence": 0.9, "probabilities": {"a": 0.95, "b": 0.05}})
     assert "Close call" not in sure
+
+
+def test_system_one_route_answers_and_refuses_in_the_hosted_apis_shapes():
+    decide = worker("decide_worker")
+    seen = {}
+
+    def fake(state, questions, images):
+        seen.update(state=state, questions=questions, images=images)
+        return {"q": {"type": "noul", "noul": 0.9}}, 12, 3.0
+    model = {"name": "Test model", "decide": fake}
+    post = lambda body, m=model: decide.systemone(m, "POST", "/v1/systemone", json_bytes(body))
+    json_bytes = lambda value: __import__("json").dumps(value).encode()
+    status, payload = post({"state": "hello", "questions": {"q": {"type": "noul", "instructions": "Hi?"}}})
+    assert status == 200 and payload["answers"]["q"]["noul"] == 0.9 and payload["usage"] == {"input_tokens": 12, "output_tokens": 0}
+    assert payload["model"] == "Test model" and seen["images"] == []
+    assert decide.systemone(model, "GET", "/healthz", None) == (200, {"ok": True, "model": "Test model"})
+    assert decide.systemone(model, "GET", "/other", None) is None  # not this API's path: the worker's own protocol answers
+    assert post({"questions": {}})[0] == 400  # no state
+    assert post({"state": "x", "questions": {"q": {"type": "bogus"}}})[0] == 400  # Karpo-style silent fall-through is refused here
+    options = {f"o{i}": "" for i in range(256)}
+    assert post({"state": "x", "questions": {"q": {"type": "choice", "criteria": options}}})[0] == 400
+    assert decide.systemone(None, "POST", "/v1/systemone", b"{}")[0] == 503  # still loading
