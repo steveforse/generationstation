@@ -38,7 +38,7 @@ function HostOverview({ store, host }: { store: HostStore; host: SavedHost }) {
     </section>}
     {services.length > 0 && <div className="overview-services" aria-label={`${name} services`}>
       {/* The same groups, in the same order, as the sidebar. */}
-      {groupByWorkload(services, ({ runtime }) => runtime.workload).map((group) => <section className="service-group" key={group.key} aria-labelledby={`overview-${host.id}-${group.key}`}>
+      {groupByWorkload(services, ({ runtime }) => runtime.workload, ({ runtime }) => runtime.name).map((group) => <section className="service-group" key={group.key} aria-labelledby={`overview-${host.id}-${group.key}`}>
         <h3 className="service-group-label" id={`overview-${host.id}-${group.key}`}>{group.label}</h3>
         <div className="service-group-tiles">{group.items.map(({ runtime, model }) => <a key={runtime.id} className="service-tile" href={href(runtime.generation ? { page: 'service', hostId: host.id, modelId: runtime.id } : runtime.chat ? { page: 'chat', hostId: host.id } : { page: 'models', hostId: host.id })}>
           <span className="service-tile-icon" style={{ color: modelColor(state.runtimes, runtime.id), background: `${modelColor(state.runtimes, runtime.id)}1f` }}><WorkloadIcon workload={runtime.workload} /></span>

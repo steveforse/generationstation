@@ -134,7 +134,7 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const runtimes = state.runtimes ?? []
   const running = runtimes.filter((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready').length
   const name = hostName(host, state)
-  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation), (runtime) => runtime.workload)
+  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation), (runtime) => runtime.workload, (runtime) => runtime.name)
   // Chat sits first under Text: it talks to the text model, which can use every other running model.
   const chatRuntimes = runtimes.filter((runtime) => runtime.chat)
   const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? chatRuntimes[0]

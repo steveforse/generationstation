@@ -127,8 +127,8 @@ function toneWav() {
 function ratedSpeechFixtures() {
   const quality = (score: number, estimated = false) => ({ metric: 'Speech arena Elo', score, estimated, source: 'https://example.com/arena', as_of: '2026-11-26', note: estimated ? 'Estimated from a sibling.' : 'From votes.' })
   return [
-    { ...speechRuntimeFixture(), id: 'voice-a', name: 'Voice A', quality: quality(1278), rankings: [{ metric: 'Naturalness MOS', score: 4.4, estimated: false, source: 'https://example.com/mos', as_of: '2026-11-26', note: 'Listener ratings.' }] },
     { ...speechRuntimeFixture(), id: 'voice-b', name: 'Voice B', quality: quality(1104, true) },
+    { ...speechRuntimeFixture(), id: 'voice-a', name: 'Voice A', quality: quality(1278), rankings: [{ metric: 'Naturalness MOS', score: 4.4, estimated: false, source: 'https://example.com/mos', as_of: '2026-11-26', note: 'Listener ratings.' }] },
     { ...speechRuntimeFixture(), id: 'voice-c', name: 'Voice C', rankings: [{ metric: 'Naturalness MOS', score: 4.1, estimated: false, source: 'https://example.com/mos', as_of: '2026-11-26' }] },
   ]
 }
@@ -1552,7 +1552,9 @@ test('models within a section sort by name or by the chosen ranking, either way'
   await go(page, '#/hosts/local/models')
   const speech = page.getByRole('region', { name: 'Speech' })
   const names = () => speech.locator('section.model-server').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
+  // Alphabetical by default (the fixture lists Voice B first), and in the sidenav too.
   expect(await names()).toEqual(['Voice A', 'Voice B', 'Voice C'])
+  await expect(page.getByRole('navigation').getByRole('group', { name: 'Speech' }).getByRole('link')).toHaveText([/Voice A/, /Voice B/, /Voice C/])
   await speech.getByLabel('Sort').selectOption('name')
   await speech.getByRole('button', { name: /Z to A|A to Z/ }).click()
   expect(await names()).toEqual(['Voice C', 'Voice B', 'Voice A'])

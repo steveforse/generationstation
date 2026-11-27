@@ -22,20 +22,20 @@ const usable = (filter: string, runtime: Runtime) => {
   return !filter || (filter === 'work' ? uses.has('work') || uses.has('conditions') : uses.has('personal'))
 }
 
-type SortKey = 'default' | 'name' | 'quality'
+type SortKey = 'name' | 'quality'
 
 /** One section of the Models page: its heading, a sort control, its quality ranking and its cards. Sorting by quality uses the
  * ranking chosen in the chart; models without a score on it come last in either direction. */
 function ModelGroup({ id, label, items, references, children }: { id: string; label: string; items: Runtime[]; references: ReferenceModel[]; children: (runtime: Runtime) => React.ReactNode }) {
   const [metric, setMetric] = useState<string | null>(null)
-  const [sort, setSort] = useState<SortKey>('default')
+  const [sort, setSort] = useState<SortKey>('name')
   const [descending, setDescending] = useState(false)
   const charts = qualityCharts(items, references)
   const chart = charts.length > 0 ? chosenChart(charts, metric) : null
   const scores = chart ? scoresOn(chart[1]) : new Map<string, number>()
-  const key: SortKey = sort === 'quality' && !chart ? 'default' : sort
+  const key: SortKey = sort === 'quality' && !chart ? 'name' : sort
   const direction = descending ? -1 : 1
-  const sorted = key === 'default' ? items : [...items].sort((a, b) => {
+  const sorted = [...items].sort((a, b) => {
     if (key === 'name') return direction * a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
     const x = scores.get(a.id), y = scores.get(b.id)
     if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? 1 : -1
@@ -54,7 +54,7 @@ function ModelGroup({ id, label, items, references, children }: { id: string; la
         <option value="name">Name</option>
         {chart && <option value="quality">Quality ({chart[0]})</option>}
       </select></label>
-      {key !== 'default' && <button type="button" className="button button-small button-secondary" aria-label={`Order: ${descending ? descendingWord : ascendingWord}. Reverse it`} title="Reverse the order" onClick={() => setDescending(!descending)}>
+      {<button type="button" className="button button-small button-secondary" aria-label={`Order: ${descending ? descendingWord : ascendingWord}. Reverse it`} title="Reverse the order" onClick={() => setDescending(!descending)}>
         {descending ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" />}{descending ? descendingWord : ascendingWord}
       </button>}
     </div>}

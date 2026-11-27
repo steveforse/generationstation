@@ -17,9 +17,11 @@ export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?:
 export const WORKLOAD_GROUPS: ReadonlyArray<readonly [string, string]> = [['text', 'Text'], ['speech', 'Speech'], ['image', 'Pictures'], ['video', 'Video'], ['music', 'Music']]
 
 /** Items grouped by workload in WORKLOAD_GROUPS order, keeping their order within a group; empty groups are left out. */
-export function groupByWorkload<T>(items: T[], workloadOf: (item: T) => string) {
+export function groupByWorkload<T>(items: T[], workloadOf: (item: T) => string, nameOf?: (item: T) => string) {
   const known = new Set(WORKLOAD_GROUPS.map(([key]) => key))
-  const groups = WORKLOAD_GROUPS.map(([key, label]) => ({ key, label, items: items.filter((item) => workloadOf(item) === key) }))
-  groups.push({ key: 'other', label: 'Other', items: items.filter((item) => !known.has(workloadOf(item))) })
+  // With a name, each group is alphabetical (case and accents ignored); without one, the catalog's order.
+  const ordered = (list: T[]) => nameOf ? [...list].sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: 'base' })) : list
+  const groups = WORKLOAD_GROUPS.map(([key, label]) => ({ key, label, items: ordered(items.filter((item) => workloadOf(item) === key)) }))
+  groups.push({ key: 'other', label: 'Other', items: ordered(items.filter((item) => !known.has(workloadOf(item)))) })
   return groups.filter((group) => group.items.length > 0)
 }

@@ -1152,3 +1152,4 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .quality-ref { margin-left: 2px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; color: var(--text-2) }
 .quality-bar-reference { background: transparent !important; border: 2px solid var(--text-3); box-sizing: border-box }
 .models-sort { justify-content: flex-end }
+.models-sort { margin-bottom: var(--sp-4) }
