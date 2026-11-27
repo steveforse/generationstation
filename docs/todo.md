@@ -33,6 +33,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 - Re-run the full Playwright suite when the machine is idle: while the video agents generate, a few tests time out at random (they pass alone).
 - Restart note: the API runs from the latest code since the last restart; restart it again after the chat and LTX changes land. The MiniMax Music 3 worker was stopped to free memory; start it again from its card if wanted.
 
+- Decide: Karpo 31B removed (weights, environment and catalog entry; kept as a reference bar); every decision model now shares one Decide page with a dropdown over those running, like Chat.
+
 ## Done this session (all on PR #2 unless noted)
 
 - Models page: default sort is alphabetical, sidenav and Overview lists are alphabetical, margin under the sort control.

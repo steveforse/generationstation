@@ -1153,3 +1153,6 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .quality-bar-reference { background: transparent !important; border: 2px solid var(--text-3); box-sizing: border-box }
 .models-sort { justify-content: flex-end }
 .models-sort { margin-bottom: var(--sp-4) }
+
+.decide-picker { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-meta); color: var(--text-3); margin-bottom: var(--sp-3) }
+.decide-picker select { font: inherit; color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px; max-width: 16rem }

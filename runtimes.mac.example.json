@@ -1380,65 +1380,6 @@
         }
       ]
     },
-    "decide_karpo": {
-      "kind": "decide",
-      "name": "Karpo 31B",
-      "workload": "decision",
-      "description": "Answers a question about a situation with a probability for each answer. Text only; the most accurate of the three here.",
-      "python": "/Users/YOU/ai/envs/decide-karpo/bin/python",
-      "output_dir": "/Users/YOU/ai/outputs/decide",
-      "port": 8400,
-      "ready_timeout_seconds": 180,
-      "stop_timeout_seconds": 30,
-      "default_preset": "mxfp4",
-      "presets": {
-        "mxfp4": {
-          "name": "Karpo 31B (MLX, mxfp4)",
-          "description": "About 0.25 s for a short situation, 3 s for 2,000 tokens. Needs about 20 GiB while it runs.",
-          "gpus": [
-            0
-          ],
-          "allowed_gpus": [
-            0
-          ],
-          "options": {
-            "model_dir": "/Users/YOU/ai/models/decision/karpo-31b-mxfp4",
-            "engine": "karpo",
-            "model_name": "Karpo 31B"
-          },
-          "settings": {},
-          "estimate": {
-            "ram_gib": 22,
-            "gpu_min_free_gib": {}
-          }
-        }
-      },
-      "license": {
-        "use": "work",
-        "weights": "Apache-2.0",
-        "code": "Apache-2.0 (MLX port by audreyt, derived from Gemma 4, also Apache-2.0)",
-        "note": "The weights and inference code are Apache-2.0; attribution is requested but not required. This is a community MLX port of the official model, text only (the picture tower is removed).",
-        "url": "https://huggingface.co/MachinePulseAI/karpo-decision-31B"
-      },
-      "quality": {
-        "metric": "JevBench Capability Score (benchmarkheaven.com)",
-        "score": 87.2,
-        "estimated": true,
-        "source": "https://benchmarkheaven.com/jev-models",
-        "as_of": "2026-11-26",
-        "note": "Karpo 31B on JevBench, a measurement of the full-precision model; this is the 4-bit mxfp4 port, which is not rated itself."
-      },
-      "rankings": [
-        {
-          "metric": "Decision Index 0.4.1 Full",
-          "score": 73.86,
-          "estimated": true,
-          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
-          "as_of": "2026-11-26",
-          "note": "Karpo 31B on the Decision Index 0.4.1 Full; this is the 4-bit port."
-        }
-      ]
-    },
     "decide_pplx": {
       "kind": "decide",
       "name": "pplx-decider 27B",
@@ -2156,6 +2097,28 @@
           "source": "https://benchmarkheaven.com/jev-models",
           "as_of": "2026-11-26",
           "note": "Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Karpo 31B",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 87.2,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Apache-2.0, text only. Tried here (community 4-bit MLX port, 18.5 GB, 0.25 s) and removed: Torchcast 31B scores higher, and the 4B and pplx-decider cover the lighter and picture cases."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 73.86,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Apache-2.0, text only. Tried here (community 4-bit MLX port, 18.5 GB, 0.25 s) and removed: Torchcast 31B scores higher, and the 4B and pplx-decider cover the lighter and picture cases."
         }
       ]
     }

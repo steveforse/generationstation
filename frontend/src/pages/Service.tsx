@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Activity, ArrowDown, ArrowUp, ArrowUpRight, ChevronDown, MemoryStick } from 'lucide-react'
 import { StatePill } from '../components/StatePill'
 import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
@@ -116,7 +116,7 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
       return <section className="model-server" key={runtime.id} aria-label={runtime.name} onMouseEnter={() => setFocusId(runtime.id)} onFocus={() => setFocusId(runtime.id)}>
         <RuntimeCard key={`${host.id}:${runtime.id}`} runtime={runtime} model={model} host={view.host} fresh={view.fresh} pending={state.pendingModelId === runtime.id}
           refusal={state.refusals[runtime.id]} message={state.runtimeMessages[runtime.id]} onRun={(r, action, launch) => session.runRuntime(r, action, launch)}
-          openHref={runtime.generation ? href({ page: 'service', hostId: host.id, modelId: runtime.id }) : undefined}
+          openHref={runtime.generation ? href(runtime.workload === 'decision' ? { page: 'decide', hostId: host.id } : { page: 'service', hostId: host.id, modelId: runtime.id }) : undefined}
           usage={modelUsage(view.host, runtime.id)} color={modelColor(state.runtimes, runtime.id)}
           estimate={(r, launch, signal) => session.estimateRuntime(r, launch, signal)}
           onEstimate={(estimate) => setEstimates((current) => current[runtime.id] === estimate ? current : { ...current, [runtime.id]: estimate })}
@@ -133,8 +133,32 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
   </>
 }
 
-/** Generation: the plugin's form and the results. Starting and stopping happen on the Models page. */
+/** One model's page, or (for a decision model) the shared Decide page, so old links to a model still work. */
 export function ServicePage({ store, host, modelId }: { store: HostStore; host?: SavedHost; modelId: string }) {
+  const state = useSession(host ? store.session(host.id) : undefined)
+  if (state.runtimes?.find((item) => item.id === modelId)?.workload === 'decision') return <DecidePage store={store} host={host} modelId={modelId} />
+  return <Workbench store={store} host={host} modelId={modelId} />
+}
+
+/** One page for every decision model, like Chat is for text models: the model answering is picked from those running. */
+export function DecidePage({ store, host, modelId }: { store: HostStore; host?: SavedHost; modelId?: string }) {
+  const state = useSession(host ? store.session(host.id) : undefined)
+  const [pickedId, setPickedId] = useState<string | null>(modelId ?? null)
+  const decide = (state.runtimes ?? []).filter((runtime) => runtime.workload === 'decision' && runtime.generation)
+  const running = decide.filter((runtime) => state.models?.find((model) => model.id === runtime.id)?.state === 'ready')
+  const chosen = running.find((runtime) => runtime.id === pickedId) ?? running[0] ?? decide.find((runtime) => runtime.id === pickedId) ?? decide[0]
+  const picker = running.length > 1
+    ? <label className="decide-picker"><span>Model answering</span>
+      <select aria-label="Model answering" value={chosen?.id} onChange={(event) => setPickedId(event.target.value)}>{running.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.name}</option>)}</select></label>
+    : null
+  return <Workbench store={store} host={host} modelId={chosen?.id ?? ''}
+    group={{ title: 'Decide', description: 'Ask a question about a situation and get a probability for each answer, from whichever decision model is running.', ids: decide.map((runtime) => runtime.id), picker, none: decide.length > 0 && running.length === 0 }} />
+}
+
+type Group = { title: string; description: string; ids: string[]; picker: ReactNode; none: boolean }
+
+/** Generation: the plugin's form and the results. Starting and stopping happen on the Models page. */
+function Workbench({ store, host, modelId, group }: { store: HostStore; host?: SavedHost; modelId: string; group?: Group }) {
   const session = host ? store.session(host.id) : undefined
   const state = useSession(session)
   // The result open in the modal, picked in the sidebar.
@@ -146,19 +170,20 @@ export function ServicePage({ store, host, modelId }: { store: HostStore; host?:
   const runtime = state.runtimes?.find((item) => item.id === modelId)
   const model = state.models?.find((item) => item.id === modelId)
   const modelsHref = href({ page: 'models', hostId: host.id })
-  const jobs = state.jobs.filter((job) => job.model_id === modelId)
+  const jobs = state.jobs.filter((job) => group ? group.ids.includes(job.model_id) : job.model_id === modelId)
   const selected = jobs.find((job) => job.id === selectedId)
   const modelState = model?.state ?? 'unknown'
   const ready = modelState === 'ready'
-  const status = ready ? `Running on ${runtime ? gpuNames(runtime) : 'this host'}.`
+  const status = ready ? `${group && runtime ? `${runtime.name} is running` : 'Running'} on ${runtime ? gpuNames(runtime) : 'this host'}.`
     : ['loading', 'unloading'].includes(modelState) ? `${stateText[modelState]}. This can take several minutes.`
-      : `${runtime?.name ?? modelId} is not running. Start it on the Models page first.`
+      : group ? 'No decision model is running. Start one on the Models page first.' : `${runtime?.name ?? modelId} is not running. Start it on the Models page first.`
   return <>
-    <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state)}</div><h1>{runtime?.name ?? modelId}</h1><p>{runtime ? runtime.description || `${runtime.workload} · runs on ${hostName(host, state)}` : 'Waiting for this host’s model list.'}</p></div></section>
+    <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state)}</div><h1>{group?.title ?? runtime?.name ?? modelId}</h1><p>{group ? group.description : runtime ? runtime.description || `${runtime.workload} · runs on ${hostName(host, state)}` : 'Waiting for this host’s model list.'}</p></div></section>
     {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={16} /></a></div>}
     {runtime && !runtime.generation && <Missing title="Nothing to make here" text={`${runtime.name} is started and stopped on the Models page.`} />}
     {runtime?.generation && <div className="service-layout"><div className="service-main"><article className="profile-card service-panel">
       <div className="service-status" aria-live="polite"><StatePill state={modelState}>{stateText[modelState] ?? 'Unknown'}</StatePill><span>{status}</span><a className="text-button" href={modelsHref}>{ready ? 'Model settings' : 'Go to Models'} <ArrowUpRight size={16} /></a></div>
+      {group?.picker}
       {ready && <GenerateForm key={reuse.n} runtime={runtime} generation={runtime.generation} initial={reuse.start} error={state.jobErrors[runtime.id]}
         upload={(file) => session.uploadFile(file)}
         ahead={jobs.filter((job) => job.status === 'queued' || job.status === 'running').length}
@@ -168,7 +193,7 @@ export function ServicePage({ store, host, modelId }: { store: HostStore; host?:
     <ResultsRail jobs={jobs} generation={runtime.generation} selectedId={selected?.id} onSelect={(job) => setSelectedId(job.id)} fileUrl={(job, output) => session.fileUrl(job, output)}
       onCancel={(job) => session.cancelJob(job)} />
     <JobModal open={!!selected} onClose={() => setSelectedId(null)} title={selected ? jobTitle(selected) : ''}>
-      {selected && <JobDetail job={selected} runtime={runtime} generation={runtime.generation} fileUrl={(job, output) => session.fileUrl(job, output)}
+      {selected && <JobDetail job={selected} runtime={state.runtimes?.find((item) => item.id === selected.model_id) ?? runtime} generation={(state.runtimes?.find((item) => item.id === selected.model_id) ?? runtime).generation ?? runtime.generation} fileUrl={(job, output) => session.fileUrl(job, output)}
         inputUrl={(job, name) => session.inputUrl(job, name)}
         onReuse={async (job) => {
           // Pictures and other references go back into the form: fetched from the job and uploaded again.

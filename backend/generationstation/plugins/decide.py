@@ -55,7 +55,7 @@ class DecidePlugin(WorkerPlugin):
         "pictures": InputSpec(
             label="Pictures", kind="files", accept=("image",), max_count=4,
             help="Optional: a receipt, a screenshot, a photo. Only pplx-decider and H2O-Lightning read pictures; "
-                 "Karpo answers from the text alone and refuses a request with a picture."),
+                 "the Torchcast models answer from the text alone and refuse a request with a picture."),
         "question_type": InputSpec(
             label="Question", kind="choice", options=("choose", "yesno", "score"), default="choose",
             option_labels={"choose": "Choose between options", "yesno": "Yes or no", "score": "Place on a scale"},
@@ -74,9 +74,12 @@ class DecidePlugin(WorkerPlugin):
             placeholder="calm\nannoyed\nangry\nfurious",
             help=f"One level per line, lowest first, 2 to {MAX_LEVELS}."),
     }
-    # Measured on an M5 Max (2026-11-27): about 0.25 s for a short situation (200 tokens), 3 s for 2,000 tokens.
+    # Measured on an M5 Max (2026-11-27), one question, a situation of a few hundred words, model already running:
+    # Torchcast 4B and H2O-Lightning 4B (bf16) about 0.2 s, Torchcast 31B (mlx8) about 0.5 s, pplx-decider 27B (q8) about 0.5 s.
     timings: ClassVar[tuple[TimingSpec, ...]] = (
-        TimingSpec(when={}, preset="karpo", seconds=1, note="for a situation of a few hundred words"),
+        TimingSpec(when={}, preset="bf16", seconds=1, note="for a situation of a few hundred words"),
+        TimingSpec(when={}, preset="mlx8", seconds=1, note="for a situation of a few hundred words"),
+        TimingSpec(when={}, preset="q8", seconds=1, note="for a situation of a few hundred words"),
     )
 
     def check_inputs(self, mode, values, files):

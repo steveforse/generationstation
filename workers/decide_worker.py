@@ -1,9 +1,8 @@
 """Decision-model worker: one situation and one question in, a probability for each answer out.
 
-The model stays resident, so a request takes the model's forward pass only (0.25 s for a short situation on an M5 Max).
+The model stays resident, so a request takes the model's forward pass only (0.15 to 0.5 s for a short situation on an M5 Max).
 Config options (from runtimes.json, per preset):
-    engine     "karpo": the Karpo 31B MLX port (serve_karpo_31b_mlx.py lives in the model folder; text only).
-               "mlx_decision": pplx-decider, H2O-Lightning and the other models the mlx-decision package loads; they
+    engine     "mlx_decision": pplx-decider, H2O-Lightning and the other models the mlx-decision package loads; they
                also read pictures.
                "torchcast": the vendor's torchcast_decision package on the Mac GPU (torch MPS, bf16); it keeps the
                vendor's non-causal attention, which stock MLX and llama.cpp get wrong. Text only.
@@ -35,29 +34,12 @@ def load(config):
     """MLX keeps its streams per thread, and the worker loads the model in one thread and runs jobs in another, so the
     model is built, and every question answered, on one thread of its own."""
     options = config["options"]
-    engine = options.get("engine", "karpo")
+    engine = options["engine"]
     model_dir = Path(options["model_dir"])
-    if engine not in ("karpo", "mlx_decision", "torchcast", "torchcast_mlx31"):
+    if engine not in ("mlx_decision", "torchcast", "torchcast_mlx31"):
         raise ValueError(f"Unknown decision engine {engine!r}")
     thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="decide")
-    if engine == "karpo":
-        if not (model_dir / "serve_karpo_31b_mlx.py").is_file():
-            raise FileNotFoundError(f"No Karpo MLX port in {model_dir}")
-
-        def build():
-            sys.path.insert(0, str(model_dir))
-            from serve_karpo_31b_mlx import Karpo31BMLX
-
-            engine_object = Karpo31BMLX(model_dir)
-
-            def decide(state, questions, images):
-                if images:
-                    raise ValueError("This model reads text only. Start pplx-decider or H2O-Lightning to use a picture.")
-                answers, tokens, _encode_ms, forward_ms = engine_object.decide(state, questions)
-                return answers, tokens, forward_ms
-            return decide
-        name = options.get("model_name", "Karpo 31B")
-    elif engine == "torchcast_mlx31":
+    if engine == "torchcast_mlx31":
         weights_dir = Path(options["weights_dir"])
         if not (weights_dir / "config.json").is_file() or not (model_dir / "torchcast_decision").is_dir():
             raise FileNotFoundError(f"Torchcast 31B needs the vendor folder {model_dir} and the 8-bit MLX copy {weights_dir}")

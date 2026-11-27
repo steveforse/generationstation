@@ -186,7 +186,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture()] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/estimate', (route) => {
@@ -216,6 +216,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   const jobs: Array<Record<string, unknown>> = []
   if (options.decide) {
     models.push({ id: 'decide_karpo', name: 'Karpo 31B', workload: 'decision', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+    models.push({ id: 'decide_small', name: 'Small decider', workload: 'decision', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
     jobs.push({ id: 'job-00000088', model_id: 'decide_karpo', status: 'done', progress: 'Done', error_message: null,
       inputs: { state: 'I was charged twice.', question_type: 'choose', instructions: 'Which team should handle this?', options: 'billing\nshipping' },
       outputs: ['decision.json', 'result.md'].map((name) => ({ name, mime: name.endsWith('.md') ? 'text/markdown' : 'application/json', bytes: 100 })),
@@ -1619,10 +1620,17 @@ test('with two chat models running, a dropdown picks which one answers and the c
   expect(sent[0]).toEqual({ created: { model_id: 'inkling2' } })
 })
 
-test('a decision shows its answer and probabilities, and Decide has its own section', async ({ page }) => {
+test('every decision model is used from one Decide page, with a dropdown over those running', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { decide: true })
-  await go(page, '#/hosts/local/services/decide_karpo')
-  await expect(page.getByRole('group', { name: 'Decide' })).toBeVisible()
+  await go(page, '#/hosts/local/decide')
+  // One entry in the sidenav, not one per model.
+  await expect(page.getByRole('group', { name: 'Decide' }).getByRole('link')).toHaveCount(1)
+  await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()
+  const picker = page.getByRole('combobox', { name: 'Model answering' })
+  await expect(picker.locator('option')).toHaveText(['Karpo 31B', 'Small decider'])
+  // Results from every decision model are listed together, and an old model link opens the same page.
+  await go(page, '#/hosts/local/services/decide_small')
+  await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()
   await page.getByRole('button', { name: /Which team|charged twice|job-0000/i }).first().click()
   const decision = page.getByRole('region', { name: 'Decision' })
   await expect(decision.getByText('Answer: billing')).toBeVisible()

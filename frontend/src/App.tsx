@@ -9,7 +9,7 @@ import { OverviewPage } from './pages/Overview'
 import { ChatPage } from './pages/Chat'
 import { LogsPage } from './pages/Logs'
 import { HostSettingsPage } from './pages/HostSettings'
-import { ModelsPage, ServicePage } from './pages/Service'
+import { DecidePage, ModelsPage, ServicePage } from './pages/Service'
 import { href, type Route, useRoute } from './routes'
 import { HostStore, useHosts, useSession } from './store'
 
@@ -77,6 +77,7 @@ export default function App() {
         {route.page === 'overview' && <OverviewPage store={store} hosts={hosts} />}
         {route.page === 'connections' && <ConnectionsPage store={store} hosts={hosts} />}
         {route.page === 'service' && <ServicePage key={`${route.hostId}:${route.modelId}`} store={store} host={routeHost} modelId={route.modelId} />}
+        {route.page === 'decide' && <DecidePage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'models' && <ModelsPage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'settings' && <HostSettingsPage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'logs' && <LogsPage key={route.hostId} store={store} host={routeHost} name={route.name} />}
@@ -92,14 +93,14 @@ export default function App() {
 function AssistantSlot({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
   const page = route.page === 'service' ? `the ${state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId} page`
-    : route.page === 'models' ? 'the Models page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
+    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decide page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
       : route.page === 'settings' ? 'the Host settings page' : route.page === 'connections' ? 'the Connections page' : 'a page'
   return <AssistantBubble store={store} host={host} where={page} />
 }
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
-  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
+  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decide' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
     : state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId
   return <div className="breadcrumb"><span className="crumb-host">{host ? hostName(host, state) : 'Workspace'}</span><span className="crumb-slash" aria-hidden="true">/</span><strong>{title}</strong></div>
 }
@@ -160,6 +161,16 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
     </div>}
     {groups.filter((group) => group.key !== 'text' || !chatRuntime).map((group) => {
       const id = `nav-${host.id}-${group.key}`
+      // Every decision model is used from one page, like Chat: the nav shows one entry, on while any of them runs.
+      if (group.key === 'decision') {
+        const anyOn = group.items.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+        const loading = group.items.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
+        return <div className="nav-group" role="group" aria-labelledby={id} key={group.key}>
+          <div className="nav-group-label" id={id}><WorkloadIcon workload="decision" size={18} /><span>{group.label}</span></div>
+          <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><WorkloadIcon workload="decision" /></span>} label="Decide"
+            title={anyOn ? 'Decide: a model is running' : 'Decide'} badge={<NavState state={anyOn ? 'ready' : loading ? 'loading' : undefined} />} />
+        </div>
+      }
       return <div className="nav-group" role="group" aria-labelledby={id} key={group.key}>
         <div className="nav-group-label" id={id}><WorkloadIcon workload={group.key} size={18} /><span>{group.label}</span></div>
         {group.items.map((runtime) => {
