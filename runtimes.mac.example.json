@@ -940,7 +940,17 @@
         "source": "https://benchmarklist.com/benchmarks/arena_ai_text_to_video/",
         "as_of": "2026-11-10",
         "note": "ESTIMATE: Arena AI rates Wan 2.2 A14B (1131.78), not the 5B run here, so this is an upper bound. Read through the benchmarklist.com mirror of arena.ai (dated 2026-11-10)."
-      }
+      },
+      "rankings": [
+        {
+          "metric": "VBench total (Vchitect, text to video)",
+          "score": 82.61,
+          "estimated": true,
+          "source": "https://benchmarklist.com/benchmarks/vbench_video_generation/",
+          "as_of": "2026-11-27",
+          "note": "ESTIMATE: VBench rates Wan2.2-T2V-A14B (82.61 without prompt optimising, 84.23 with), not the 5B run here, so this is an upper bound. Self-reported on the VBench leaderboard (read through benchmarklist.com, 2026-10-29)."
+        }
+      ]
     },
     "qwen_image_2512": {
       "kind": "qwen_image",
@@ -1244,7 +1254,17 @@
         "source": "https://artificialanalysis.ai/video/leaderboard/text-to-video/open-weights",
         "as_of": "2026-11-26",
         "note": "Artificial Analysis rates the hosted LTX-2.5 Fast (938) and Pro (932); this is the 4-bit distilled build, which should be close to Fast but is not rated itself. Blind human votes run by Artificial Analysis."
-      }
+      },
+      "rankings": [
+        {
+          "metric": "VBench total (Vchitect, text to video)",
+          "score": 79.35,
+          "estimated": true,
+          "source": "https://benchmarklist.com/benchmarks/vbench_video_generation/",
+          "as_of": "2026-11-27",
+          "note": "ESTIMATE: VBench rates LTX-2 (Diffusers, no prompt optimising), not LTX-2.5 and not this 4-bit build. Self-reported on the VBench leaderboard (read through benchmarklist.com, 2026-10-29)."
+        }
+      ]
     },
     "fastmetal_video": {
       "kind": "fastmetal_video",
@@ -1348,7 +1368,17 @@
         "code": "longcat-video-mlx: MIT (declared in its pyproject.toml and README; the repository has no LICENSE file)",
         "note": "Meituan's LongCat-Video is MIT. The MLX port needs two fixes that the worker's driver applies without editing it: merging the fast LoRA into the quantised weights, and giving the first-frame latents timestep 0.",
         "url": "https://huggingface.co/mlx-community/LongCat-Video-q8"
-      }
+      },
+      "rankings": [
+        {
+          "metric": "VBench-2.0 total (Vchitect)",
+          "score": 62.11,
+          "estimated": false,
+          "source": "https://paperswithcode.co/benchmark/vbench-2-0",
+          "as_of": "2026-11-27",
+          "note": "LongCat-Video, second on the VBench-2.0 leaderboard (intrinsic faithfulness: human fidelity, creativity, controllability, physics, commonsense). Run by its authors at full precision; this is the quantised MLX port. No other model here is rated on VBench-2.0, so there is no chart."
+        }
+      ]
     },
     "decide_karpo": {
       "kind": "decide",
@@ -1573,6 +1603,57 @@
         "source": "https://benchmarkheaven.com/jev-models",
         "as_of": "2026-11-26",
         "note": "Torchcast 4B v1.3 on JevBench, run at bf16 as here."
+      },
+      "rankings": []
+    },
+    "decide_torchcast_31b": {
+      "kind": "decide",
+      "name": "Torchcast 31B",
+      "workload": "decision",
+      "description": "Answers a question about a situation with a probability for each answer. Text only; among the most accurate open models, and it needs most of the memory.",
+      "python": "/Users/YOU/ai/envs/decide-torchcast/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8404,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx8",
+      "presets": {
+        "mlx8": {
+          "name": "Torchcast 31B v1.0 (MLX, 8-bit)",
+          "description": "About 0.2 s for a short situation, 9 s for three 2,000-token questions. Needs about 40 GiB while it runs, so stop other large models first.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "torchcast_mlx31",
+            "model_dir": "/Users/YOU/ai/models/decision/torchcast-31b",
+            "weights_dir": "/Users/YOU/ai/models/decision/torchcast-31b-mlx-8bit",
+            "model_name": "Torchcast 31B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 40,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Apache-2.0 (torchcast_decision package)",
+        "note": "Based on Gemma 4 31B (Apache-2.0). The 12B and 27B Torchcast models are CC BY-NC, so personal use only. Runs here as an 8-bit MLX copy made by workers/torchcast31_convert.py, with the vendor's bidirectional attention; stock runtimes give wrong answers.",
+        "url": "https://huggingface.co/torchcast-ai/torchcast-decision-31b"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 89.5,
+        "estimated": true,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "Torchcast 31B on JevBench at full precision; this is the 8-bit copy, which stayed within 0.008 of the bf16 probabilities on our checks."
       },
       "rankings": []
     }
@@ -2075,20 +2156,6 @@
           "source": "https://benchmarkheaven.com/jev-models",
           "as_of": "2026-11-26",
           "note": "Not run here."
-        }
-      ]
-    },
-    {
-      "name": "Torchcast 31B",
-      "workload": "decision",
-      "scores": [
-        {
-          "metric": "JevBench Capability Score (benchmarkheaven.com)",
-          "score": 89.5,
-          "estimated": false,
-          "source": "https://benchmarkheaven.com/jev-models",
-          "as_of": "2026-11-26",
-          "note": "Apache-2.0. Runs on this Mac only as a custom 8-bit MLX build (about 37 GB at peak), not added here yet."
         }
       ]
     }

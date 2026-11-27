@@ -11,7 +11,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
 | Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
 | Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use while the app stays internal) | |
-| Decide: Karpo 31B and Torchcast 4B (text), pplx-decider 27B and H2O-Lightning 4B (read pictures), all Apache-2.0 and work use; one probability per answer in well under a second | |
+| Decide: Karpo 31B and Torchcast 4B and 31B (text), pplx-decider 27B and H2O-Lightning 4B (read pictures), all Apache-2.0 and work use; one probability per answer in well under a second | |
 | Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
 | Text models: Qwen3.8 27B, Qwen3.8 Flash-Next, Tencent Hy4-Flash, Inkling 2 Mini | The Basalt runtime and the Windows meeting engines (Nemotron, VibeVoice, DiariZen) |
 | Meeting notes: speaker detection, speech recognition, correction, notes, name reading from Zoom video, transcript editing | |
@@ -377,6 +377,12 @@ uv venv ~/ai/envs/decide-torchcast --python 3.12
 uv pip install --python ~/ai/envs/decide-torchcast/bin/python torch "transformers==5.8.1" accelerate safetensors pillow torchvision numpy
 ~/ai/envs/meeting-worker/bin/hf download torchcast-ai/torchcast-decision-4b --revision v1.3.1 --local-dir ~/ai/models/decision/torchcast-4b
 
+# Torchcast 31B (v1.0.0, 61 GB bf16) as a 33 GB 8-bit MLX copy. Needs mlx-lm 0.32.x, which the same environment has;
+# the conversion peaks near 40 GB, so run it alone. Delete the bf16 folder afterwards if you like.
+~/ai/envs/meeting-worker/bin/hf download torchcast-ai/torchcast-decision-31b --revision v1.0.0 --local-dir ~/ai/models/decision/torchcast-31b
+~/ai/envs/decide-torchcast/bin/python workers/torchcast31_convert.py ~/ai/models/decision/torchcast-31b ~/ai/models/decision/torchcast-31b-mlx-8bit
+# (the vendor folder is still needed at run time for its prompt code and tokenizer, but not its weights)
+
 # pplx-decider 27B (8-bit, 26 GB) and H2O-Lightning 4B (8.7 GB): both read pictures, through mlx-decision
 uv venv ~/ai/envs/decide-pplx --python 3.12
 uv pip install --python ~/ai/envs/decide-pplx/bin/python mlx-decision pillow
@@ -389,6 +395,7 @@ export HF_HOME=~/ai/models/decision/.hf-cache
 | --- | --- | --- | --- |
 | Karpo 31B (mxfp4) | about 18.5 GB at peak | 0.25 s for a short text, 3 s for 2,000 tokens | Text only. Probabilities are very peaked (near 0 or 1) and the maker says they are not calibrated. 256 options crash it, so the form stops at 255. |
 | Torchcast 4B v1.3.1 (bf16, torch on the Mac GPU) | about 14 GB | 0.15 s short, 1.5 s for 6,000 tokens | Text only. Checked against the vendor's CPU fp32 output: probabilities within 0.006, same answer on every test. Use v1.3.1 (earlier tags are non-commercial). Not 4-bit: one answer flips. |
+| Torchcast 31B v1.0 (8-bit MLX, bidirectional global attention) | about 37 GB at peak; run it alone | 0.2-0.5 s short, 9 s for three 2,000-token questions | Text only. Within 0.0084 of the vendor's bf16 run, same answers on every test. Loads in about 14 s, then a warm-up. Do not use stock MLX or llama.cpp builds of it: they get answers wrong. |
 | pplx-decider v1.2 27B (8-bit) | about 30 GB at peak | 0.5 s for 300 words, 3.7 s for 3,000 | Reads pictures (cold first call 7 s). Does not fit in bf16 (52 GB). The v1.3 release adds span extraction; not tested here. |
 | H2O-Lightning 4B (bf16) | about 10 GB at peak | 0.15 s for 300 words, 1 s for 3,000 | Reads pictures. The 31B is non-commercial; this is the 4B. |
 

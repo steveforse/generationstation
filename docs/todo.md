@@ -10,7 +10,7 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Waiting for a decision
 
-- **Decide tool: Karpo 31B, pplx-decider 27B (8-bit) and H2O-Lightning 4B built and tested through the app (pplx read a receipt picture). Torchcast 4B added (vendor package on torch MPS, 0.15 s). Torchcast 31B has a correct Mac route (custom 8-bit MLX build, 37 GB peak, harness in `~/ai/models/decision/scripts/mlx31.py`) but is not added yet and is a reference bar; adding it needs the harness moved into `workers/`. Leftovers: `torchcast-31b-untied` (convert input) and the arinltte 4B MLX copies (20 GB) can go.** Also open: a calibration note on the result page (Karpo's probabilities are near 0 or 1), pplx v1.3, an ordering test.
+- **Decide tool: Karpo 31B, pplx-decider 27B (8-bit) and H2O-Lightning 4B built and tested through the app (pplx read a receipt picture). Torchcast 4B (vendor package on torch MPS) and 31B (8-bit MLX, `workers/torchcast_mlx.py`) added and run through the app. Leftovers on disk: the bf16 `torchcast-31b` (61 GB, still needed at run time for its prompt code and tokenizer, weights not), `torchcast-31b-untied`, and the arinltte 4B MLX copies (20 GB).** Also open: a calibration note on the result page (Karpo's probabilities are near 0 or 1), pplx v1.3, an ordering test.
 
 - **Decision models (like TypeSafe's Jev) as a "Decide" tool.** Research done (see `docs/context.md`): Apache-2.0 shortlist is karpo-decision-31B (community MLX, 16.4 GB), pplx-decider 27B / flash 4B through `mlx-decision`, then H2O-Lightning-4B. Waiting for your go-ahead and which to start with; none measured on this Mac yet.
 
@@ -18,6 +18,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 - **Project Maya (Mac).** Answered: it has an experimental Metal path for GLM-5.3-Flash only, untested by its author on the real model, and the smallest Mac-relevant quant is 73.4 GB (it expects 64 GB of RAM plus a 24 GB card), so it does not fit this 64 GB Mac. Hy4-Flash and Inkling 2 Mini run on it only on NVIDIA and AMD. Worth revisiting for the Windows RTX 5090 desktop, not the Mac.
 
 ## Later / offered
+
+- Run our own VBench subset on the video models (about 100 prompts, 1 to 3 hours each, own numbers not comparable to published ones): after the Decide work, needs an idle machine. VBench-2.0 LongCat and the Wan 2.2 and LTX-2 VBench estimates are in the catalog.
 
 - Two frontend tests that failed overnight (stream reconnect, song card in chat) passed again on 2026-11-27; the cause was never found (not the code). Watch for it.
 

@@ -7,6 +7,8 @@ Config options (from runtimes.json, per preset):
                also read pictures.
                "torchcast": the vendor's torchcast_decision package on the Mac GPU (torch MPS, bf16); it keeps the
                vendor's non-causal attention, which stock MLX and llama.cpp get wrong. Text only.
+               "torchcast_mlx31": Torchcast 31B on MLX, 8-bit (torchcast_mlx.py; needs weights_dir, made by
+               torchcast31_convert.py). Text only.
     reading    mlx_decision only: "two-way" (default) or "one-way" (H2O: questions share one pass over the situation).
     model_dir  The model folder.
 Inputs: state, question_type ("choose" | "yesno" | "score"), instructions, options (one per line, "name: meaning"),
@@ -35,7 +37,7 @@ def load(config):
     options = config["options"]
     engine = options.get("engine", "karpo")
     model_dir = Path(options["model_dir"])
-    if engine not in ("karpo", "mlx_decision", "torchcast"):
+    if engine not in ("karpo", "mlx_decision", "torchcast", "torchcast_mlx31"):
         raise ValueError(f"Unknown decision engine {engine!r}")
     thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="decide")
     if engine == "karpo":
@@ -55,6 +57,25 @@ def load(config):
                 return answers, tokens, forward_ms
             return decide
         name = options.get("model_name", "Karpo 31B")
+    elif engine == "torchcast_mlx31":
+        weights_dir = Path(options["weights_dir"])
+        if not (weights_dir / "config.json").is_file() or not (model_dir / "torchcast_decision").is_dir():
+            raise FileNotFoundError(f"Torchcast 31B needs the vendor folder {model_dir} and the 8-bit MLX copy {weights_dir}")
+
+        def build():
+            from torchcast_mlx import TorchcastMLX31B
+
+            engine_object = TorchcastMLX31B(model_dir, weights_dir)
+            engine_object.decide("Warm-up.", {"q": {"type": "noul", "instructions": "Is this a test?"}})  # MLX reads the weights on first use
+
+            def decide(state, questions, images):
+                if images:
+                    raise ValueError("This model reads text only. Start pplx-decider or H2O-Lightning to use a picture.")
+                started = time.perf_counter()
+                answers, usage = engine_object.decide(state, questions)
+                return answers, usage.get("input_tokens"), (time.perf_counter() - started) * 1000
+            return decide
+        name = options.get("model_name", "Torchcast 31B")
     elif engine == "torchcast":
         if not (model_dir / "torchcast_decision").is_dir():
             raise FileNotFoundError(f"No torchcast_decision package in {model_dir}")
