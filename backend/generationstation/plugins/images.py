@@ -7,7 +7,7 @@ model's own field names.
 """
 from pydantic import BaseModel, ConfigDict
 
-ROLES = ("prompt", "shape", "size", "quality", "negative", "seed", "pictures", "notes")
+ROLES = ("prompt", "shape", "size", "width", "height", "quality", "negative", "steps", "seed", "pictures", "start", "strength", "notes")
 
 
 class ImageInfo(BaseModel):

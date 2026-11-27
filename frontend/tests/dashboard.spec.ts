@@ -138,7 +138,10 @@ function imageRuntimeFixtures() {
     key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
   })
   const prompt = field('prompt', 'Description', 'textarea', { required: true, max_length: 2000 })
-  const size = field('size', 'Shape', 'choice', { options: ['square', 'portrait', 'landscape', 'wide'], default: 'square' })
+  const size = field('size', 'Shape', 'choice', { options: ['square', 'portrait', 'landscape', 'wide', 'custom', 'match picture'], default: 'square', option_labels: { custom: 'Custom size', 'match picture': 'Match the starting picture' } })
+  const width = field('width', 'Width', 'int', { minimum: 256, maximum: 2048, default: 1024, show_when: { size: 'custom' } })
+  const height = field('height', 'Height', 'int', { minimum: 256, maximum: 2048, default: 1024, show_when: { size: 'custom' } })
+  const start = field('picture', 'Start from a picture', 'files', { accept: ['image'], max_count: 1 })
   const seed = field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })
   const make = (id: string, name: string, use: string, inputs: Record<string, unknown>[], roles: Record<string, string>) => ({
     id, kind: 'qwen_image', plugin: 'Qwen Image', name, description: 'Makes pictures.', workload: 'image', port: 8300 + (id === 'qwen_img' ? 0 : 1), default_preset: 'main', last_launch: { preset: 'main', settings: {}, gpus: [0] }, max_gpus: 1,
@@ -148,9 +151,9 @@ function imageRuntimeFixtures() {
       image: { guidance: `${name}: describe the subject and the light.`, create: '', edit: null, roles: { '': roles } } },
   })
   return [
-    make('qwen_img', 'Qwen Image', 'personal', [prompt, size, field('quality', 'Quality', 'choice', { options: ['quick', 'best'], default: 'quick' }), field('negative_prompt', 'Avoid', 'text', { max_length: 400 }), seed],
-      { prompt: 'prompt', shape: 'size', quality: 'quality', negative: 'negative_prompt', seed: 'seed' }),
-    make('z_img', 'Z-Image Turbo', 'work', [prompt, size, seed], { prompt: 'prompt', shape: 'size', seed: 'seed' }),
+    make('qwen_img', 'Qwen Image', 'personal', [prompt, size, width, height, start, field('quality', 'Quality', 'choice', { options: ['quick', 'best'], default: 'quick' }), field('negative_prompt', 'Avoid', 'text', { max_length: 400 }), seed],
+      { prompt: 'prompt', shape: 'size', width: 'width', height: 'height', start: 'picture', quality: 'quality', negative: 'negative_prompt', seed: 'seed' }),
+    make('z_img', 'Z-Image Turbo', 'work', [prompt, size, width, height, start, seed], { prompt: 'prompt', shape: 'size', width: 'width', height: 'height', start: 'picture', seed: 'seed' }),
   ]
 }
 
@@ -1968,4 +1971,20 @@ test('a video model with a picture tab shows it on Images and keeps its clip tab
   await go(page, '#/hosts/local/services/minimax_h3')
   await expect(page.getByRole('tab', { name: 'From a description' })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'A picture' })).toHaveCount(0)
+})
+
+test('Images: a custom size shows its width and height, and a starting picture is added, carried across models and noted when a model cannot take it', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { images: true })
+  await go(page, '#/hosts/local/images')
+  await expect(page.getByLabel(/^width/i)).toHaveCount(0)
+  await page.getByLabel(/^shape/i).selectOption('custom')
+  await page.getByLabel(/^width/i).fill('1280')
+  await page.getByLabel(/^height/i).fill('720')
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /Add picture: Start from a picture/ }).click()])
+  await chooser.setFiles({ name: 'start.png', mimeType: 'image/png', buffer: readFileSync(new URL('./fixtures/wide.png', import.meta.url)) })
+  await expect(page.getByRole('button', { name: 'Remove start.png' })).toBeVisible()
+  await page.getByLabel('Model drawing').selectOption('z_img')
+  await expect(page.getByLabel(/^width/i)).toHaveValue('1280')
+  await expect(page.getByRole('button', { name: 'Remove start.png' })).toBeVisible()  // this model can start from a picture too
+  expect(api.uploads.at(-1)?.name).toBe('start.png')
 })

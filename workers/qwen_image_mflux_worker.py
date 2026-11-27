@@ -10,8 +10,9 @@ Config options (from runtimes.json, per preset):
     guidance     Optional guidance scale; omit for distilled (Turbo) models.
     base_model   Optional `--base-model`: the built-in model a third-party folder is based on.
     negative     true if the model uses a negative prompt (default false; Turbo models ignore it).
-Inputs: prompt, size ("square" | "portrait" | "landscape" | "wide" or "WxH"), negative_prompt, seed. `quality` is
-    ignored: a preset is one quality.
+Inputs: prompt, size ("square" | "portrait" | "landscape" | "wide" | "custom" with width and height | "match picture" |
+    "WxH"), picture ([{"path"}], an init image) with strength (percent, how closely it follows the picture), steps (default
+    the preset's), negative_prompt, seed. `quality` is ignored: a preset is one quality.
 """
 import random
 import re
@@ -58,15 +59,22 @@ def load(config):
 def generate(model, inputs, job):
     from PIL import Image
 
-    width, height = _size(inputs.get("size"))
+    picture = (inputs.get("picture") or [{}])[0].get("path")
+    size = str(inputs.get("size") or "square").lower()
+    # "match picture" leaves the size to the starting picture; "custom" takes the width and height fields.
+    width, height = (None, None) if size == "match picture" else _size(f"{inputs.get('width') or 1024}x{inputs.get('height') or 1024}" if size == "custom" else size)
+    step_count = int(inputs.get("steps") or model["steps"])
     seed = inputs.get("seed")
     seed = seed if isinstance(seed, int) else random.randrange(1, 2**31)
     out = job.output(f"picture-{seed}.png", "image/png")
     job.report("Reading the description")
     started = time.perf_counter()
-    command = [model["command"], "--model", model["model_dir"], "--prompt", inputs["prompt"], "--width", str(width),
-               "--height", str(height), "--seed", str(seed), "--steps", str(model["steps"]), "--low-ram",
-               "--no-metadata", "--output", str(out)]
+    command = [model["command"], "--model", model["model_dir"], "--prompt", inputs["prompt"], "--seed", str(seed),
+               "--steps", str(step_count), "--low-ram", "--no-metadata", "--output", str(out)]
+    if width:
+        command += ["--width", str(width), "--height", str(height)]
+    if picture:
+        command += ["--image", str(picture), str(int(inputs.get("strength") or 40) / 100)]
     if model["base_model"]:
         command += ["--base-model", model["base_model"]]
     if model["guidance"] is not None:
@@ -99,7 +107,7 @@ def generate(model, inputs, job):
             process.kill()
             process.wait()
     image = Image.open(out)
-    job.detail(seed=seed, steps=model["steps"], width=width, height=height,
+    job.detail(seed=seed, steps=step_count, width=image.width, height=image.height, **({"start_strength": int(inputs.get("strength") or 40)} if picture else {}),
                **({"peak_gib": round(peak, 1)} if peak else {}))
     job.thumbnail(image, size=1024)
     job.report(f"Done in {time.perf_counter() - started:.0f} s, seed {seed}")

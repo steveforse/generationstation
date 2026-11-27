@@ -44,6 +44,7 @@ class ImageTool:
             parts = [f"shape: {', '.join(self._options(item, 'shape'))}" if self._options(item, "shape") else None,
                      f"size: {', '.join(self._options(item, 'size'))}" if self._options(item, "size") else None,
                      "quality choice" if self._has(item, "quality") else None, "negative prompt" if self._has(item, "negative") else None,
+                     "custom size" if self._has(item, "width") else None, "start from a picture (`start_picture`)" if self._has(item, "start") else None,
                      "can edit the pictures given in `pictures`" if info.edit is not None else None]
             lines.append(f"- {runtime.name} (id {model_id}): {info.guidance}" + (" Takes: " + "; ".join(p for p in parts if p) + "." if any(parts) else ""))
         properties = {
@@ -53,7 +54,13 @@ class ImageTool:
             "quality": {"type": "string", "description": PARAMETERS["quality"]},
             "negative_prompt": {"type": "string", "description": PARAMETERS["negative"]},
             "seed": {"type": "integer", "description": "A seed, to repeat a picture."},
+            "width": {"type": "integer", "description": "Custom width in pixels (256 to 2048), with `height`, for models that take a custom size."},
+            "height": {"type": "integer", "description": "Custom height in pixels (256 to 2048), with `width`."},
+            "steps": {"type": "integer", "description": "Painting steps, for models that take them; leave out for the model's own."},
         }
+        if any(self._has(item, "start") for item in running):
+            properties["start_picture"] = {"type": "string", "description": "Reference (8 characters, such as 1a2b3c4d) of an earlier picture to begin from, for models that can; the new picture is a variation of it, so describe the whole picture."}
+            properties["strength"] = {"type": "integer", "description": "With start_picture: percent (5 to 95), how closely the result follows it. Default 40."}
         if any(item[2].image.edit is not None for item in running):
             properties["pictures"] = {"type": "array", "items": {"type": "string"}, "maxItems": 4,
                                       "description": "References (8 characters, such as 1a2b3c4d) of earlier pictures to start from; the prompt then says what to make with them."}
@@ -88,8 +95,12 @@ class ImageTool:
         mode = info.edit if pictures else info.create
         roles = info.roles[mode]
         form = self.fields_of(plugin, runtime, mode)
-        values = {"prompt": prompt.strip(), "shape": arguments.get("shape"), "size": arguments.get("size"), "quality": arguments.get("quality"),
-                  "negative": arguments.get("negative_prompt"), "seed": arguments.get("seed")}
+        start = arguments.get("start_picture")
+        width, height = arguments.get("width"), arguments.get("height")
+        shape = arguments.get("shape") or ("custom" if width and height and "width" in roles else None)
+        values = {"prompt": prompt.strip(), "shape": shape, "size": arguments.get("size"), "quality": arguments.get("quality"),
+                  "negative": arguments.get("negative_prompt"), "seed": arguments.get("seed"), "width": width, "height": height,
+                  "steps": arguments.get("steps"), "strength": arguments.get("strength") if start else None}
         inputs = {"mode": mode} if plugin.modes else {}
         notes = []
         for role, value in values.items():
@@ -99,4 +110,12 @@ class ImageTool:
                 inputs[roles[role]] = value
             elif role != "prompt":
                 notes.append(f"the {'things to avoid' if role == 'negative' else role} (this model has no place for it)")
-        return model_id, runtime, plugin, mode, inputs, ({roles["pictures"]: pictures} if pictures else {}), notes
+        references = {roles["pictures"]: pictures} if pictures else {}
+        if start:
+            if not isinstance(start, str):
+                raise ValueError("`start_picture` takes one result reference.")
+            if "start" in roles and roles["start"] in form:
+                references[roles["start"]] = [start]
+            else:
+                notes.append("the starting picture (this model cannot begin from one)")
+        return model_id, runtime, plugin, mode, inputs, references, notes

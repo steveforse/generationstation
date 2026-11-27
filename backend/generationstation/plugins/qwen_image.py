@@ -61,8 +61,24 @@ class QwenImagePlugin(WorkerPlugin):
             help="Describe the subject, setting, style and light. Put any words that should appear in the "
                  "picture in quotes."),
         "size": InputSpec(
-            label="Shape", kind="choice", options=("square", "portrait", "landscape", "wide"), default="square",
-            help="Square 1024x1024, portrait 768x1152, landscape 1152x768, wide 1344x768."),
+            label="Shape", kind="choice", options=("square", "portrait", "landscape", "wide", "custom", "match picture"), default="square",
+            option_labels={"custom": "Custom size", "match picture": "Match the starting picture"},
+            help="Square 1024x1024, portrait 768x1152, landscape 1152x768, wide 1344x768. Custom lets you set the width and "
+                 "height (bigger pictures take longer and need more memory). 'Match the starting picture' keeps its size."),
+        "width": InputSpec(
+            label="Width", kind="int", minimum=256, maximum=2048, default=1024, show_when={"size": "custom"},
+            help="In pixels, 256 to 2048. Rounded down to a multiple of 16."),
+        "height": InputSpec(
+            label="Height", kind="int", minimum=256, maximum=2048, default=1024, show_when={"size": "custom"},
+            help="In pixels, 256 to 2048. Rounded down to a multiple of 16."),
+        "picture": InputSpec(
+            label="Start from a picture", kind="files", accept=("image",), max_count=1,
+            help="Draws a new picture that begins from this one (a variation or a restyle) instead of from nothing. It does "
+                 "not follow instructions like \"make the coat blue\"; describe the whole picture you want."),
+        "strength": InputSpec(
+            label="How closely it follows the picture", kind="int", minimum=5, maximum=95, placeholder="40",
+            help="Percent (40 if empty). Low: only the rough layout and colours of your picture stay. High: it stays close to it. "
+                 "Used only with a starting picture."),
         "quality": InputSpec(
             label="Quality", kind="choice", options=("quick", "best"), default="quick",
             help="'quick' takes a few seconds. 'best' takes 15-45 s and draws finer detail and small lettering. "
@@ -70,6 +86,10 @@ class QwenImagePlugin(WorkerPlugin):
         "negative_prompt": InputSpec(
             label="Avoid", kind="text", max_length=400, placeholder="blurry, extra fingers",
             help="Things to keep out of the picture. Used only at 'best' quality.", advanced=True),
+        "steps": InputSpec(
+            label="Steps", kind="int", minimum=1, maximum=100,
+            help="How many painting steps. Leave empty for the model's own number (8 for the Turbo models, 20 to 30 for "
+                 "the full ones). More steps rarely help a Turbo model.", advanced=True),
         "seed": InputSpec(
             label="Seed", kind="seed", minimum=0, maximum=2**31 - 1,
             help="Leave empty for a new picture each time. Reuse a seed to get the same picture again.",
@@ -79,7 +99,8 @@ class QwenImagePlugin(WorkerPlugin):
     image: ClassVar[ImageInfo] = ImageInfo(
         guidance=("Describe the subject, setting, style and light. Put any words that should appear in the picture in quotes: "
                   "these models draw legible lettering."),
-        create="", roles={"": {"prompt": "prompt", "shape": "size", "quality": "quality", "negative": "negative_prompt", "seed": "seed"}})
+        create="", roles={"": {"prompt": "prompt", "shape": "size", "width": "width", "height": "height", "start": "picture", "strength": "strength",
+                               "quality": "quality", "negative": "negative_prompt", "steps": "steps", "seed": "seed"}})
 
     @staticmethod
     def _mflux(runtime) -> bool:
@@ -87,7 +108,8 @@ class QwenImagePlugin(WorkerPlugin):
 
     def mode_inputs(self, mode, runtime=None):
         """The Apple-silicon (mflux) models make one quality per preset, so they have no Quality field; a model whose presets
-        use no negative prompt has no Avoid field."""
+        use no negative prompt has no Avoid field. Custom sizes, a starting picture and the step count are what the mflux
+        worker does; the Windows worker has only the four shapes."""
         inputs = super().mode_inputs(mode, runtime)
         if runtime is None:
             return inputs
@@ -96,7 +118,16 @@ class QwenImagePlugin(WorkerPlugin):
             drop.add("quality")
             if not any(preset.options.get("negative") for preset in runtime.presets.values()):
                 drop.add("negative_prompt")
-        return {key: spec for key, spec in inputs.items() if key not in drop}
+            return {key: spec for key, spec in inputs.items() if key not in drop}
+        drop |= {"width", "height", "picture", "strength", "steps"}
+        shapes = inputs["size"].model_copy(update={"options": tuple(o for o in inputs["size"].options if o not in {"custom", "match picture"}),
+                                                   "help": "Square 1024x1024, portrait 768x1152, landscape 1152x768, wide 1344x768."})
+        return {key: (shapes if key == "size" else spec) for key, spec in inputs.items() if key not in drop}
+
+    def check_inputs(self, mode, values, files):
+        if values.get("size") == "match picture" and not files.get("picture"):
+            return ["Add a starting picture to match its size, or choose another shape."]
+        return []
 
     def estimate(self, runtime, preset, values, gpus):
         ram, vram = super().estimate(runtime, preset, values, gpus)

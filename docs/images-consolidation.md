@@ -33,3 +33,7 @@ The dropdown shows the licence only. Time per picture and memory stay on the Mod
 ## Checks
 
 Fixture tests for the form logic (capabilities, carry-over, hidden fields), backend tests for the declarations and the `make_image` tool, then one picture per model through the app on the Mac.
+
+## Added after checking the models' own commands (2026-11-27)
+
+The first form only described what the old one had. Each mflux command also takes a custom width and height, a starting picture with a strength (`--image PATH STRENGTH`) and a step count; these are now in the form for the Mac models (the Windows worker has only the four shapes). Not added: guidance (preset-specific, no float field), LoRA styles, scheduler, the experimental small text encoder; instruction editing and multi-picture references need edit weights that are not installed.
