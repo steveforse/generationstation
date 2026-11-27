@@ -76,8 +76,8 @@ export function NotesEditor({ url, onSave, onClose }: { url: string; onSave: (ed
       <button type="button" className="button button-secondary button-small" onClick={() => setDraft({ ...draft, summary: [...draft.summary, ''] })}><Plus size={14} />Add a point</button>
     </fieldset>
     <fieldset className="notes-block"><legend>Action items{changed.actions && <em> (changed)</em>}</legend>
-      {draft.actions.map((item, index) => <div className="notes-row notes-row-fields" key={index}>
-        <input type="text" className="notes-wide" maxLength={400} value={item.task} placeholder="What needs doing" aria-label={`Task of action item ${index + 1}`} onChange={(event) => setAt('actions', index, { ...item, task: event.target.value })} />
+      {draft.actions.map((item, index) => <div className="notes-row notes-row-fields notes-row-action" key={index}>
+        <textarea rows={2} className="notes-wide" maxLength={400} value={item.task} placeholder="What needs doing" aria-label={`Task of action item ${index + 1}`} onChange={(event) => setAt('actions', index, { ...item, task: event.target.value })} />
         <input type="text" maxLength={80} value={item.owner ?? ''} placeholder="Owner" aria-label={`Owner of action item ${index + 1}`} onChange={(event) => setAt('actions', index, { ...item, owner: event.target.value })} />
         <input type="text" maxLength={80} value={item.due ?? ''} placeholder="Due" aria-label={`Due date of action item ${index + 1}`} onChange={(event) => setAt('actions', index, { ...item, due: event.target.value })} />
         <input type="text" maxLength={80} value={item.time ?? ''} placeholder="Time" aria-label={`Time in the meeting of action item ${index + 1}`} onChange={(event) => setAt('actions', index, { ...item, time: event.target.value })} />
@@ -86,8 +86,8 @@ export function NotesEditor({ url, onSave, onClose }: { url: string; onSave: (ed
       <button type="button" className="button button-secondary button-small" onClick={() => setDraft({ ...draft, actions: [...draft.actions, { task: '' }] })}><Plus size={14} />Add an action item</button>
     </fieldset>
     <fieldset className="notes-block"><legend>Decisions{changed.decisions && <em> (changed)</em>}</legend>
-      {draft.decisions.map((item, index) => <div className="notes-row notes-row-fields" key={index}>
-        <input type="text" className="notes-wide" maxLength={400} value={item.decision} placeholder="What was decided" aria-label={`Text of decision ${index + 1}`} onChange={(event) => setAt('decisions', index, { ...item, decision: event.target.value })} />
+      {draft.decisions.map((item, index) => <div className="notes-row notes-row-fields notes-row-decision" key={index}>
+        <textarea rows={2} className="notes-wide" maxLength={400} value={item.decision} placeholder="What was decided" aria-label={`Text of decision ${index + 1}`} onChange={(event) => setAt('decisions', index, { ...item, decision: event.target.value })} />
         <input type="text" maxLength={80} value={item.by ?? ''} placeholder="Decided by" aria-label={`Who made decision ${index + 1}`} onChange={(event) => setAt('decisions', index, { ...item, by: event.target.value })} />
         <input type="text" maxLength={80} value={item.time ?? ''} placeholder="Time" aria-label={`Time in the meeting of decision ${index + 1}`} onChange={(event) => setAt('decisions', index, { ...item, time: event.target.value })} />
         <button type="button" className="icon-button" aria-label={`Remove decision ${index + 1}`} title="Remove" onClick={() => removeAt('decisions', index)}><Trash2 size={16} /></button>
