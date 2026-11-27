@@ -116,6 +116,8 @@ export type FieldCommand = { n: number; mode: string; field: string; apply: (cur
 export type FormHooks = {
   starts?: Record<string, FormStart>; onValues?: (mode: string, values: Record<string, string>, files: Record<string, FileItem[]>) => void
   onMode?: (mode: string) => void; command?: FieldCommand
+  /** Which tabs the page shows (a model that serves two pages shows each its own). */
+  showModes?: (mode: string) => boolean
   /** Write down a voice sample (by its upload ID); the form pre-fills "what the sample says" with it. Speech models only. */
   transcribe?: (uploadId: string) => Promise<string>
 }
@@ -125,7 +127,7 @@ export function GenerateForm({ runtime, generation, onGenerate, error, initial, 
   runtime: Runtime; generation: Generation; error?: string; onGenerate: GenerateHandlers['onGenerate']
   initial?: FormStart; ahead?: number; upload: (file: File) => Promise<UploadRecord>; hooks?: FormHooks
 }) {
-  const modes = generation.modes ?? []
+  const modes = (generation.modes ?? []).filter((item) => hooks?.showModes?.(item.key) ?? true)
   const [mode, setMode] = useState(() => modes.find((item) => item.key === initial?.mode)?.key ?? modes[0]?.key ?? '')
   const label = labelOf(generation)
   const current = modes.find((item) => item.key === mode) ?? modes[0]

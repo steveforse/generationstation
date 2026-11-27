@@ -39,7 +39,8 @@ WORDS = {"image": "picture", "video": "video clip", "audio": "sound recording"}
 
 ASSISTANT_TITLE = "Assistant"
 GUIDE = (Path(__file__).with_name("assistant_guide.md")).read_text(encoding="utf-8").strip()
-GROUPS = {"text": "Text", "speech": "Speech", "image": "Pictures", "video": "Video", "music": "Music"}
+# Where each kind of model is in the menu on the left: models that serve several of a kind share one entry; a text tool that is not a chat model has its own.
+GROUPS = {"text": "Chat", "decision": "Decide", "speech": "Speech", "image": "Images", "video": "Video", "music": "Music"}
 
 # What every chat is told it can do. Only the help assistant's own conversation is told it is "the assistant" (INTRO_ASSISTANT);
 # the general chat is just a model running on the user's computer and does not call itself the assistant.
@@ -629,7 +630,7 @@ class ChatManager:
             plugin = self.catalog.plugin(model_id)
             state = (states.get(model_id) or {}).get("state", "unloaded")
             word = "running" if state == "ready" else "stopped"
-            group = GROUPS.get(runtime.workload, runtime.workload or "Other")
+            group = runtime.name if runtime.workload == "text" and not plugin.chats else GROUPS.get(runtime.workload, runtime.workload or "Other")
             about = runtime.description or plugin.description or ""
             lines.append(f"- **{runtime.name}** (menu: {group}; now {word}; id {model_id}): {about}")
             if plugin.speech:

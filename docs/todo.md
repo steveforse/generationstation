@@ -21,6 +21,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Later / offered
 
+- **Images page** built and tested with fixtures (2026-11-27); check one picture per model on the Mac by eye, and the H3 picture tabs on the Windows desktop. Video and Music consolidations follow the same pattern.
+
 - Run our own VBench subset on the video models (about 100 prompts, 1 to 3 hours each, own numbers not comparable to published ones): after the Decide work, needs an idle machine. VBench-2.0 LongCat and the Wan 2.2 and LTX-2 VBench estimates are in the catalog.
 
 - Frontend tests are flaky on this machine again (2026-11-27 afternoon): the stream reconnect and chat song tests, plus one or two others that vary by run, fail with timeouts, and the suite takes 1 to 1.5 minutes instead of 17 s. The same tests fail on the commit before today's changes, so it is the machine (two decision workers and a virtual machine were running), not the code. They passed at 17 s earlier today.

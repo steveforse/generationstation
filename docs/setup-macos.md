@@ -9,7 +9,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Dashboard, API, database, chat, logs | HunyuanVideo 1.5 |
 | Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s; FastMetal-QAD (distilled Wan, up to 5 s at 1280x704 or 832x480); LongCat-Video (832x480, up to 4 s, slow); LTX-2.5 with sound, up to 5 s at 1280x704 (personal use) | |
 | Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
-| Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
+| Images: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
 | Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use while the app stays internal) | |
 | Decide: Torchcast 4B and 31B (text), pplx-decider 27B and H2O-Lightning 4B (read pictures), all Apache-2.0 and work use; one probability per answer in well under a second | |
 | Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
@@ -56,7 +56,7 @@ The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B,
 
 ## Models page: sections and quality chart
 
-The Models page is grouped like the sidebar (Text, Speech, Pictures, Video, Music). Above each group's cards, a folded chart ranks the models that have a published score on the same measure:
+The Models page is grouped like the sidebar (Text, Speech, Images, Video, Music). Above each group's cards, a folded chart ranks the models that have a published score on the same measure:
 
 Each section has a Sort control: default order, name, or quality (using the ranking chosen in the chart), with a button to reverse it. Models without a score on that ranking stay last in either direction.
 
@@ -74,7 +74,7 @@ Claude Haiku, Sonnet and Opus 5.5 appear on the text rankings as outlined "refer
 | Text | LiveBench coding | LiveBench 2.0 release 2026-11-06, independent (Qwen3.8 27B and Inkling 2 Mini only) |
 | Speech | Speech arena Elo | Artificial Analysis |
 | Music | SongBench average (WildSongBench) | The YuE2 authors' model card, so vendor-run and scored by automatic metrics |
-| Pictures | Image arena Elo | Artificial Analysis |
+| Images | Image arena Elo | Artificial Analysis |
 | Video | Text-to-video arena Elo | Arena AI (read through the benchmarklist.com mirror) |
 
 These are scores for the hosted, full-precision models, not for the quantised builds that run here, so they are a proxy. A hatched bar with "est." is an estimate: the score was not published for that exact build (every text quant, Qwen3-TTS, Qwen-Image 2512 and Wan 2.2 5B). Hover or focus a bar to see how it was derived, or open the Table under the chart for the sources. Hy4-Flash and OmniVoice have no score anywhere yet and are listed as such. Only a Mac template carries scores for now; the Windows template does not.
@@ -197,9 +197,11 @@ Gyro-L is not offered by Strata's Mac setup; it was installed by hand, and the r
 
 Hy4-Flash (220B mixture of experts, 12B active) runs on Strata's `strata-hy4` engine in the `SQ-64` build: a 62 GB model file plus a 67.6 GB lookup table that stays on the SSD, about 122 GiB in all. It reads experts from the SSD into a cache, so it is much slower (14-18 tok/s) than Flash-Next; try it only if you have the disk. Install it into its own checkout so the Flash-Next install is untouched; the exact environment variables are in the template's `hy4_flash` entry (`STRATA_METAL_EXP_CACHE_GB` sets the cache). Thinking is off with `reasoning_effort: "none"`; the model's own levels are `high` (default) and `max`.
 
-## 5. Pictures and songs
+## 5. Images and songs
 
 Both run as workers in their own environments, outside the repository, and are started from the Models page like any other model.
+
+All picture models share one **Images** page (in the sidebar, with Chat, Decide, Meeting notes and Speech). A dropdown lists the running picture models with their licence; the description, shape and seed carry over when you switch, and anything the new model has no place for (the Avoid list on Z-Image Turbo, which is distilled and has no negative prompt) is named on the page and kept for the way back. The mflux models make one quality per preset, so the form has no Quality field; the Windows model keeps it. In the chat, every running picture model is reached through one `make_image` tool (description, shape, size, quality, things to avoid, seed, earlier results to start from, which model). A video model with picture tabs (H3 on Windows) shows those tabs on Images and keeps its clip tabs on its own page.
 
 ### Qwen Image 2.1 Turbo (mflux)
 

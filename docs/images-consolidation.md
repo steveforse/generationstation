@@ -1,4 +1,4 @@
-# One Images page (plan, proposed 2026-11-27, not built yet)
+# One Images page (plan, agreed 2026-11-27; built, one picture per model on the Mac still to check by eye)
 
 The picture models get one shared page, as Speech, Decide and Chat have: one sidebar entry named **Images** (the group is called Pictures today, and that word goes everywhere: the Models page group, the quality chart, docs), a dropdown over the running image models, and a form built from the chosen model. Video and Music follow later.
 
@@ -24,9 +24,11 @@ All three Mac models are one plugin (`qwen_image`) with one form, so today they 
 7. **Sidebar**: Images joins Chat, Decide, Meeting notes and Speech as an entry (Pictures group removed); Video and Music keep their sections until they are consolidated.
 8. **No redirects**, as before: `modelRoute` sends image models to the Images page.
 
-## Open question
+## Decided
 
-H3's picture tabs (Windows only). Either the Images page includes them when H3 runs (a video model serving two pages, with the edit capability showing there), or they stay with H3 on the Video page until Video is consolidated. Nothing on the Mac is affected.
+H3's picture tabs (Windows only) appear on the Images page when H3 runs; its clip tabs and clip results stay on its own Video page. Nothing on the Mac is affected.
+
+The dropdown shows the licence only. Time per picture and memory stay on the Models page and the model's details; they would have repeated what is there.
 
 ## Checks
 

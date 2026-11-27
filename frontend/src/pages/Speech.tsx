@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { FormHooks, FormStart } from '../components/Runtime'
+import { useCallback, useEffect, useState } from 'react'
+import type { FormHooks } from '../components/Runtime'
 import { LICENSE_WORD } from '../components/Runtime'
 import type { SavedHost } from '../hosts'
-import { absorb, dropped, emptyDraft, modeFor, removeCues, sourceOf, startFor, strayCues, unknownCues, type Draft } from '../speechDraft'
-import { type HostStore, useSession } from '../store'
-import type { Job, Runtime, Voice } from '../types'
+import { dropped } from '../roleDraft'
+import { removeCues, speechKit, strayCues, unknownCues } from '../speechDraft'
+import type { HostStore } from '../store'
+import type { Runtime, Voice } from '../types'
 import type { FileItem } from '../components/FilePicker'
-import { takeHandOff } from '../voiceSample'
 import { VoiceLibrary } from '../components/VoiceLibrary'
 import { ServicePage } from './Service'
+import { type Member, useConsolidated } from './useConsolidated'
 
 const insert = (cue: string) => (current: string, start: number | null, end: number | null) => {
   const at = start ?? current.length
@@ -16,85 +17,28 @@ const insert = (cue: string) => (current: string, start: number | null, end: num
   return `${before}${before && !/\s$/.test(before) ? ' ' : ''}${cue} ${current.slice(end ?? at)}`.replace(/ $/, '')
 }
 
+const memberOf = (runtime: Runtime): Member | undefined => {
+  const speech = runtime.generation?.speech
+  return runtime.workload === 'speech' && speech ? { kit: speechKit(speech), modes: (runtime.generation?.modes ?? []).map((item) => item.key) } : undefined
+}
+
 /** One page for every speech model, like Chat for text models. What is typed (text, language, voice, direction) is kept
  * by role, so changing the model or the voice source carries it over; only what the new model has no place for is left out. */
 export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: SavedHost; modelId?: string }) {
-  const state = useSession(host ? store.session(host.id) : undefined)
-  const [pickedId, setPickedId] = useState<string | null>(modelId ?? null)
-  const [draft, setDraft] = useState<Draft>(emptyDraft)
-  const draftRef = useRef(draft)
-  const [form, setForm] = useState<{ n: number; mode?: string }>({ n: 0 })
-  const modeRef = useRef('')
-  const [picked, setMode] = useState('')
+  const { start, state, runtimes, running, chosen, chosenId, member, mode, draft, draftRef, update, form, hooks: shared, setPickedId, rebuild, reuseElsewhere } = useConsolidated(store, host, modelId, memberOf)
   const [command, setCommand] = useState<FormHooks['command']>()
   const session = host ? store.session(host.id) : undefined
   const [voices, setVoices] = useState<Voice[]>([])
   const loadVoices = useCallback(() => { void session?.listVoices().then(setVoices, () => undefined) }, [session])
   useEffect(() => { if (state.connection === 'connected') loadVoices() }, [state.connection, loadVoices])
-  const speechRuntimes = (state.runtimes ?? []).filter((runtime) => runtime.workload === 'speech' && runtime.generation?.speech)
-  const running = speechRuntimes.filter((runtime) => state.models?.find((model) => model.id === runtime.id)?.state === 'ready')
-  const chosen = running.find((runtime) => runtime.id === pickedId) ?? running[0] ?? speechRuntimes.find((runtime) => runtime.id === pickedId) ?? speechRuntimes[0]
   const speech = chosen?.generation?.speech ?? undefined
-  const chosenId = chosen?.id
-  const mode = chosen?.generation?.modes?.some((item) => item.key === picked) ? picked : chosen?.generation?.modes?.[0]?.key ?? ''
-  modeRef.current = mode
+  const hooks: FormHooks = { ...shared, command, transcribe: session && chosenId ? (uploadId) => session.transcribe(chosenId, uploadId) : undefined }
 
-  const update = (next: Draft) => { draftRef.current = next; setDraft(next) }
-  // A model chosen or a tab opened carries the draft over: the form is rebuilt from it, on the tab for the voice source in use.
-  const rebuild = (runtime: Runtime | undefined, fromSource: string | undefined, fallbackMode?: string) => {
-    const info = runtime?.generation?.speech
-    if (!info) return
-    const first = runtime!.generation!.modes?.[0]?.key ?? ''
-    modeRef.current = modeFor(info, fromSource, fallbackMode ?? first)
-    setMode(modeRef.current)
-    setForm((current) => ({ n: current.n + 1, mode: modeRef.current }))
-  }
-  const previous = useRef<string | undefined>(undefined)
-  const lastMode = useRef('')  // the tab open at the last render, which is the old model's when the model changes
-  useEffect(() => {
-    if (!chosenId || previous.current === chosenId) { previous.current = chosenId; return }
-    const had = previous.current
-    previous.current = chosenId
-    if (!had) return
-    const before = speechRuntimes.find((runtime) => runtime.id === had)?.generation?.speech
-    rebuild(chosen, before ? sourceOf(before, lastMode.current) : undefined)
-  }, [chosenId]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { lastMode.current = mode })
-
-  // A voice sent from another page (a clip's soundtrack, "use these settings" in Chat) arrives once the models are listed.
-  const taken = useRef(false)
-  useEffect(() => {
-    if (!host || taken.current || !speechRuntimes.length) return
-    taken.current = true
-    for (const runtime of speechRuntimes) {
-      const start = takeHandOff(host.id, runtime.id)
-      const info = runtime.generation?.speech
-      if (!start || !info) continue
-      const mode = start.mode ?? runtime.generation!.modes?.[0]?.key ?? ''
-      const values = Object.fromEntries(Object.entries(start.inputs ?? {}).map(([key, value]) => [key, Array.isArray(value) || value == null ? '' : String(value)]))
-      update(absorb(draftRef.current, info, mode, values, start.files ?? {}))
-      setPickedId(runtime.id)
-      modeRef.current = mode; setMode(mode)
-      setForm((current) => ({ n: current.n + 1, mode }))
-      break
-    }
-  }, [speechRuntimes.length, host?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const starts: Record<string, FormStart> = {}
-  if (speech && chosen) for (const key of Object.keys(speech.roles)) starts[key] = startFor(draft, speech, key)
-  const hooks: FormHooks = {
-    starts,
-    onValues: (formMode, values, files) => { if (speech) update(absorb(draftRef.current, speech, formMode, values, files)) },
-    // A tab was opened by hand: rebuild so it starts from what the other tab held.
-    onMode: (next) => { modeRef.current = next; setMode(next); setForm((current) => ({ n: current.n + 1, mode: next })) },
-    command,
-    transcribe: session && chosenId ? (uploadId) => session.transcribe(chosenId, uploadId) : undefined,
-  }
   const textField = speech?.roles[mode]?.text
   const text = draft.values.text ?? ''
   const stray = speech ? strayCues(text, speech) : []
   const unknown = speech ? unknownCues(text, speech) : []
-  const left = speech && mode ? dropped(draft, speech, mode) : ''
+  const left = member && mode ? dropped(draft, member.kit, mode) : ''
   const cues = speech?.direction.cues
   const send = (apply: (current: string, start: number | null, end: number | null) => string) => textField && setCommand((current) => ({ n: (current?.n ?? 0) + 1, mode, field: textField, apply }))
 
@@ -106,20 +50,20 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
 
   const canClone = !!speech?.voices.clone
   const extension: Record<string, string> = { 'audio/wav': '.wav', 'audio/mpeg': '.mp3', 'audio/flac': '.flac', 'audio/mp4': '.m4a', 'audio/ogg': '.ogg' }
-  const library = session && speech ? <VoiceLibrary voices={voices} canClone={canClone} modelName={chosen?.name ?? ''} sampleReady={draft.sample.some((item) => item.id)}
+  const library = session && speech ? <VoiceLibrary voices={voices} canClone={canClone} modelName={chosen?.name ?? ''} sampleReady={(draft.files.sample ?? []).some((item) => item.id)}
     onUse={async (voice) => {
       try {
         const blob = await session.voiceBlob(voice.id)
         const name = `${voice.name}${extension[voice.mime] ?? '.wav'}`
         const record = await session.uploadFile(new File([blob], name, { type: voice.mime }))
         const sample: FileItem = { key: `voice-${voice.id}-${record.id}`, name, kind: 'audio', url: URL.createObjectURL(blob), status: 'ready', id: record.id }
-        update({ values: { ...draftRef.current.values, sample_text: voice.sample_text }, sample: [sample] })
+        update({ values: { ...draftRef.current.values, sample_text: voice.sample_text }, files: { ...draftRef.current.files, sample: [sample] } })
         rebuild(chosen, 'clone')
         return ''
       } catch (reason) { return reason instanceof Error ? reason.message : 'The voice could not be used.' }
     }}
     onSaveSample={async (name) => {
-      const sample = draftRef.current.sample.find((item) => item.id)
+      const sample = (draftRef.current.files.sample ?? []).find((item) => item.id)
       if (!sample?.id) return 'There is no sample on the form.'
       try { await session.saveVoice(name, draftRef.current.values.sample_text ?? '', sample.id); loadVoices(); return '' } catch (reason) { return reason instanceof Error ? reason.message : 'The voice could not be saved.' }
     }}
@@ -139,21 +83,10 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
     {library}
   </div> : null
 
-  const reuseElsewhere = (job: Job) => {
-    const target = speechRuntimes.find((runtime) => runtime.id === job.model_id)
-    const info = target?.generation?.speech
-    if (!target || !info) return
-    const jobMode = typeof job.inputs.mode === 'string' ? job.inputs.mode : target.generation!.modes?.[0]?.key ?? ''
-    const values = Object.fromEntries(Object.entries(job.inputs).map(([key, value]) => [key, Array.isArray(value) || value == null || typeof value === 'object' ? '' : String(value)]))
-    update(absorb(draftRef.current, info, jobMode, values, {}))
-    setPickedId(target.id)
-    if (target.id === chosenId) rebuild(target, sourceOf(info, jobMode), jobMode)
-  }
-
   return <ServicePage store={store} host={host} modelId={chosen?.id ?? ''}
     group={{
       title: 'Speech', noun: 'speech', description: 'Turn text into speech with whichever speech model is running. What you type carries over when you change the model.',
-      ids: speechRuntimes.map((runtime) => runtime.id), picker, above, onVoiceSaved: loadVoices, none: speechRuntimes.length > 0 && running.length === 0,
-      form: { key: `${chosenId}:${form.n}`, start: { mode: form.mode ?? undefined }, hooks }, reuseElsewhere,
+      ids: runtimes.map((runtime) => runtime.id), picker, above, onVoiceSaved: loadVoices, none: runtimes.length > 0 && running.length === 0,
+      form: { key: `${chosenId}:${form.n}`, start, hooks }, reuseElsewhere,
     }} />
 }

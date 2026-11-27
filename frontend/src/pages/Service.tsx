@@ -155,6 +155,8 @@ export type Group = {
   /** The form is remounted when `key` changes; `start` is where it opens; `hooks` let the page follow and change it. */
   form?: { key: string; start?: FormStart; hooks?: FormHooks }
   above?: ReactNode
+  /** Which of the group's models' results belong on the page (a model that serves two pages has results for each). */
+  keepJob?: (job: Job) => boolean
   /** Called instead of refilling the form when "Use these settings" is chosen on a result from another model of the group. */
   reuseElsewhere?: (job: Job) => void
   /** A voice was added to the library from a result. */
@@ -174,7 +176,11 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
   const runtime = state.runtimes?.find((item) => item.id === modelId)
   const model = state.models?.find((item) => item.id === modelId)
   const modelsHref = href({ page: 'models', hostId: host.id })
-  const jobs = state.jobs.filter((job) => group ? group.ids.includes(job.model_id) : job.model_id === modelId)
+  // A model that makes pictures and clips keeps its picture tabs and results on the Images page, and the rest here.
+  const imageTabs = !group ? Object.keys(runtime?.generation?.image?.roles ?? {}).filter(Boolean) : []
+  const ownHooks: FormHooks | undefined = imageTabs.length ? { showModes: (key) => !imageTabs.includes(key) } : undefined
+  const jobs = state.jobs.filter((job) => group ? group.ids.includes(job.model_id) && (group.keepJob?.(job) ?? true)
+    : job.model_id === modelId && !imageTabs.includes(String(job.inputs.mode)))
   const selected = jobs.find((job) => job.id === selectedId)
   const modelState = model?.state ?? 'unknown'
   const ready = modelState === 'ready'
@@ -189,7 +195,7 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
       <div className="service-status" aria-live="polite"><StatePill state={modelState}>{stateText[modelState] ?? 'Unknown'}</StatePill><span>{status}</span><a className="text-button" href={modelsHref}>{ready ? 'Model settings' : 'Go to Models'} <ArrowUpRight size={16} /></a></div>
       {group && ready && <div className="decide-bar">{group.connect && <ConnectLink kind="decide" runtime={runtime} host={host} session={session} />}{group.picker}</div>}
       {ready && group?.above}
-      {ready && <GenerateForm key={`${group?.form?.key ?? ''}:${reuse.n}`} runtime={runtime} generation={runtime.generation} initial={reuse.n ? reuse.start : reuse.start ?? group?.form?.start} hooks={group?.form?.hooks} error={state.jobErrors[runtime.id]}
+      {ready && <GenerateForm key={`${group?.form?.key ?? ''}:${reuse.n}`} runtime={runtime} generation={runtime.generation} initial={reuse.n ? reuse.start : reuse.start ?? group?.form?.start} hooks={group?.form?.hooks ?? ownHooks} error={state.jobErrors[runtime.id]}
         upload={(file) => session.uploadFile(file)}
         ahead={jobs.filter((job) => job.status === 'queued' || job.status === 'running').length}
         onGenerate={(r, inputs) => session.runJob(r, inputs)} />}

@@ -132,6 +132,34 @@ function styledSpeechFixture() {
   }
 }
 
+/** Two picture models with no tabs: one takes a negative prompt and a quality choice, the other neither (as on the Mac). */
+function imageRuntimeFixtures() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const prompt = field('prompt', 'Description', 'textarea', { required: true, max_length: 2000 })
+  const size = field('size', 'Shape', 'choice', { options: ['square', 'portrait', 'landscape', 'wide'], default: 'square' })
+  const seed = field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })
+  const make = (id: string, name: string, use: string, inputs: Record<string, unknown>[], roles: Record<string, string>) => ({
+    id, kind: 'qwen_image', plugin: 'Qwen Image', name, description: 'Makes pictures.', workload: 'image', port: 8300 + (id === 'qwen_img' ? 0 : 1), default_preset: 'main', last_launch: { preset: 'main', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use, weights: use === 'work' ? 'Apache-2.0' : 'Research only', note: 'Fixture.' },
+    presets: { main: { name, gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 10, gpu_min_free_gib: {} }, settings: [] } },
+    generation: { output_kind: 'image', inputs, modes: [], make_label: 'Make a picture', result_noun: 'picture', timings: [],
+      image: { guidance: `${name}: describe the subject and the light.`, create: '', edit: null, roles: { '': roles } } },
+  })
+  return [
+    make('qwen_img', 'Qwen Image', 'personal', [prompt, size, field('quality', 'Quality', 'choice', { options: ['quick', 'best'], default: 'quick' }), field('negative_prompt', 'Avoid', 'text', { max_length: 400 }), seed],
+      { prompt: 'prompt', shape: 'size', quality: 'quality', negative: 'negative_prompt', seed: 'seed' }),
+    make('z_img', 'Z-Image Turbo', 'work', [prompt, size, seed], { prompt: 'prompt', shape: 'size', seed: 'seed' }),
+  ]
+}
+
+/** The H3 video fixture with the capability its picture tab gives it on the Images page. */
+function videoWithPicturesFixture() {
+  const base = videoRuntimeFixture()
+  return { ...base, generation: { ...base.generation, image: { guidance: 'H3: describe the picture.', create: 'picture', edit: null, roles: { picture: { prompt: 'prompt', size: 'size' } } } } }
+}
+
 /** Half a second of a 220 Hz tone as a WAV: a stand-in for a clip's soundtrack (the browser decodes by content). */
 function toneWav() {
   const rate = 24000, count = rate / 2
@@ -197,7 +225,7 @@ function decideRuntimeFixture(pictures = true) {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; speech2?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; speech2?: boolean; images?: boolean; h3images?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -207,7 +235,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [options.h3images ? videoWithPicturesFixture() : videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.images ? imageRuntimeFixtures() : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/connection', (route) => route.fulfill({ json: { bind: '127.0.0.1', port: 8000, model: route.request().url().includes('/inkling2/') ? 'inkling-2-mini' : null } }))
@@ -226,6 +254,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
     } })
   })
   if (options.videos) models.push({ id: 'minimax_h3', name: 'MiniMax H3 videos', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.images) for (const [id, name] of [['qwen_img', 'Qwen Image'], ['z_img', 'Z-Image Turbo']]) models.push({ id, name, workload: 'image', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.speech2) models.push({ id: 'styled', name: 'Styled speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.speech) models.push({ id: 'omnivoice', name: 'OmniVoice speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   const uploads: Array<{ name: string; type: string; head?: string }> = []
@@ -1903,4 +1932,40 @@ test('a blocked microphone says so instead of failing silently', async ({ page }
   await page.getByRole('tab', { name: 'From a voice sample' }).click()
   await page.getByRole('tabpanel', { name: 'From a voice sample' }).getByRole('button', { name: /Record from the microphone/ }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'microphone is blocked' })).toBeVisible()
+})
+
+test('Images is one entry in the sidebar and one page over the running picture models; the description carries over', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { images: true, llm: true })
+  await go(page, '#/hosts/local/images')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav.getByRole('link', { name: /^Images/ })).toHaveCount(1)
+  await expect(nav.getByText('Pictures', { exact: true })).toHaveCount(0)
+  await expect(nav.getByRole('link', { name: /^Z-Image/ })).toHaveCount(0)  // not a sidebar entry of its own
+  await expect(page.getByRole('heading', { name: 'Images', level: 1 })).toBeVisible()
+  const picker = page.getByLabel('Model drawing')
+  await expect(picker.locator('option')).toHaveText(['Qwen Image (Personal use only)', 'Z-Image Turbo (Work use)'])
+  await page.getByLabel(/^description/i).fill('A fox in the snow')
+  await page.getByLabel(/^avoid/i).fill('blurry')
+  await page.getByLabel(/^shape/i).selectOption('wide')
+  await picker.selectOption('z_img')
+  // The description and the shape cross over; the Avoid list has no place on this model, which says so and keeps it.
+  await expect(page.getByLabel(/^description/i)).toHaveValue('A fox in the snow')
+  await expect(page.getByLabel(/^shape/i)).toHaveValue('wide')
+  await expect(page.getByLabel(/^avoid/i)).toHaveCount(0)
+  await expect(page.getByText('has no place for the things to avoid')).toBeVisible()
+  await picker.selectOption('qwen_img')
+  await expect(page.getByLabel(/^avoid/i)).toHaveValue('blurry')
+  await page.screenshot({ path: 'test-results/screenshots/images.png', fullPage: true })
+})
+
+test('a video model with a picture tab shows it on Images and keeps its clip tabs on its own page', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { images: true, videos: true, h3images: true })
+  await go(page, '#/hosts/local/images')
+  await page.getByLabel('Model drawing').selectOption('minimax_h3')
+  await expect(page.getByRole('tab', { name: 'A picture' })).toHaveCount(0)  // one tab: no tab bar
+  await expect(page.getByLabel(/^size/i)).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'From pictures' })).toHaveCount(0)
+  await go(page, '#/hosts/local/services/minimax_h3')
+  await expect(page.getByRole('tab', { name: 'From a description' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'A picture' })).toHaveCount(0)
 })
