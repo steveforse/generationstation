@@ -6,7 +6,7 @@ import type { SavedHost } from './hosts'
 import {
   ApiError, type Connection, type Job, type JobOutput, type Launch, type Model,
   type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord,
-  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult,
+  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult, type ReferenceModel,
 } from './types'
 
 /** How many recent results to keep in view (the results sidebar lists them). */
@@ -18,6 +18,8 @@ export type SessionState = {
   snapshot: Snapshot | null
   models: Model[] | null
   runtimes: Runtime[] | null
+  /** Models not run here, with published scores, drawn beside the local ones in the quality charts. */
+  references: ReferenceModel[]
   operations: Operation[]
   jobs: Job[]
   catalogError: string
@@ -28,8 +30,14 @@ export type SessionState = {
   jobErrors: Record<string, string>
 }
 
+/** The reference models a /api/runtimes reply carries (none from a host that predates them). */
+const referencesOf = (reply: object): ReferenceModel[] => {
+  const list = (reply as { references?: unknown }).references
+  return Array.isArray(list) ? list.filter((item): item is ReferenceModel => !!item && typeof (item as ReferenceModel).name === 'string' && Array.isArray((item as ReferenceModel).scores)) : []
+}
+
 const initialState = (message = 'Open Connections to connect this host.'): SessionState => ({
-  connection: 'idle', message, snapshot: null, models: null, runtimes: null, operations: [], jobs: [],
+  connection: 'idle', message, snapshot: null, models: null, runtimes: null, references: [], operations: [], jobs: [],
   catalogError: '', actionError: '', pendingModelId: null, refusals: {}, runtimeMessages: {}, jobErrors: {},
 })
 
@@ -222,6 +230,7 @@ export class HostSession {
       this.set((state) => ({
         operations: isOperations(operations) ? operations.operations.slice(0, 8) : state.operations,
         runtimes: isRuntimes(runtimes) ? runtimes.runtimes : (state.runtimes ?? []),
+        references: isRuntimes(runtimes) ? referencesOf(runtimes) : state.references,
         jobs: isJobs(jobs) ? jobs.jobs : state.jobs,
       }))
       this.scheduleBusyPoll()

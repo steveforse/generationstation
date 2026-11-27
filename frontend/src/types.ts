@@ -21,6 +21,8 @@ export type Operation = { id: string; model_id: string; action: string; status: 
 export type RuntimeSetting = { key: string; label: string; kind: 'int' | 'bool' | 'choice' | 'optional_int'; minimum: number | null; maximum: number | null; unit: string | null; help: string; default: SettingValue; options: string[] | null; option_labels?: Record<string, string>; advanced?: boolean }
 /** A published quality score, charted against other models measured the same way. */
 export type RuntimeQuality = { metric: string; score: number; estimated: boolean; source?: string | null; as_of?: string | null; note?: string | null }
+/** A model that is not run here, with published scores, drawn as reference bars beside the local models. */
+export type ReferenceModel = { name: string; workload: string; scores: RuntimeQuality[] }
 export type RuntimePreset = { license?: RuntimeLicense | null; quality?: RuntimeQuality | null; rankings?: RuntimeQuality[]; name: string; description?: string | null; gpus: number[]; allowed_gpus: { index: number; name: string }[]; settings: RuntimeSetting[]; estimate: { ram_gib: number; gpu_min_free_gib: Record<string, number> }
   /** GPUs one start may use (overrides the runtime's), and a note per card choice ("0", "1", "0,1") on how the model behaves there. */
   max_gpus?: number | null; card_notes?: Record<string, string> }

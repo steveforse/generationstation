@@ -11,7 +11,7 @@ import type { SavedHost } from '../hosts'
 import { handOff, soundtrackToWav, spokenLine, takeHandOff, voiceTargets } from '../voiceSample'
 import { href } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
-import type { JobFile, Operation, Runtime, RuntimeEstimate } from '../types'
+import type { JobFile, Operation, ReferenceModel, Runtime, RuntimeEstimate } from '../types'
 
 /** The Models page's licence filter: everything, what is fine for work, or what is personal use only. */
 const USE_FILTERS = [['', 'All'], ['work', 'Work use'], ['personal', 'Personal use only']] as const
@@ -26,11 +26,11 @@ type SortKey = 'default' | 'name' | 'quality'
 
 /** One section of the Models page: its heading, a sort control, its quality ranking and its cards. Sorting by quality uses the
  * ranking chosen in the chart; models without a score on it come last in either direction. */
-function ModelGroup({ id, label, items, children }: { id: string; label: string; items: Runtime[]; children: (runtime: Runtime) => React.ReactNode }) {
+function ModelGroup({ id, label, items, references, children }: { id: string; label: string; items: Runtime[]; references: ReferenceModel[]; children: (runtime: Runtime) => React.ReactNode }) {
   const [metric, setMetric] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('default')
   const [descending, setDescending] = useState(false)
-  const charts = qualityCharts(items)
+  const charts = qualityCharts(items, references)
   const chart = charts.length > 0 ? chosenChart(charts, metric) : null
   const scores = chart ? scoresOn(chart[1]) : new Map<string, number>()
   const key: SortKey = sort === 'quality' && !chart ? 'default' : sort
@@ -58,7 +58,7 @@ function ModelGroup({ id, label, items, children }: { id: string; label: string;
         </button>}
       </div>}
     </div>
-    <QualityChart runtimes={items} metric={metric} onMetric={setMetric} />
+    <QualityChart runtimes={items} references={references} metric={metric} onMetric={setMetric} />
     {sorted.map(children)}
   </section>
 }
@@ -110,7 +110,7 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     </div>}
     {state.runtimes && allRuntimes.length === 0 && <div className="empty-models"><div><strong>No model servers</strong><p>This host does not list any model servers.</p></div></div>}
     {allRuntimes.length > 0 && runtimes.length === 0 && <div className="empty-models"><div><strong>No models match</strong><p>None of this host's models are marked for that use.</p></div></div>}
-    {groupByWorkload(runtimes, (runtime) => runtime.workload).map((group) => <ModelGroup key={group.key} id={group.key} label={group.label} items={group.items}>
+    {groupByWorkload(runtimes, (runtime) => runtime.workload).map((group) => <ModelGroup key={group.key} id={group.key} label={group.label} items={group.items} references={state.references.filter((reference) => reference.workload === group.key)}>
       {(runtime: Runtime) => {
       const model = state.models?.find((item) => item.id === runtime.id)
       return <section className="model-server" key={runtime.id} aria-label={runtime.name} onMouseEnter={() => setFocusId(runtime.id)} onFocus={() => setFocusId(runtime.id)}>

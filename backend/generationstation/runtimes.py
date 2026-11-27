@@ -9,15 +9,16 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .plugins import get_plugin, plugin_kinds
-from .plugins.base import GIB, BasePreset, BaseRuntime, RuntimePlugin
+from .plugins.base import GIB, BasePreset, BaseRuntime, RuntimePlugin, RuntimeQuality
 
 __all__ = [
     "GIB",
     "Catalog",
     "CatalogError",
+    "ReferenceModel",
     "SettingsError",
     "describe_runtime",
     "estimate_requirements",
@@ -28,9 +29,25 @@ __all__ = [
 ]
 
 
+class ReferenceModel(BaseModel):
+    """A model that is not run here, with published scores, charted beside the local models for context."""
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=80)
+    workload: str = Field(default="text", min_length=1, max_length=40)
+    scores: list[RuntimeQuality] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def one_score_per_metric(self):
+        metrics = [score.metric for score in self.scores]
+        if len(set(metrics)) != len(metrics):
+            raise ValueError(f"{self.name} lists a metric twice.")
+        return self
+
+
 @dataclass
 class Catalog:
     runtimes: dict[str, BaseRuntime] = field(default_factory=dict)
+    references: list[ReferenceModel] = field(default_factory=list)
 
     def plugin(self, model_id: str) -> RuntimePlugin:
         return get_plugin(self.runtimes[model_id].kind)
@@ -47,8 +64,8 @@ class SettingsError(ValueError):
 
 
 def parse_catalog(data) -> Catalog:
-    if not isinstance(data, dict) or set(data) - {"runtimes"} or not isinstance(data.get("runtimes", {}), dict):
-        raise CatalogError('The runtime catalog must be {"runtimes": {...}}.')
+    if not isinstance(data, dict) or set(data) - {"runtimes", "references"} or not isinstance(data.get("runtimes", {}), dict):
+        raise CatalogError('The runtime catalog must be {"runtimes": {...}} with an optional "references" list.')
     runtimes = {}
     for model_id, raw in data.get("runtimes", {}).items():
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", model_id):
@@ -64,7 +81,11 @@ def parse_catalog(data) -> Catalog:
         except (ValidationError, ValueError) as exc:
             raise CatalogError(f"Runtime {model_id!r}: {exc}") from exc
         runtimes[model_id] = runtime
-    return Catalog(runtimes)
+    try:
+        references = [ReferenceModel.model_validate(raw) for raw in data.get("references") or []]
+    except (ValidationError, TypeError) as exc:
+        raise CatalogError(f"References: {exc}") from exc
+    return Catalog(runtimes, references)
 
 
 def load_catalog(path: Path | None) -> Catalog:

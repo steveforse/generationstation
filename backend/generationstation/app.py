@@ -397,7 +397,8 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
 
     @api.get("/runtimes")
     def runtimes():
-        return {"runtimes": lifecycle.runtime_catalog(snapshot())}
+        return {"runtimes": lifecycle.runtime_catalog(snapshot()),
+                "references": [reference.model_dump() for reference in catalog.references]}
 
     @api.post("/runtimes/{model_id}/start", status_code=202)
     def start_runtime(model_id: str, payload: RuntimeStartRequest,

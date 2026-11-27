@@ -173,7 +173,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : [])] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/estimate', (route) => {
@@ -1524,16 +1524,23 @@ test('the Models page groups models by kind and charts their published quality s
   await speech.getByText('Quality ranking').click()
   await expect(chart).toBeVisible()
   // Ranked high to low, with an estimate marked, and the unscored model named.
-  await expect(chart.getByRole('listitem')).toHaveText([/Voice A.*1278/, /Voice B.*1104.*est\./])
+  await expect(chart.getByRole('listitem')).toHaveText([/Hosted Voice.*reference.*1310/, /Voice A.*1278/, /Voice B.*1104.*est\./])
   await expect(speech.getByText('Not on this ranking: Voice C.')).toBeVisible()
-  await chart.getByRole('listitem').nth(1).hover()
+  await chart.getByRole('listitem').filter({ hasText: 'Voice B' }).hover()
   await expect(chart.locator('.quality-detail')).toContainText('Voice B: 1104 (estimated). Estimated from a sibling.')
+  // A reference model that is not run here is drawn as an outlined bar in the ranking it has a score on, never as a card.
+  const hosted = chart.getByRole('listitem').filter({ hasText: 'Hosted Voice' })
+  await expect(hosted).toContainText('reference')
+  await expect(hosted.locator('.quality-bar-reference')).toHaveCount(1)
+  await expect(speech.locator('section.model-server')).toHaveCount(3)
+  await hosted.hover()
+  await expect(chart.locator('.quality-detail')).toContainText('Hosted Voice (not run here): 1310')
   await chart.getByText('Table').click()
   await expect(chart.getByRole('cell', { name: 'Estimate: Estimated from a sibling.' })).toBeVisible()
   // A button switches to the other ranking, which has its own models and its own gap.
   await speech.getByRole('button', { name: /Naturalness MOS/ }).click()
   const mos = speech.getByRole('figure', { name: 'Naturalness MOS' })
-  await expect(mos.getByRole('listitem')).toHaveText([/Voice A.*4\.4/, /Voice C.*4\.1/])
+  await expect(mos.getByRole('listitem')).toHaveText([/Voice A.*4\.4/, /Voice C.*4\.1/]) // the reference has no score on this ranking
   await expect(speech.getByText('Not on this ranking: Voice B.')).toBeVisible()
   await expect(chart).toHaveCount(0)
   // A kind with one scored model has no chart.
