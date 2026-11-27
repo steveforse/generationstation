@@ -1640,9 +1640,7 @@ test('every decision model is used from one Decide page, with a dropdown over th
   await expect(page.getByText('Pictures', { exact: true })).toHaveCount(0)
   await picker.selectOption('decide_karpo')
   await expect(page.getByText('Pictures', { exact: true })).toBeVisible()
-  // Results from every decision model are listed together, and an old model link opens the same page.
-  await go(page, '#/hosts/local/services/decide_small')
-  await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()
+  // Results from every decision model are listed together.
   await page.getByRole('button', { name: /Which team|charged twice|job-0000/i }).first().click()
   const decision = page.getByRole('region', { name: 'Decision' })
   await expect(decision.getByText('Answer: billing')).toBeVisible()
@@ -1728,4 +1726,10 @@ test('the paperclip uploads files from the computer and the library lists meetin
   await expect.poll(() => sent).not.toBeNull()
   expect(sent).toEqual({ text: 'Summarise this', attachments: [{ file_id: 'f'.repeat(32), name: 'notes.txt' }, { job_id: 'job-00000077', name: 'transcript.md' }], thinking: true })
   await expect(page.locator('.chat-thread').getByRole('button', { name: 'notes.txt' })).toBeVisible()
+})
+
+test('links to a decision result, in the recent results and elsewhere, open the Decide page', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { decide: true })
+  await go(page, '#/overview')
+  await expect(page.locator('.overview-recent a').first()).toHaveAttribute('href', '#/hosts/local/decide')
 })

@@ -35,6 +35,11 @@ export function href(route: Route) {
   }
 }
 
+/** Where a model's own page is: every decision model shares the Decide page, any other has a page of its own. */
+export function modelRoute(hostId: string, modelId: string, runtimes?: { id: string; workload: string }[] | null): Route {
+  return runtimes?.find((runtime) => runtime.id === modelId)?.workload === 'decision' ? { page: 'decide', hostId } : { page: 'service', hostId, modelId }
+}
+
 export function useRoute() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash))
   useEffect(() => {

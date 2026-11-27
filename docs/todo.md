@@ -21,7 +21,7 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 - Run our own VBench subset on the video models (about 100 prompts, 1 to 3 hours each, own numbers not comparable to published ones): after the Decide work, needs an idle machine. VBench-2.0 LongCat and the Wan 2.2 and LTX-2 VBench estimates are in the catalog.
 
-- Two frontend tests that failed overnight (stream reconnect, song card in chat) passed again on 2026-11-27; the cause was never found (not the code). Watch for it.
+- Frontend tests are flaky on this machine again (2026-11-27 afternoon): the stream reconnect and chat song tests, plus one or two others that vary by run, fail with timeouts, and the suite takes 1 to 1.5 minutes instead of 17 s. The same tests fail on the commit before today's changes, so it is the machine (two decision workers and a virtual machine were running), not the code. They passed at 17 s earlier today.
 
 - Clean re-timing of the video models: done 2026-11-26 (see `docs/context.md`); a few cells are scaled rather than measured.
 

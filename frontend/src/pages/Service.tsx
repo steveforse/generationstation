@@ -10,7 +10,7 @@ import { fieldsFor, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle,
 import type { FileItem } from '../components/FilePicker'
 import type { SavedHost } from '../hosts'
 import { handOff, soundtrackToWav, spokenLine, takeHandOff, voiceTargets } from '../voiceSample'
-import { href } from '../routes'
+import { href, modelRoute } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
 import type { JobFile, Operation, ReferenceModel, Runtime, RuntimeEstimate } from '../types'
 
@@ -117,7 +117,7 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
       return <section className="model-server" key={runtime.id} aria-label={runtime.name} onMouseEnter={() => setFocusId(runtime.id)} onFocus={() => setFocusId(runtime.id)}>
         <RuntimeCard key={`${host.id}:${runtime.id}`} runtime={runtime} model={model} host={view.host} fresh={view.fresh} pending={state.pendingModelId === runtime.id}
           refusal={state.refusals[runtime.id]} message={state.runtimeMessages[runtime.id]} onRun={(r, action, launch) => session.runRuntime(r, action, launch)}
-          openHref={runtime.generation ? href(runtime.workload === 'decision' ? { page: 'decide', hostId: host.id } : { page: 'service', hostId: host.id, modelId: runtime.id }) : undefined}
+          openHref={runtime.generation ? href(modelRoute(host.id, runtime.id, state.runtimes)) : undefined}
           usage={modelUsage(view.host, runtime.id)} color={modelColor(state.runtimes, runtime.id)}
           estimate={(r, launch, signal) => session.estimateRuntime(r, launch, signal)}
           onEstimate={(estimate) => setEstimates((current) => current[runtime.id] === estimate ? current : { ...current, [runtime.id]: estimate })}
@@ -134,13 +134,6 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
   </>
 }
 
-/** One model's page, or (for a decision model) the shared Decide page, so old links to a model still work. */
-export function ServicePage({ store, host, modelId }: { store: HostStore; host?: SavedHost; modelId: string }) {
-  const state = useSession(host ? store.session(host.id) : undefined)
-  if (state.runtimes?.find((item) => item.id === modelId)?.workload === 'decision') return <DecidePage store={store} host={host} modelId={modelId} />
-  return <Workbench store={store} host={host} modelId={modelId} />
-}
-
 /** One page for every decision model, like Chat is for text models: the model answering is picked from those running. */
 export function DecidePage({ store, host, modelId }: { store: HostStore; host?: SavedHost; modelId?: string }) {
   const state = useSession(host ? store.session(host.id) : undefined)
@@ -152,14 +145,14 @@ export function DecidePage({ store, host, modelId }: { store: HostStore; host?: 
     ? <label className="decide-picker"><span>Model answering</span>
       <select aria-label="Model answering" value={chosen?.id} onChange={(event) => setPickedId(event.target.value)}>{running.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.name}</option>)}</select></label>
     : null
-  return <Workbench store={store} host={host} modelId={chosen?.id ?? ''}
+  return <ServicePage store={store} host={host} modelId={chosen?.id ?? ''}
     group={{ title: 'Decide', description: 'Ask a question about a situation and get a probability for each answer, from whichever decision model is running.', ids: decide.map((runtime) => runtime.id), picker, none: decide.length > 0 && running.length === 0 }} />
 }
 
 type Group = { title: string; description: string; ids: string[]; picker: ReactNode; none: boolean }
 
 /** Generation: the plugin's form and the results. Starting and stopping happen on the Models page. */
-function Workbench({ store, host, modelId, group }: { store: HostStore; host?: SavedHost; modelId: string; group?: Group }) {
+export function ServicePage({ store, host, modelId, group }: { store: HostStore; host?: SavedHost; modelId: string; group?: Group }) {
   const session = host ? store.session(host.id) : undefined
   const state = useSession(session)
   // The result open in the modal, picked in the sidebar.

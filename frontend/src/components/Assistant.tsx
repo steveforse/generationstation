@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, ArrowUpRight, Bot, ChevronDown, Loader2, MessageCircleQuestion, RotateCcw, Square } from 'lucide-react'
 import { DraftView, MessageView, useChatTurn, usePinnedScroll } from './ChatParts'
 import type { SavedHost } from '../hosts'
-import { href } from '../routes'
+import { href, modelRoute } from '../routes'
 import { type HostStore, useSession } from '../store'
 import type { ChatMessage, Conversation } from '../types'
 
@@ -122,7 +122,7 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
           disabled={!ready || busy} onClick={() => void ask(question)}>{question}</button>)}</div>
       </div>}
       {loaded?.messages.map((message) => <MessageView key={message.id} message={message} session={session} jobs={state.jobs} runtimes={state.runtimes ?? []}
-        onOpenJob={(id) => { const job = state.jobs.find((item) => item.id === id); if (job) { setOpenSaved(false); window.location.hash = href({ page: 'service', hostId: host.id, modelId: job.model_id }) } }} />)}
+        onOpenJob={(id) => { const job = state.jobs.find((item) => item.id === id); if (job) { setOpenSaved(false); window.location.hash = href(modelRoute(host.id, job.model_id, state.runtimes)) } }} />)}
       {draft && <DraftView draft={draft} />}
       {busy && !draft && <div className="chat-msg from-model chat-waiting"><span className="chat-avatar" aria-hidden="true"><Bot size={18} /></span><span><Loader2 size={16} className="spin" aria-hidden="true" /> {activity || 'Reading…'}</span></div>}
       {error && <p className="chat-error" role="alert">{error}</p>}

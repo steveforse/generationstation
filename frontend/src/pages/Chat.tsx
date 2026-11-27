@@ -7,7 +7,7 @@ import { ConnectLink } from '../components/Connect'
 import { StatePill } from '../components/StatePill'
 import { handOff } from '../voiceSample'
 import type { SavedHost } from '../hosts'
-import { href } from '../routes'
+import { href, modelRoute } from '../routes'
 import type { HostSession } from '../session'
 import { type HostStore, useSession } from '../store'
 import type { ChatAttachment, ChatMessage, Conversation, Job, Runtime, Thinking } from '../types'
@@ -215,7 +215,7 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
         fileUrl={(job, output) => session.fileUrl(job, output)} inputUrl={(job, name) => session.inputUrl(job, name)}
         onReuse={(job) => {
           handOff(host.id, job.model_id, { mode: typeof job.inputs.mode === 'string' ? job.inputs.mode : undefined, inputs: job.inputs })
-          window.location.hash = href({ page: 'service', hostId: host.id, modelId: job.model_id })
+          window.location.hash = href(modelRoute(host.id, job.model_id, state.runtimes))
         }}
         onDelete={async (job) => { const problem = await session.deleteJob(job); if (!problem) setOpenJob(null); return problem }}
         onCancel={(job) => session.cancelJob(job)} />}

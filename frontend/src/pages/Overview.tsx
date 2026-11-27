@@ -6,7 +6,7 @@ import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
 import { StatePill } from '../components/StatePill'
 import { jobTitle, ResultThumb, jobKind, when } from '../components/Runtime'
 import type { SavedHost } from '../hosts'
-import { href } from '../routes'
+import { href, modelRoute } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
 
 export function OverviewPage({ store, hosts }: { store: HostStore; hosts: SavedHost[] }) {
@@ -40,7 +40,7 @@ function HostOverview({ store, host }: { store: HostStore; host: SavedHost }) {
       {/* The same groups, in the same order, as the sidebar. */}
       {groupByWorkload(services, ({ runtime }) => runtime.workload === 'decision' ? 'text' : runtime.workload, ({ runtime }) => runtime.name).map((group) => <section className="service-group" key={group.key} aria-labelledby={`overview-${host.id}-${group.key}`}>
         <h3 className="service-group-label" id={`overview-${host.id}-${group.key}`}>{group.label}</h3>
-        <div className="service-group-tiles">{group.items.map(({ runtime, model }) => <a key={runtime.id} className="service-tile" href={href(runtime.generation ? (runtime.workload === 'decision' ? { page: 'decide', hostId: host.id } : { page: 'service', hostId: host.id, modelId: runtime.id }) : runtime.chat ? { page: 'chat', hostId: host.id } : { page: 'models', hostId: host.id })}>
+        <div className="service-group-tiles">{group.items.map(({ runtime, model }) => <a key={runtime.id} className="service-tile" href={href(runtime.generation ? modelRoute(host.id, runtime.id, state.runtimes) : runtime.chat ? { page: 'chat', hostId: host.id } : { page: 'models', hostId: host.id })}>
           <span className="service-tile-icon" style={{ color: modelColor(state.runtimes, runtime.id), background: `${modelColor(state.runtimes, runtime.id)}1f` }}><WorkloadIcon workload={runtime.workload} /></span>
           <span className="service-tile-text"><strong>{runtime.name}</strong><small>{runtime.workload}</small>
             <StatePill state={model?.state ?? 'unknown'}>{stateText[model?.state ?? ''] ?? model?.state ?? 'Unknown'}</StatePill></span>
@@ -50,7 +50,7 @@ function HostOverview({ store, host }: { store: HostStore; host: SavedHost }) {
     {recent.length > 0 && <section className="overview-recent" aria-labelledby={`recent-${host.id}`}><h2 id={`recent-${host.id}`}>Recent results</h2><ul>{recent.map((job) => {
       const runtime = state.runtimes?.find((item) => item.id === job.model_id)
       const session = store.session(host.id)
-      return <li key={job.id}><a href={href({ page: 'service', hostId: host.id, modelId: job.model_id })}>
+      return <li key={job.id}><a href={href(modelRoute(host.id, job.model_id, state.runtimes))}>
         {runtime?.generation && session ? <ResultThumb job={job} kind={jobKind(job, runtime.generation)} fileUrl={(item, output) => session.fileUrl(item, output)} /> : null}
         <span className="overview-recent-text"><strong>{jobTitle(job)}</strong><small>{runtime?.name ?? job.model_id} · {when(job.created_at)}</small></span>
       </a></li>
