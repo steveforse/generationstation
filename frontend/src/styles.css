@@ -1168,3 +1168,6 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .connect-tool select { font: inherit; color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px }
 .connect-code { display: flex; gap: var(--sp-2); align-items: flex-start }
 .connect-code pre { flex: 1; margin: 0; overflow-x: auto; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--bg-sunken, rgba(127,127,127,.12)); font-size: 0.85rem }
+
+.chat-chip-name { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.chat-chip-failed { border-color: var(--danger, #c0392b) }

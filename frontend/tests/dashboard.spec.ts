@@ -1095,11 +1095,11 @@ test('chats with the text model, which starts a song; conversations can be attac
   await expect(page.getByRole('heading', { name: 'What would you like to talk about?' })).toBeVisible()
   await expect(page.getByText('YuE2 songs', { exact: false }).first()).toBeVisible()
 
-  // Attach an earlier clip from the picker.
-  await page.getByRole('button', { name: 'Attach', exact: true }).click()
-  const picker = page.getByRole('dialog', { name: 'Attach results' })
+  // Add an earlier clip from the library.
+  await page.getByRole('button', { name: 'Add from library' }).click()
+  const picker = page.getByRole('dialog', { name: 'Add from library' })
   await picker.getByRole('button', { name: /^A woman with a soft Welsh accent/ }).click()
-  await picker.getByRole('button', { name: 'Attach', exact: true }).click()
+  await picker.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(page.getByRole('button', { name: /^Remove A woman with a soft Welsh accent/ })).toBeVisible()
 
   await page.getByLabel('Message').fill('Write me a short song')
@@ -1674,4 +1674,49 @@ test('Chat names the running model for the tool picked', async ({ page }) => {
   await page.getByRole('combobox', { name: 'Tool' }).selectOption('Aider')
   await expect(page.locator('.connect-code code')).toContainText('aider --model openai/inkling-2-mini')
   await expect(page.locator('.connect-code code')).toContainText('OPENAI_API_BASE=http://127.0.0.1:')
+})
+
+test('the paperclip uploads files from the computer and the library lists meetings and decisions', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, chatReady: true, meeting: true, decide: true })
+  await keepFresh(page)
+  await page.route('**/api/uploads?name=*', async (route) => {
+    const name = new URL(route.request().url()).searchParams.get('name') ?? ''
+    if (name.endsWith('.bin')) { await route.fulfill({ status: 422, json: { detail: 'That type of file is not accepted.' } }); return }
+    await route.fulfill({ status: 201, json: { id: 'f'.repeat(32), name, kind: 'document', mime: 'text/plain', bytes: 12 } })
+  })
+  const conversation = { id: 'conv-3', title: 'New conversation', model_id: 'basalt', created_at: '2026-11-27T10:00:00Z', updated_at: '2026-11-27T10:00:00Z', busy: false }
+  let sent: Record<string, unknown> | null = null
+  await page.route('**/api/conversations', async (route) => {
+    if (route.request().method() === 'POST') { await route.fulfill({ status: 201, json: conversation }); return }
+    await route.fulfill({ json: { conversations: [] } })
+  })
+  const saved: unknown[] = []
+  await page.route('**/api/conversations/conv-3', (route) => route.fulfill({ json: { conversation, messages: saved } }))
+  await page.route('**/api/conversations/conv-3/messages', async (route) => {
+    sent = route.request().postDataJSON() as Record<string, unknown>
+    const user = chatMessage('u1', 1, 'user', { content: 'Summarise this', attachments: [{ file_id: 'f'.repeat(32), name: 'notes.txt', mime: 'text/plain', kind: 'document', bytes: 12 }] })
+    const answer = chatMessage('a1', 2, 'assistant', { content: 'Done.' })
+    saved.push(user, answer)
+    await route.fulfill({ status: 200, contentType: 'text/event-stream', body: chatStream([['message', user], ['start', {}], ['delta', { content: 'Done.' }], ['message', answer], ['done', {}]]) })
+  })
+  await go(page, '#/hosts/local/chat')
+  await expect(page.getByText('Attach a picture, PDF or text file with the paperclip')).toBeVisible()
+  await page.getByLabel('Choose files to attach').setInputFiles([{ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello world!') }, { name: 'odd.bin', mimeType: 'application/octet-stream', buffer: Buffer.from('x') }])
+  await expect(page.getByRole('button', { name: 'Remove notes.txt' })).toBeVisible()
+  await expect(page.getByText('odd.bin: That type of file is not accepted.')).toBeVisible()
+  await page.getByRole('button', { name: 'Remove odd.bin' }).click()
+  // The library has tabs for meetings and decisions, besides pictures, videos and sounds.
+  await page.getByRole('button', { name: 'Add from library' }).click()
+  const picker = page.getByRole('dialog', { name: 'Add from library' })
+  await expect(picker.getByRole('group', { name: 'Show' }).getByRole('button')).toHaveText(['All', 'Meetings', 'Decisions'])
+  await picker.getByRole('button', { name: 'Decisions' }).click()
+  await expect(picker.locator('.chat-pick')).toHaveCount(1)
+  await picker.getByRole('button', { name: 'Meetings' }).click()
+  await picker.locator('.chat-pick').first().click()
+  await picker.getByRole('button', { name: 'Add', exact: true }).click()
+  await page.getByLabel('Message').fill('Summarise this')
+  await page.getByLabel('Message').press('Enter')
+  await expect.poll(() => sent).not.toBeNull()
+  expect(sent).toEqual({ text: 'Summarise this', attachments: [{ file_id: 'f'.repeat(32), name: 'notes.txt' }, { job_id: 'job-00000077', name: 'transcript.md' }], thinking: true })
+  await expect(page.locator('.chat-thread').getByRole('button', { name: 'notes.txt' })).toBeVisible()
 })

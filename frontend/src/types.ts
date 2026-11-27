@@ -60,8 +60,8 @@ export type RuntimeEstimate = {
 /** A conversation with a text model; `busy` while an answer is being written. */
 /** `kind` is 'assistant' for the help bubble's thread, else 'chat'. */
 export type Conversation = { id: string; title: string; model_id: string; kind?: 'chat' | 'assistant'; created_at: string; updated_at: string; busy: boolean }
-/** A result attached to a chat message. */
-export type ChatAttachment = { job_id: string; name: string; mime?: string | null; model_id?: string }
+/** Something attached to a chat message: a result from the library (`job_id`), or a file from the person's computer (`file_id`). */
+export type ChatAttachment = { job_id?: string; file_id?: string; name: string; mime?: string | null; model_id?: string; kind?: string; bytes?: number }
 export type ToolCall = { id: string; name: string; arguments: string }
 /** One saved message. A "tool" message is the outcome of one tool call: `job_id` names the job it started. */
 export type ChatMessage = {

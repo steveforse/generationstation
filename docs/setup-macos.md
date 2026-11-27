@@ -394,6 +394,10 @@ export HF_HOME=~/ai/models/decision/.hf-cache
 
 Inputs are capped at 20,000 characters and 255 options. The worker keeps every MLX call on one thread, because MLX streams belong to the thread that made them. Karpo 31B (a community 4-bit MLX port) was tried and removed: Torchcast 31B scores higher and Torchcast 4B and pplx-decider cover the lighter and picture cases. Rankings come from JevBench, the Decision Index and Artificial Analysis; the hosted Jev is the baseline, and a few other open models (two of them personal-use only) are reference bars. The full survey is in `docs/context.md`.
 
+## Files in the chat
+
+The paperclip attaches files from your computer: pictures (up to 12 MB; the model sees them when picture reading is on), PDFs (their text is extracted with pypdf; a scan with no text layer is refused with a hint to attach its pages as pictures) and text or code files (.txt, .md, .csv, .json, .py and similar). Each file's text is cut at 120,000 characters, with a note saying so. Files are kept with the conversation under `<runtime_dir>/chat-files/` and removed when it is deleted. "Add from library" attaches things made here earlier: pictures, videos, sounds, meetings (notes, then transcript) and decisions (their result), which the model reads as text.
+
 ## Connecting your own tools to a model
 
 Chat and Decide each have a "Connect a tool" fold-out under the model's name. It shows the running model's own address (this API does not sit in between) and the settings of the tool you pick:

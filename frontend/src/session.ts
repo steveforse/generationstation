@@ -556,6 +556,17 @@ export class HostSession {
     return body as UploadRecord
   }
 
+  /** A file attached to a chat message, as a local object URL. */
+  async chatFileUrl(fileId: string) {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected.')
+    const response = await fetch(apiUrl(ctx.base, `/api/chat-files/${encodeURIComponent(fileId)}`), {
+      headers: { Authorization: `Bearer ${ctx.token}` }, signal: ctx.signal, cache: 'no-store',
+    })
+    if (!response.ok) throw new Error(`The file could not be loaded (${response.status}).`)
+    return URL.createObjectURL(await response.blob())
+  }
+
   /** A job's reference file (picture, video, audio), as a local object URL. */
   async inputUrl(job: Job, name: string) {
     return URL.createObjectURL(await this.inputBlob(job, name))

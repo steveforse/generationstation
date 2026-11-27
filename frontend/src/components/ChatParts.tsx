@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bot, ChevronDown, Loader2 } from 'lucide-react'
+import { Bot, ChevronDown, FileText, Image as ImageIcon, Loader2 } from 'lucide-react'
 import { Markdown } from './Markdown'
 import { jobTitle, ResultThumb } from './Runtime'
 import { StatePill } from './StatePill'
@@ -14,7 +14,14 @@ export type MessageBody = { text: string; attachments: ChatAttachment[]; thinkin
 const THUMBNAIL = 'thumbnail.jpg'
 export const mainOutput = (job: Job): JobOutput | undefined => job.outputs.find((output) => output.name !== THUMBNAIL && output.name !== job.details?.thumbnail)
 export const kindOf = (mime?: string | null) => mime?.split('/')[0] ?? ''
-export const KIND_WORD: Record<string, string> = { image: 'Picture', video: 'Video', audio: 'Sound' }
+export const KIND_WORD: Record<string, string> = { image: 'Picture', video: 'Video', audio: 'Sound', meeting: 'Meeting', decision: 'Decision' }
+/** What kind of result a job made, for the library's tabs: meetings and decisions are named for their tools, the rest by file type. */
+export function resultKind(job: Job, runtimes: Runtime[]) {
+  const kind = runtimes.find((runtime) => runtime.id === job.model_id)?.kind
+  return kind === 'meeting_notes' ? 'meeting' : kind === 'decide' ? 'decision' : kindOf(mainOutput(job)?.mime)
+}
+/** The kind a result's thumbnail is drawn for (a meeting or decision is a document). */
+export const thumbKind = (kind: string) => kind === 'meeting' || kind === 'decision' ? 'document' : kind
 
 /**
  * Sending a message and following the answer as it is written: the draft, what a tool is doing, and the
@@ -98,12 +105,12 @@ export function usePinnedScroll(reset: unknown) {
 export function MessageView({ message, session, jobs, runtimes, onOpenJob }: { message: ChatMessage; session: HostSession; jobs: Job[]; runtimes: Runtime[]; onOpenJob: (id: string) => void }) {
   if (message.role === 'user') return <div className="chat-msg from-user">
     <div className="chat-bubble">
-      {message.attachments.length > 0 && <div className="chat-attachments">{message.attachments.map((item) => <AttachmentChip key={`${item.job_id}/${item.name}`} item={item} jobs={jobs} session={session} onOpen={onOpenJob} />)}</div>}
+      {message.attachments.length > 0 && <div className="chat-attachments">{message.attachments.map((item) => <AttachmentChip key={`${item.file_id ?? item.job_id}/${item.name}`} item={item} jobs={jobs} runtimes={runtimes} session={session} onOpen={onOpenJob} />)}</div>}
       {message.content && <p className="chat-user-text">{message.content}</p>}
     </div>
   </div>
   if (message.role === 'tool' && message.attachments.length > 0) return <div className="chat-shown" aria-label={message.note ?? 'Results'}>
-    {message.attachments.map((item) => <JobCard key={item.job_id} jobId={item.job_id} jobs={jobs} runtimes={runtimes} session={session} onOpen={onOpenJob} />)}
+    {message.attachments.filter((item) => item.job_id).map((item) => <JobCard key={item.job_id} jobId={item.job_id!} jobs={jobs} runtimes={runtimes} session={session} onOpen={onOpenJob} />)}
   </div>
   if (message.role === 'tool') return message.job_id
     ? <JobCard jobId={message.job_id} jobs={jobs} runtimes={runtimes} session={session} onOpen={onOpenJob} />
@@ -180,12 +187,37 @@ function InlineMedia({ job, output, session }: { job: Job; output: JobOutput; se
   </div>
 }
 
-function AttachmentChip({ item, jobs, session, onOpen }: { item: ChatAttachment; jobs: Job[]; session: HostSession; onOpen: (id: string) => void }) {
+function AttachmentChip({ item, jobs, runtimes, session, onOpen }: { item: ChatAttachment; jobs: Job[]; runtimes: Runtime[]; session: HostSession; onOpen: (id: string) => void }) {
+  if (item.file_id) return <FileChip item={item} session={session} />
   const job = jobs.find((other) => other.id === item.job_id)
-  const kind = kindOf(item.mime)
+  const kind = job ? resultKind(job, runtimes) : kindOf(item.mime)
   return <button type="button" className="chat-chip" onClick={() => job && onOpen(job.id)} disabled={!job} title={job ? jobTitle(job) : 'An earlier result'}>
-    {job ? <ResultThumb job={job} kind={kind} fileUrl={(j, o) => session.fileUrl(j, o)} /> : <span className="result-thumb result-thumb-empty" />}
-    <span>{KIND_WORD[kind] ?? 'Result'} · {item.job_id.slice(0, 8)}</span>
+    {job ? <ResultThumb job={job} kind={thumbKind(kind)} fileUrl={(j, o) => session.fileUrl(j, o)} /> : <span className="result-thumb result-thumb-empty" />}
+    <span>{KIND_WORD[kind] ?? 'Result'} · {item.job_id?.slice(0, 8)}</span>
+  </button>
+}
+
+/** A file the person attached from their computer: a picture shows small, anything else shows its name; either opens on click. */
+function FileChip({ item, session }: { item: ChatAttachment; session: HostSession }) {
+  const [url, setUrl] = useState('')
+  const picture = item.kind === 'image'
+  useEffect(() => {
+    if (!picture || !item.file_id) return
+    let cancelled = false
+    let made = ''
+    session.chatFileUrl(item.file_id).then((next) => { made = next; if (!cancelled) setUrl(next); else URL.revokeObjectURL(next) }).catch(() => undefined)
+    return () => { cancelled = true; if (made) URL.revokeObjectURL(made) }
+  }, [picture, item.file_id, session])
+  const open = async () => {
+    if (!item.file_id) return
+    const target = url || await session.chatFileUrl(item.file_id)
+    const link = document.createElement('a')
+    link.href = target; link.download = picture ? '' : item.name; link.target = '_blank'; link.rel = 'noopener'
+    link.click()
+  }
+  return <button type="button" className="chat-chip" onClick={() => void open()} title={item.name}>
+    <span className={`result-thumb ${url ? '' : 'result-thumb-empty'}`} aria-hidden="true">{url ? <img src={url} alt="" /> : picture ? <ImageIcon size={22} /> : <FileText size={22} />}</span>
+    <span className="chat-chip-name">{item.name}</span>
   </button>
 }
 

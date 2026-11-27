@@ -17,7 +17,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .chat import ChatManager
@@ -189,9 +198,17 @@ class ConversationRename(BaseModel):
 
 
 class ChatAttachment(BaseModel):
+    """A result from the library (`job_id` and the file's `name`), or a file the person uploaded (`file_id`)."""
     model_config = ConfigDict(extra="forbid")
-    job_id: StrictStr = Field(min_length=1, max_length=36)
+    job_id: StrictStr | None = Field(default=None, min_length=1, max_length=36)
+    file_id: StrictStr | None = Field(default=None, min_length=32, max_length=32)
     name: StrictStr = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def one_source(self):
+        if (self.job_id is None) == (self.file_id is None):
+            raise ValueError("An attachment is a result (job_id) or an uploaded file (file_id), not both or neither.")
+        return self
 
 
 class ChatMessageRequest(BaseModel):
@@ -442,6 +459,11 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
             return await uploads.save_stream(name, request.stream())
         except UploadError as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    @api.get("/chat-files/{file_id}")
+    def chat_file(file_id: str):
+        path, mime, name = chat.file_path(file_id)
+        return FileResponse(path, media_type=mime, filename=name, content_disposition_type="inline" if mime.startswith("image/") else "attachment")
 
     @api.get("/jobs/{job_id}/inputs/{name}")
     def job_input(job_id: str, name: str):
