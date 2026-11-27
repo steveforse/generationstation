@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .chatfiles import MAX_DOC_CHARS, ChatFileError, ChatFiles
 from .lifecycle import LifecycleError
+from .make_image import ImageTool
 from .speak import SpeakTool
 from .uploads import UploadError, kind_of
 from .voices import VoiceNotFound
@@ -120,6 +121,7 @@ class ChatManager:
     def __init__(self, store, catalog, generation, uploads, opener=None, host_tools=None, web_tools=None,
                  job_tools=None, voices=None):
         self.speak_tool = SpeakTool(voices)
+        self.image_tool = ImageTool()
         self.host_tools = host_tools
         self.job_tools = job_tools
         self.web_tools = web_tools
@@ -637,6 +639,10 @@ class ChatManager:
                     lines.append(f"  - Cues in the text: {info.direction.cues.text} {', '.join(info.direction.cues.examples)}")
                 continue
             modes = list(plugin.modes.items()) or ([(None, None)] if plugin.generates else [])
+            if plugin.image:
+                info = plugin.image
+                lines.append("  - Picture tabs are used from the **Images** page, shared by every picture model. " + info.guidance)
+                modes = [item for item in modes if (item[0] or "") not in info.roles]
             for key, mode in modes:
                 specs = mode.inputs if mode else plugin.inputs
                 fields = [spec.label for spec in specs.values() if not spec.advanced and spec.kind not in {"crop", "seed"}]
@@ -665,7 +671,7 @@ class ChatManager:
         """One tool per way of making something on each running generator."""
         states = self.store.runtime_states()
         tools, handlers = [], {}
-        speaking = []
+        speaking, picturing = [], []
         for model_id, runtime in self.catalog.runtimes.items():
             plugin = self.catalog.plugin(model_id)
             if not plugin.generates or states.get(model_id, {}).get("state") != "ready":
@@ -675,6 +681,9 @@ class ChatManager:
                 continue
             modes = [(key, mode.label, mode.help, mode.inputs) for key, mode in plugin.modes.items()] or \
                 [(None, None, None, plugin.inputs)]
+            if plugin.image:  # its picture tabs are reached through the one make_image tool; any other tab keeps its own tool
+                picturing.append((model_id, runtime, plugin))
+                modes = [item for item in modes if (item[0] or "") not in plugin.image.roles]
             for mode, label, help_text, specs in modes:
                 name = tool_name(model_id, mode)
                 properties, required = {}, []
@@ -692,6 +701,10 @@ class ChatManager:
                     "parameters": {"type": "object", "properties": properties, "required": required}}})
                 handlers[name] = {"model_id": model_id, "runtime": runtime, "plugin": plugin, "mode": mode,
                                   "specs": specs}
+        make_image = self.image_tool.schema(picturing)
+        if make_image:
+            tools.append(make_image)
+            handlers["make_image"] = {"image": picturing}
         speak = self.speak_tool.schema(speaking)
         if speak:
             tools.append(speak)
@@ -750,6 +763,17 @@ class ChatManager:
             return {"text": "The arguments were not a JSON object. Call the tool again."}
         if handler.get("builtin"):
             return self._builtin(call["name"], arguments, conversation, turn)
+        if handler.get("image"):
+            try:
+                model_id, runtime, plugin, mode, inputs, references, notes = self.image_tool.plan(arguments, handler["image"])
+                for field, refs in references.items():
+                    spec = self.image_tool.fields_of(plugin, runtime, mode)[field]
+                    inputs[field] = [self._upload_result(ref, spec) for ref in refs]
+                job = self.generation.create(model_id, inputs)
+            except (LifecycleError, UploadError, ValueError) as exc:
+                return {"text": f"Not started: {getattr(exc, 'message', None) or exc}"}
+            left = f" Left out: {'; '.join(notes)}." if notes else ""
+            return {"text": f"Started job {job['id'][:8]} on {runtime.name}. It will appear in the chat when it is done.{left}", "job_id": job["id"], "job": job}
         if handler.get("speak"):
             try:
                 model_id, runtime, inputs, notes = self.speak_tool.plan(arguments, handler["speak"], self.uploads)

@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, SettingSpec, TimingSpec
+from .images import ImageInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 # The text encoder (Qwen3-VL 8B, BF16) when it is kept on the card instead of in system RAM.
@@ -74,6 +75,28 @@ class QwenImagePlugin(WorkerPlugin):
             help="Leave empty for a new picture each time. Reuse a seed to get the same picture again.",
             advanced=True),
     }
+
+    image: ClassVar[ImageInfo] = ImageInfo(
+        guidance=("Describe the subject, setting, style and light. Put any words that should appear in the picture in quotes: "
+                  "these models draw legible lettering."),
+        create="", roles={"": {"prompt": "prompt", "shape": "size", "quality": "quality", "negative": "negative_prompt", "seed": "seed"}})
+
+    @staticmethod
+    def _mflux(runtime) -> bool:
+        return "mflux" in (runtime.worker_script or "")
+
+    def mode_inputs(self, mode, runtime=None):
+        """The Apple-silicon (mflux) models make one quality per preset, so they have no Quality field; a model whose presets
+        use no negative prompt has no Avoid field."""
+        inputs = super().mode_inputs(mode, runtime)
+        if runtime is None:
+            return inputs
+        drop = set()
+        if self._mflux(runtime):
+            drop.add("quality")
+            if not any(preset.options.get("negative") for preset in runtime.presets.values()):
+                drop.add("negative_prompt")
+        return {key: spec for key, spec in inputs.items() if key not in drop}
 
     def estimate(self, runtime, preset, values, gpus):
         ram, vram = super().estimate(runtime, preset, values, gpus)

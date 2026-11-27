@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, SettingSpec, TimingSpec
+from .images import ImageInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 PROMPT = InputSpec(
@@ -293,6 +294,13 @@ class MiniMaxH3Plugin(WorkerPlugin):
                 "seed": PICTURE_SEED,
             }),
     }
+
+    image: ClassVar[ImageInfo] = ImageInfo(
+        guidance=("Describe the picture: the subject, the setting, the light, the style and the framing. To edit, name the "
+                  "pictures you give as \"picture 1\", \"picture 2\" and say what to keep and what changes."),
+        create="picture", edit="edit",
+        roles={"picture": {"prompt": "prompt", "shape": "shape", "size": "size", "quality": "quality", "seed": "seed"},
+               "edit": {"pictures": "images", "prompt": "prompt", "notes": "notes", "shape": "shape", "size": "size", "quality": "quality", "seed": "seed"}})
 
     def check_inputs(self, mode, values, files):
         if mode == "frames" and not (files.get("first") or files.get("last")):
