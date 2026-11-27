@@ -903,7 +903,8 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .chat-think select { height: 28px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer }
 .chat-think select:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: 1px; border-radius: var(--r-sm, 4px) }
 .chat-think-on { border-color: var(--accent-line); background: var(--bg-accent-soft); color: var(--accent) }
-.chat-picker { display: flex; flex-direction: column; gap: var(--sp-3) }
+.chat-picker { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5) var(--sp-5) }
+@media (max-width: 720px) { .chat-picker { padding: var(--sp-3) var(--sp-4) var(--sp-4) } }
 .chat-picker-filter { display: flex; flex-wrap: wrap; gap: var(--sp-2) }
 .chat-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: var(--sp-2); max-height: 60dvh; margin: 0; padding: 0; overflow-y: auto; list-style: none }
 .chat-pick { position: relative; display: flex; align-items: center; gap: var(--sp-3); width: 100%; padding: var(--sp-2); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-surface); text-align: left; color: var(--text) }
@@ -1171,3 +1172,6 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 
 .chat-chip-name { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .chat-chip-failed { border-color: var(--danger, #c0392b) }
+
+.chat-main > .connect-panel { margin: var(--sp-2) var(--sp-5) 0 }
+@media (max-width: 720px) { .chat-main > .connect-panel { margin: var(--sp-2) var(--sp-3) 0 } }
