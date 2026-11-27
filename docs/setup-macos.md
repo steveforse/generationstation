@@ -7,7 +7,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Works | Does not (needs an NVIDIA card) |
 | --- | --- |
 | Dashboard, API, database, chat, logs | HunyuanVideo 1.5 |
-| Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s | |
+| Video: Wan 2.2 TI2V 5B through mlx-video, 832x480 clips of up to 1.4 s; FastMetal-QAD (distilled Wan, up to 5 s at 1280x704 or 832x480); LTX-2.5 with sound, up to 5 s at 1280x704 (personal use) | |
 | Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
 | Pictures: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
 | Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use while the app stays internal) | |
@@ -35,6 +35,8 @@ The Mac reports its shared memory as one pool (`apple-unified-memory`), counted 
 | `z_image`, Z-Image Turbo (8-bit) | 9 GiB, while a picture is made | 10 GB | 16-22 s for 1024x1024 |
 | `qwen_image_2512`, Qwen-Image 2512 (8-bit) | 38 GiB, while a picture is made | 34 GB | about 3 min for 768x1152 |
 | `h3_video`, MiniMax H3 (BF16 streamed from the SSD) | 14 GiB, while a clip is made | 134 GB | 5 s at 480p: about 3 min as a draft, 16 min at standard |
+| `fastmetal_video`, FastMetal-QAD 5B / 14B (INT8) | 26 GiB / 30 GiB (a new description briefly needs 24 GiB for the text encoder) | 18 GB / 39 GB | 5B: 3 s clip in about 75 s (about 40 s faster mode); 14B: 5 s clip in about 6 min (about 2 min faster mode) |
+| `ltx_video`, LTX-2.5 distilled (4-bit) | 22 GiB (14 GiB at the peak up to 1280x704) | 26 GB | 4 s clip: about 55 s quick, 150 s sharp |
 | `wan_video`, Wan 2.2 TI2V 5B (8-bit) | 30 GiB, while a clip is made | 18 GB | about 70-100 s for a 1.4 s clip |
 | `qwen3_tts` (8-bit, three 1.7B models, one at a time) | 8 GiB | 9 GB | a few seconds per sentence |
 | `omnivoice` (bf16) | 6 GiB | 1.5 GB | a few seconds per sentence |
@@ -48,7 +50,7 @@ A start is refused unless its estimate fits in the memory the Mac has available,
 
 ## Personal and work models
 
-The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2, ACE-Step, MiniMax Music 3 and meeting notes are work use; Qwen Image 2.1, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
+The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B, Flash-Next, Hy4-Flash, Inkling 2 Mini, Qwen-Image 2512, Z-Image Turbo, Qwen3-TTS, Wan 2.2, FastMetal, ACE-Step, MiniMax Music 3 and meeting notes are work use; Qwen Image 2.1, LTX-2.5, YuE2, OmniVoice, Drama 3, S2 Pro, Breeze TTS 2 and MiniMax H3 are personal use only. If colleagues will use the app, delete the personal entries from their `runtimes.json` (or hide them behind a separate host) and see the filter on the Models page. The details of each model give the clause behind its verdict.
 
 ## Models page: sections and quality chart
 
@@ -56,7 +58,7 @@ The Models page is grouped like the sidebar (Text, Speech, Pictures, Video, Musi
 
 Each section has a Sort control: default order, name, or quality (using the ranking chosen in the chart), with a button to reverse it. Models without a score on that ranking stay last in either direction.
 
-A group can offer several rankings (a model carries extra scores in `rankings`); buttons above the chart switch between them, and models missing from the chosen ranking are named under it.
+Claude Haiku, Sonnet and Opus 5.5 appear on the text rankings as outlined "reference" bars (the `references` list in the catalog): hosted models that are not run here, shown for scale. A group can offer several rankings (a model carries extra scores in `rankings`); buttons above the chart switch between them, and models missing from the chosen ranking are named under it.
 
 | Group | Measure | Source |
 | --- | --- | --- |
@@ -64,6 +66,9 @@ A group can offer several rankings (a model carries extra scores in `rankings`);
 | Text | LLM Stats score | llm-stats.com, an aggregate of mostly vendor-reported benchmarks (all four models) |
 | Text | DeepSWE v1.1 | Vendor-reported agentic coding scores (all four; harnesses differ, Hy4-Flash's is second-hand) |
 | Text | Arena text Elo | LMArena human votes, read through its Hugging Face dataset because arena.ai blocks scripts (Qwen3.8 27B and Inkling 2 Mini only) |
+| Text | GPQA Diamond | The vendors' model cards (Qwen3.8 27B, Flash-Next, Inkling); Hy4-Flash only has an indicative OpenRouter figure. Claude references are OpenRouter measurements, which score lower than card figures |
+| Text | Terminal-Bench 4.0 | Vals AI, mini-swe-agent (independent; Qwen3.8 27B and Flash-Next are not on it) |
+| Text | Terminal-Bench 2.1 | Mixed sources, each stated per bar (Qwen and Thinking Machines cards, Artificial Analysis through BenchLM, Vals for Claude); sources disagree by 20 points or more for the same model |
 | Text | LiveBench coding | LiveBench 2.0 release 2026-11-06, independent (Qwen3.8 27B and Inkling 2 Mini only) |
 | Speech | Speech arena Elo | Artificial Analysis |
 | Music | SongBench average (WildSongBench) | The YuE2 authors' model card, so vendor-run and scored by automatic metrics |
@@ -268,6 +273,41 @@ uv pip install --python ~/ai/envs/mlx-video/bin/python "git+https://github.com/B
 ```
 
 The worker needs `google/umt5-xxl`'s tokenizer in the Hugging Face cache (the first generation without `HF_HUB_OFFLINE` fetches it). HunyuanVideo 1.5 is not set up: the only MLX port found is gated, and a GGUF run through stable-diffusion.cpp took about 80 s per step at 480x272. Its licence also excludes the EU, UK and South Korea.
+
+### FastMetal-QAD video (FastVideo)
+
+[FastMetal-QAD](https://haoailab.com/blogs/fastmetal/) (Hao AI Lab) are Wan models distilled to 3 denoising steps and quantised to INT8 for MLX: the 5B is Wan 2.2 TI2V 5B (1280x704 or 704x1280, up to 121 frames at 24 fps), the 14B is Wan 2.1 T2V 14B (832x480 or 480x832, up to 81 frames at 16 fps), and a 1.3B exists too (not in the template). Weights and code are Apache-2.0. The runtime is text-to-video only: no first picture and no sound. "Faster" mode makes about half the frames and fills the rest in with RIFE interpolation (the 14B drops from 338 s to 135 s). Each clip is one FastVideo script process, so nothing stays resident between clips; a new description first runs the UMT5 text encoder (up to 24 GiB resident for a few seconds, then the clip itself needs 12 GiB for the 5B and 22 GiB for the 14B). The encoded description is cached, so the same description again is quicker.
+
+```sh
+git clone --depth 1 --filter=blob:none https://github.com/hao-ai-lab/FastVideo.git ~/ai/src/FastVideo   # a full clone kept dropping the connection here
+cd ~/ai/src/FastVideo
+git sparse-checkout init --no-cone
+git sparse-checkout set /LICENSE /pyproject.toml /README.md /docs/ /examples/inference/basic/ /fastvideo/
+git checkout
+uv venv --python 3.12 --seed ~/ai/envs/fastmetal
+VIRTUAL_ENV=~/ai/envs/fastmetal uv pip install -e ".[mlx]"     # large: the base dependencies include torch, gradio and ray, none of them CUDA on a Mac
+~/ai/envs/meeting-worker/bin/hf download FastVideo/FastMetal-5B-QAD  --local-dir ~/ai/models/video/fastmetal/5B    # 18 GB
+~/ai/envs/meeting-worker/bin/hf download FastVideo/FastMetal-14B-QAD --local-dir ~/ai/models/video/fastmetal/14B   # 39 GB
+```
+
+Set `python` to `~/ai/envs/fastmetal/bin/python`, and each preset's `model_dir` and `repo_dir` (the FastVideo checkout) in the `fastmetal_video` entry. The first clip downloads a small TAEHV decoder file from GitHub into `~/.cache/fastvideo/taehv/`; after that the worker runs offline.
+
+### LTX-2.5 video (ltx-2-mlx)
+
+[LTX-2.5](https://huggingface.co/Lightricks) makes clips with a sound track, from a description or a first picture. It is personal use only here: the LTX-2.x Community License needs a paid licence for any use by an entity with US$10M or more annual revenue (affiliates included), apart from a company's testing and evaluation in a non-production environment. The code (ltx-2-mlx) is MIT.
+
+It runs from a fork of `dgrauet/ltx-2-mlx` pinned to the tag below, because the ungated 4-bit pack (Phosphene's conversion, by `Mrbizarro`) will not load in mainline. The `dgrauet` weights themselves are gated: accept the licence on their page and log in with `hf auth login` if you want them instead. Only the distilled pack exists here, so there is no negative prompt and no guidance setting. Each clip is one process under a 26 GiB MLX limit (a soft limit). Sizes are multiples of 64 (quick 704x448, sharp 1280x704) and clips are 2, 4 or 5 s at 24 fps. On an M5 Max a 4 s quick clip took 53 s and a sharp one 147 s, both peaking at 13.8 GiB; 1920x1088 at 5 s took 595 s at 29.8 GiB and is not offered. The sound is quiet ambience.
+
+```sh
+git clone --branch "v0.14.19+ltx25.9" --depth 1 https://github.com/mrbizarro/ltx-2-mlx ~/ai/src/ltx-2-mlx-fork
+cd ~/ai/src/ltx-2-mlx-fork
+for f in packages/*/pyproject.toml; do sed -i '' '/^readme = "..\/..\/README.md"/d' $f; done   # hatchling rejects that path
+UV_PROJECT_ENVIRONMENT=~/ai/envs/ltx25 uv sync --python 3.12    # do not use --all-extras: the trainer extras hang
+~/ai/envs/meeting-worker/bin/hf download Mrbizarro/ltx-2.5-mlx-q4 --local-dir ~/ai/models/video/ltx25-q4-mrbizarro      # 19 GB
+~/ai/envs/meeting-worker/bin/hf download Mrbizarro/gemma4-12b-ltx25-q4 --local-dir ~/ai/models/video/ltx25-gemma4-q4     # 6.3 GB text encoder
+```
+
+Set `python` to `~/ai/envs/ltx25/bin/python` and `model_dir` and `gemma_dir` to those folders in the `ltx_video` entry.
 
 ### MiniMax H3 (h3.c)
 

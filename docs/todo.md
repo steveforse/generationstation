@@ -4,10 +4,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## In progress
 
-- **Chat page: name only running models, and a dropdown when two or more run.** Code and tests are done (frontend 47 tests, switching sends `model_id` with the message and the host moves the conversation to it). Still to do: a backend test for the switch in `backend/tests/test_chat.py`, then commit.
-- **LTX-2.5 video (personal use).** Plugin, worker, catalog entries and docs are written and the catalog tests pass. Still to do: one end-to-end clip through the app (queued behind the other agents' generations), then commit.
-- **Video engines to add, in this order.** (1) FastMetal-QAD 5B and 14B (Apache-2.0, official MLX runtime), (2) Wan 2.2 A14B through mlx-video, (3) LongCat-Video (MIT, single-developer MLX port), (4) LTX-2.5 (above). Four background agents have installed and measured them; LTX-2.5 reported, the others are pending. Each needs a plugin, worker, catalog entry, quality score, docs, tests and an end-to-end clip.
-- **LLM benchmarks: add AIME 2025, GPQA Diamond and LiveCodeBench rankings, plus Claude Haiku, Sonnet and Opus as reference bars.** A research agent is collecting sourced numbers for the four local models and the Claude models. The reference bars need a new idea in the catalog and chart: scores for models that are not run here, drawn in a neutral style and labelled as reference points. Hy4-Flash has no published AIME25/GPQA/LiveCodeBench so far.
+- **Video engines still to add: Wan 2.2 A14B (mlx-video) and LongCat-Video (MIT, single-developer MLX port).** Their agents are still measuring (Wan A14B has been slow under shared load). Each needs a plugin, worker, catalog entry, quality score, docs, tests and an end-to-end clip.
+- **LLM benchmarks and Claude reference bars: committed** (GPQA Diamond, Terminal-Bench 4.0 and 2.1, plus the earlier rankings; Claude Haiku, Sonnet and Opus 5.5 as references). Open: Fable 5.2 as a fourth reference (offered); Terminal-Bench 4.0 has no independent score for Qwen3.8 27B and Flash-Next; AIME 2025 is not published for any of the models.
 
 ## Waiting for a decision
 
@@ -26,6 +24,11 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Done this session (all on PR #2 unless noted)
 
+- Models page: default sort is alphabetical, sidenav and Overview lists are alphabetical, margin under the sort control.
+- FastMetal-QAD (5B, 14B) and LTX-2.5 video added and tested through the app (FastMetal 2 s clip in 29 s fast mode, LTX 2 s clip with sound in 31 s).
+- Chat page names only running models, with a dropdown to switch between running chat models (the host moves the conversation to the model chosen).
+- Reference-model support in the quality charts; quality rankings moved below the cards with the sort control above them.
+- Running TODO (this file).
 - Mac generators: Qwen Image family, Z-Image, Qwen-Image 2512, YuE2, five speech models, Wan 2.2 5B, H3, ACE-Step 1.5, MiniMax Music 3.
 - Licence badges, filter, details; Models page grouped by kind with folded quality rankings, a ranking switcher and sorting by name or quality.
 - Text rankings: Intelligence Index, LLM Stats, DeepSWE, Arena text Elo, LiveBench coding. Music ranking: SongBench. Video: Artificial Analysis open-weights (added with LTX-2.5, not yet committed).

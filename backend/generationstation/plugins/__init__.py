@@ -3,10 +3,12 @@ from .ace_step import AceStepPlugin
 from .basalt import BasaltPlugin
 from .base import RuntimePlugin
 from .breeze_tts import BreezeTTSPlugin
+from .fastmetal_video import FastMetalVideoPlugin
 from .fish_drama3 import FishDrama3Plugin
 from .fish_s2 import FishS2Plugin
 from .h3_video import H3VideoPlugin
 from .llm import LLMPlugin
+from .ltx_video import LtxVideoPlugin
 from .meeting_notes import MeetingNotesPlugin
 from .minimax_h3 import MiniMaxH3Plugin
 from .minimax_music import MiniMaxMusicPlugin
@@ -31,6 +33,8 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     FishS2Plugin(),
     BreezeTTSPlugin(),
     WanVideoPlugin(),
+    LtxVideoPlugin(),
+    FastMetalVideoPlugin(),
     MeetingNotesPlugin(),
 )}
 

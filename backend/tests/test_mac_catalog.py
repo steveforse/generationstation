@@ -72,3 +72,15 @@ def test_scores_for_quantised_builds_are_marked_as_estimates():
     assert all(preset.quality.estimated for preset in flash.presets.values())
     assert CATALOG.runtimes["qwen38_27b"].quality.estimated and CATALOG.runtimes["wan_video"].quality.estimated
     assert not CATALOG.runtimes["fish_drama3"].quality.estimated
+
+
+def test_reference_scores_sit_on_rankings_the_local_models_have():
+    local = set()
+    for entry in CATALOG.runtimes.values():
+        for owner in [entry, *entry.presets.values()]:
+            local |= {score.metric for score in [owner.quality, *owner.rankings] if score is not None}
+    assert CATALOG.references, "the Mac template carries the Claude reference points"
+    for reference in CATALOG.references:
+        for score in reference.scores:
+            assert score.metric in local, (reference.name, score.metric)
+            assert score.source and score.as_of and not score.estimated

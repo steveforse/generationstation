@@ -61,7 +61,7 @@
           "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
         },
         {
-          "metric": "DeepSWE v1.1 (vendor-reported)",
+          "metric": "DeepSWE v1.1",
           "score": 42.2,
           "estimated": true,
           "source": "https://huggingface.co/Qwen/Qwen3.8-27B",
@@ -83,6 +83,22 @@
           "source": "https://livebench.ai/data/20261106/table.csv",
           "as_of": "2026-11-26",
           "note": "The coding category of LiveBench 2.0, run by the LiveBench team (independent). Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 89.2,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-27B",
+          "as_of": "2026-11-26",
+          "note": "Reported by Qwen on its model card; no sample count or effort stated. Artificial Analysis measured 90.5 at its highest effort. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 73.0,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-27B",
+          "as_of": "2026-11-26",
+          "note": "Reported by Qwen on its model card (agent 'Terminus'). Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
         }
       ]
     },
@@ -225,12 +241,28 @@
           "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
         },
         {
-          "metric": "DeepSWE v1.1 (vendor-reported)",
+          "metric": "DeepSWE v1.1",
           "score": 58.7,
           "estimated": true,
           "source": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
           "as_of": "2026-11-26",
           "note": "Agentic coding, reported by the vendor. Best of two harnesses (Claude Code, mini-SWE-agent) at xhigh reasoning. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 91.7,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
+          "as_of": "2026-11-26",
+          "note": "Reported by Qwen on its model card; no sample count or effort stated. Artificial Analysis measured 92.3. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 86.1,
+          "estimated": true,
+          "source": "https://benchlm.ai/models/qwen3-8-flash-next",
+          "as_of": "2026-11-26",
+          "note": "Artificial Analysis harness (Terminus 2, pass@1 over 3 runs), read through BenchLM and not checked on Artificial Analysis itself. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
         }
       ]
     },
@@ -309,12 +341,28 @@
           "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
         },
         {
-          "metric": "DeepSWE v1.1 (vendor-reported)",
+          "metric": "DeepSWE v1.1",
           "score": 64.6,
           "estimated": true,
           "source": "https://llmlearner.com/models/hy4-flash",
           "as_of": "2026-11-26",
           "note": "Agentic coding, reported by the vendor. Second-hand: Tencent's figure (Thinking High, with tools) as quoted by a mirror, harness not stated. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 89.3,
+          "estimated": true,
+          "source": "https://openrouter.ai/tencent/hy4-flash",
+          "as_of": "2026-11-26",
+          "note": "Indicative only: Tencent publishes no GPQA figure. This is OpenRouter's quality panel for providers serving Hy4-Flash (88.2 to 91.2 by provider), a different method from the model-card figures of the other local models. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 15.15,
+          "estimated": true,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. Tencent's card says 19.2 and tbench.ai's 4.1 board 11.8. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
         }
       ]
     },
@@ -388,7 +436,7 @@
           "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
         },
         {
-          "metric": "DeepSWE v1.1 (vendor-reported)",
+          "metric": "DeepSWE v1.1",
           "score": 48.2,
           "estimated": true,
           "source": "https://thinkingmachines.ai/model-card/inkling-2-mini",
@@ -410,6 +458,30 @@
           "source": "https://livebench.ai/data/20261106/table.csv",
           "as_of": "2026-11-26",
           "note": "The coding category of LiveBench 2.0, run by the LiveBench team (independent). Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 86.6,
+          "estimated": true,
+          "source": "https://thinkingmachines.ai/model-card/inkling-2-mini",
+          "as_of": "2026-11-26",
+          "note": "Reported by Thinking Machines on its model card; no effort, tools or sample count stated. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 6.57,
+          "estimated": true,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. Thinking Machines reports 5.6. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 71.6,
+          "estimated": true,
+          "source": "https://thinkingmachines.ai/model-card/inkling-2-mini",
+          "as_of": "2026-11-26",
+          "note": "Reported by Thinking Machines (agent 'pi v0.83.0'); no independent run found. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
         }
       ]
     },
@@ -1018,7 +1090,17 @@
         "source": "https://benchmarklist.com/benchmarks/arena_ai_text_to_video/",
         "as_of": "2026-11-10",
         "note": "MiniMax H3, 29,257 votes. Read through the benchmarklist.com mirror of arena.ai (dated 2026-11-10). Rated on the hosted full-precision model, not the quantised build run here."
-      }
+      },
+      "rankings": [
+        {
+          "metric": "Open-weights video arena Elo (Artificial Analysis)",
+          "score": 1164,
+          "estimated": false,
+          "source": "https://artificialanalysis.ai/video/leaderboard/text-to-video/open-weights",
+          "as_of": "2026-11-26",
+          "note": "MiniMax H3 on the open-weights board. Blind human votes run by Artificial Analysis; rated on the hosted model, not the quantised build run here."
+        }
+      ]
     },
     "ace_step": {
       "kind": "ace_step",
@@ -1114,6 +1196,321 @@
         "as_of": "2026-11-26",
         "note": "Scored by the YuE2 authors on WildSongBench, not by MiniMax. Best lyric accuracy of the three (phoneme error 6.3% against 7.5% ACE-Step and 8.4% YuE2). MiniMax rewrites the style prompt before generating."
       }
+    },
+    "ltx_video": {
+      "kind": "ltx_video",
+      "name": "LTX-2.5 video",
+      "workload": "video",
+      "description": "Short clips with sound from a description or a first picture. Personal use only: a company above US$10M revenue needs a paid licence.",
+      "python": "/Users/YOU/ai/envs/ltx25/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/ltx-video",
+      "port": 8300,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "LTX-2.5 distilled (MLX, 4-bit)",
+          "description": "Up to 1280x704 and 5 s with sound. About 1 minute for a 4 s quick clip, 2.5 minutes sharp. Needs about 14 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/video/ltx25-q4-mrbizarro",
+            "gemma_dir": "/Users/YOU/ai/models/video/ltx25-gemma4-q4",
+            "memory_limit_gib": 26
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 22,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "LTX-2.x Community License (paid licence needed above US$10M annual revenue)",
+        "code": "ltx-2-mlx: MIT",
+        "note": "Section 2.1: entities with annual revenues of at least US$10,000,000 (affiliates included) need a paid licence for any use except non-commercial purposes. Section 2.2 limits those to personal hobby use unconnected to any employer, or a company's testing, evaluation and R&D in a non-production environment. So it is personal here; at work only for evaluation.",
+        "url": "https://huggingface.co/Mrbizarro/ltx-2.5-mlx-q4/blob/main/LICENSE-LTX-2.x-Community-License.md"
+      },
+      "quality": {
+        "metric": "Open-weights video arena Elo (Artificial Analysis)",
+        "score": 938,
+        "estimated": true,
+        "source": "https://artificialanalysis.ai/video/leaderboard/text-to-video/open-weights",
+        "as_of": "2026-11-26",
+        "note": "Artificial Analysis rates the hosted LTX-2.5 Fast (938) and Pro (932); this is the 4-bit distilled build, which should be close to Fast but is not rated itself. Blind human votes run by Artificial Analysis."
+      }
+    },
+    "fastmetal_video": {
+      "kind": "fastmetal_video",
+      "name": "FastMetal video",
+      "workload": "video",
+      "description": "Short clips from a description, fast: distilled Wan models, 3 denoise steps (Apache-2.0). No first picture and no sound.",
+      "python": "/Users/YOU/ai/envs/fastmetal/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/fastmetal-video",
+      "port": 8310,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "5b",
+      "presets": {
+        "5b": {
+          "name": "FastMetal 5B (1280x704)",
+          "description": "Wan 2.2 5B distilled. Up to 5 s at 1280x704; a 3 s clip takes about 75 s. Needs about 26 GiB while a new description is encoded, 12 GiB after.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "family": "wan22",
+            "model_dir": "/Users/YOU/ai/models/video/fastmetal/5B",
+            "repo_dir": "/Users/YOU/ai/src/FastVideo"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 26,
+            "gpu_min_free_gib": {}
+          }
+        },
+        "14b": {
+          "name": "FastMetal 14B (832x480)",
+          "description": "Wan 2.1 14B distilled. Up to 5 s at 832x480; a 5 s clip takes about 6 minutes (about 2 in faster mode). About 22 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "family": "t2v",
+            "model_dir": "/Users/YOU/ai/models/video/fastmetal/14B",
+            "repo_dir": "/Users/YOU/ai/src/FastVideo",
+            "memory_limit_gib": 26
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 30,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "FastVideo: Apache-2.0 (TAEHV and RIFE decoders: MIT)",
+        "note": "Distilled from Wan 2.2 TI2V 5B and Wan 2.1 T2V 14B, both Apache-2.0. The first run downloads a small TAEHV decoder file from GitHub once.",
+        "url": "https://huggingface.co/FastVideo/FastMetal-14B-QAD"
+      }
     }
-  }
+  },
+  "references": [
+    {
+      "name": "Claude Haiku 5.5",
+      "workload": "text",
+      "scores": [
+        {
+          "metric": "Intelligence Index v5 (Artificial Analysis)",
+          "score": 36.5,
+          "estimated": false,
+          "source": "https://artificialanalysis.ai/models/claude-haiku-5-5",
+          "as_of": "2026-11-26",
+          "note": "Artificial Analysis, at its Max effort setting. A hosted model that is not run here."
+        },
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 48.5,
+          "estimated": false,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "The LLM Stats composite index. A hosted model that is not run here."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 59.9,
+          "estimated": false,
+          "source": "https://www.deepswe.dev/",
+          "as_of": "2026-11-26",
+          "note": "Independent run by Mercor (mini-SWE-agent, 113 tasks, Max effort), not the vendor figure the local models show. A hosted model that is not run here."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1398,
+          "estimated": false,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, overall, published 2026-11-22; Arena rates it at High effort. A hosted model that is not run here."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 77.6,
+          "estimated": false,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0; effort not stated. A hosted model that is not run here."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 86.6,
+          "estimated": false,
+          "source": "https://openrouter.ai/benchmarks/gpqa-diamond",
+          "as_of": "2026-11-26",
+          "note": "Measured by OpenRouter through real provider endpoints, which scores lower than model-card figures for the same model (Qwen3.8 27B: 82.2 there against 89.2 on its card), so compare with the local bars loosely. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 36.36,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. A hosted model that is not run here."
+        }
+      ]
+    },
+    {
+      "name": "Claude Sonnet 5.5",
+      "workload": "text",
+      "scores": [
+        {
+          "metric": "Intelligence Index v5 (Artificial Analysis)",
+          "score": 54.7,
+          "estimated": false,
+          "source": "https://artificialanalysis.ai/models/claude-sonnet-5-5",
+          "as_of": "2026-11-26",
+          "note": "Artificial Analysis, at its Max effort setting. A hosted model that is not run here."
+        },
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 56.3,
+          "estimated": false,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "The LLM Stats composite index. A hosted model that is not run here."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 70.5,
+          "estimated": false,
+          "source": "https://www.deepswe.dev/",
+          "as_of": "2026-11-26",
+          "note": "Independent run by Mercor (mini-SWE-agent, 113 tasks, Max effort), not the vendor figure the local models show. A hosted model that is not run here."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1469,
+          "estimated": false,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, overall, published 2026-11-22; Arena rates it at xHigh effort. A hosted model that is not run here."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 77.2,
+          "estimated": false,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0; effort not stated. A hosted model that is not run here."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 92.8,
+          "estimated": false,
+          "source": "https://openrouter.ai/benchmarks/gpqa-diamond",
+          "as_of": "2026-11-26",
+          "note": "Measured by OpenRouter through real provider endpoints, which scores lower than model-card figures for the same model (Qwen3.8 27B: 82.2 there against 89.2 on its card), so compare with the local bars loosely. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 64.14,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 83.15,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-2-1",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, Terminus 2. A hosted model that is not run here. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models."
+        }
+      ]
+    },
+    {
+      "name": "Claude Opus 5.5",
+      "workload": "text",
+      "scores": [
+        {
+          "metric": "Intelligence Index v5 (Artificial Analysis)",
+          "score": 59.1,
+          "estimated": false,
+          "source": "https://artificialanalysis.ai/models/claude-opus-5-5",
+          "as_of": "2026-11-26",
+          "note": "Artificial Analysis, at its Max effort setting. A hosted model that is not run here."
+        },
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 58.0,
+          "estimated": false,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "The LLM Stats composite index. A hosted model that is not run here."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 72.3,
+          "estimated": false,
+          "source": "https://www.deepswe.dev/",
+          "as_of": "2026-11-26",
+          "note": "Independent run by Mercor (mini-SWE-agent, 113 tasks, Max effort), not the vendor figure the local models show. A hosted model that is not run here."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1514,
+          "estimated": false,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, overall, published 2026-11-22; Arena rates it at High effort. A hosted model that is not run here."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 87.1,
+          "estimated": false,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0; effort not stated. A hosted model that is not run here."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 90.2,
+          "estimated": false,
+          "source": "https://openrouter.ai/benchmarks/gpqa-diamond",
+          "as_of": "2026-11-26",
+          "note": "Measured by OpenRouter through real provider endpoints, which scores lower than model-card figures for the same model (Qwen3.8 27B: 82.2 there against 89.2 on its card), so compare with the local bars loosely. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 65.15,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 87.64,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-2-1",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, Terminus 2. A hosted model that is not run here. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models."
+        }
+      ]
+    }
+  ]
 }
