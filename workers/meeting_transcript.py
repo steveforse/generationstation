@@ -4,6 +4,8 @@ A segment is {"speaker": str, "start": float | None, "end": float | None, "text"
 are kept as the speaker labels. Times are seconds from the first stamp; a transcript with none has `start` and `end`
 of None and is "untimed" (the worker then writes no captions and no [mm:ss] markers).
 """
+import csv
+import io
 import re
 
 MAX_WORDS = 30000  # about three hours of talk: the notes read the whole transcript in one request
@@ -193,3 +195,36 @@ def render(segs, names):
         # The same cues for web players and Zoom's own caption import: a header and dots instead of commas in the times.
         files["transcript.vtt"] = "\n".join(["WEBVTT", ""] + [line.replace(",", ".") if " --> " in line else line for line in srt])
     return files
+
+
+def action_line(action):
+    """One action item as the notes show it: "Task — Owner, due D (mm:ss)"."""
+    return (action["task"] + (f" — {action['owner']}" if action.get("owner") else "") + (f", due {action['due']}" if action.get("due") else "")
+            + (f" ({action['time']})" if action.get("time") else ""))
+
+
+def decision_line(decision):
+    return decision["decision"] + (f" — {decision['by']}" if decision.get("by") else "") + (f" ({decision['time']})" if decision.get("time") else "")
+
+
+def _csv(header, rows):
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return "\ufeff" + out.getvalue()  # a byte-order mark so Excel reads it as UTF-8
+
+
+def render_notes(notes, names):
+    """{"notes.md", "actions.csv", "decisions.csv"} text for notes {summary: [str], actions: [{task, owner, due, time}],
+    decisions: [{decision, by, time}]} (shared by the worker and the host's notes editor)."""
+    md = ["# Meeting notes", "", "## Summary", ""] + [f"- {bullet}" for bullet in notes["summary"]]
+    md += ["", "## Action items", ""] + ([f"- [ ] {action_line(a)}" for a in notes["actions"]] or ["None recorded."])
+    md += ["", "## Decisions", ""] + ([f"- {decision_line(d)}" for d in notes["decisions"]] or ["None recorded."])
+    if names:
+        md += ["", "## Speakers", ""] + [f"- {k}: {v}" for k, v in names.items() if v]
+    return {
+        "notes.md": "\n".join(md) + "\n",
+        "actions.csv": _csv(["Task", "Owner", "Due", "Time"], [[a.get("task"), a.get("owner") or "", a.get("due") or "", a.get("time") or ""] for a in notes["actions"]]),
+        "decisions.csv": _csv(["Decision", "By", "Time"], [[d.get("decision"), d.get("by") or "", d.get("time") or ""] for d in notes["decisions"]]),
+    }

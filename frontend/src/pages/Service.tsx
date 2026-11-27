@@ -190,6 +190,7 @@ export function ServicePage({ store, host, modelId }: { store: HostStore; host?:
         onDelete={async (job) => { const problem = await session.deleteJob(job); if (!problem) setSelectedId(null); return problem }}
         onCancel={(job) => session.cancelJob(job)}
         onEditTranscript={(job, edit) => session.editTranscript(job, edit)}
+        onEditNotes={(job, edit) => session.editNotes(job, edit)}
         voiceTargets={voiceTargets(state.runtimes, state.models).filter((target) => target.runtime.id !== modelId)}
         onUseVoice={async (job, url, target) => {
           try {

@@ -9,6 +9,7 @@ import { WorkloadIcon } from './WorkloadIcon'
 import { RefusalDetails } from './Refusal'
 import { StatePill } from './StatePill'
 import { Markdown } from './Markdown'
+import { MeetingHistory, NotesEditor, type NotesEditRequest } from './MeetingNotes'
 import type { VoiceTarget } from '../voiceSample'
 
 /**
@@ -539,11 +540,13 @@ const formatClock = (seconds: number) => {
     : `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`
 }
 
-export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, voiceTargets = [], onUseVoice }: {
+export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, onEditNotes, voiceTargets = [], onUseVoice }: {
   job: Job; runtime: Runtime; generation: Generation; fileUrl: GenerateHandlers['fileUrl']; inputUrl: GenerateHandlers['inputUrl']
   onReuse: (job: Job) => void | Promise<void>; onDelete: (job: Job) => Promise<string>; onCancel: (job: Job) => Promise<string>
   /** Save corrections to a transcript; returns an error message or ''. Only meeting results offer it. */
   onEditTranscript?: (job: Job, edit: TranscriptEditRequest) => Promise<string>
+  /** Save a person's version of the notes (summary, action items, decisions); returns an error message or ''. */
+  onEditNotes?: (job: Job, edit: NotesEditRequest) => Promise<string>
   /** Speech models that can clone a voice; a finished clip's soundtrack can be sent to one as its voice sample. */
   voiceTargets?: VoiceTarget[]; onUseVoice?: (job: Job, url: string, target: VoiceTarget) => Promise<string>
 }) {
@@ -553,6 +556,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [editingNotes, setEditingNotes] = useState(false)
   const [revision, setRevision] = useState(0) // bumped after an edit is saved, so the files are read again
   const files = job.outputs.filter((output) => !isThumbnail(job, output))
   const media = files.filter((output) => /^(audio|image|video)\//.test(output.mime))
@@ -572,7 +576,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.id, urls['notes.md'], urls['transcript.md']])
 
-  useEffect(() => { setEditing(false) }, [job.id])
+  useEffect(() => { setEditing(false); setEditingNotes(false) }, [job.id])
   useEffect(() => {
     setConfirming(false); setError('')
     if (job.status !== 'done') return
@@ -632,14 +636,19 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
         : output.mime.startsWith('image/') ? <img src={urls[output.name]} alt={title} />
           : <video controls src={urls[output.name]} aria-label={`Play ${title}`} />) : <div className="job-media-loading"><small>Loading…</small></div>}
     </div>)}
-    {docs['notes.md'] && <section className="job-section job-document" aria-label="Notes"><Markdown text={docs['notes.md']} /></section>}
+    {docs['notes.md'] && (editingNotes && urls['meeting.json'] && onEditNotes
+      ? <NotesEditor url={urls['meeting.json']} onSave={(edit) => onEditNotes(job, edit)} onClose={(saved) => { setEditingNotes(false); if (saved) setRevision((count) => count + 1) }} />
+      : <section className="job-section job-document" aria-label="Notes"><Markdown text={docs['notes.md']} /></section>)}
     {docs['transcript.md'] && (editing && urls['meeting.json'] && onEditTranscript
       ? <TranscriptEditor url={urls['meeting.json']} onSave={(edit) => onEditTranscript(job, edit)} onClose={(saved) => { setEditing(false); if (saved) setRevision((count) => count + 1) }} />
       : <details className="job-section job-document disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Transcript</summary><Markdown text={docs['transcript.md'].replace(/^# .*\n+/, '')} /></details>)}
+    {urls['meeting.json'] && (onEditNotes || onEditTranscript) && job.status === 'done' && <MeetingHistory url={urls['meeting.json']} version={revision} />}
     <div className="job-actions">
       <button type="button" className="button button-secondary" onClick={() => void onReuse(job)}><RotateCcw size={16} />Use these settings</button>
+      {onEditNotes && !editingNotes && job.status === 'done' && urls['meeting.json'] && docs['notes.md'] &&
+        <button type="button" className="button button-secondary" onClick={() => { setEditing(false); setEditingNotes(true) }}><Pencil size={16} />Edit notes</button>}
       {onEditTranscript && !editing && job.status === 'done' && urls['meeting.json'] && docs['transcript.md'] &&
-        <button type="button" className="button button-secondary" onClick={() => setEditing(true)}><Pencil size={16} />Edit transcript</button>}
+        <button type="button" className="button button-secondary" onClick={() => { setEditingNotes(false); setEditing(true) }}><Pencil size={16} />Edit transcript</button>}
       {job.status === 'done' && onUseVoice && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).flatMap((output) => voiceTargets.map((target) =>
         <button key={target.runtime.id} type="button" className="button button-secondary" disabled={!urls[output.name] || !!voiceBusy}
           title={`Send this clip's sound to ${target.runtime.name} as the voice to speak in${target.ready ? '' : ` (${target.runtime.name} is not running: start it on the Models page)`}`}

@@ -19,7 +19,6 @@ The app stops a worker by terminating it, which does not reach processes inside 
 watchdog that ends it when the worker's heartbeat file goes stale.
 """
 import contextlib
-import csv
 import json
 import os
 import re
@@ -447,26 +446,10 @@ def write_outputs(job, segs, notes, names, raw):
     record = {"speakers": names, "segments": segs, "revision": 1}
     if notes is not None:
         record.update({k: notes[k] for k in ("summary", "actions", "decisions")})
-        md = ["# Meeting notes", "", "## Summary", ""] + [f"- {b}" for b in notes["summary"]]
-        md += ["", "## Action items", ""]
-        md += ([f"- [ ] {a['task']}" + (f" — {a['owner']}" if a.get("owner") else "") + (f", due {a['due']}" if a.get("due") else "")
-                + (f" ({a['time']})" if a.get("time") else "") for a in notes["actions"]] or ["None recorded."])
-        md += ["", "## Decisions", ""]
-        md += ([f"- {d['decision']}" + (f" — {d['by']}" if d.get("by") else "") + (f" ({d['time']})" if d.get("time") else "")
-                for d in notes["decisions"]] or ["None recorded."])
-        if names:
-            md += ["", "## Speakers", ""] + [f"- {k}: {v}" for k, v in names.items() if v]
-        job.output("notes.md", "text/markdown").write_text("\n".join(md) + "\n", encoding="utf-8")
-        with open(job.output("actions.csv", "text/csv"), "w", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f)
-            w.writerow(["Task", "Owner", "Due", "Time"])
-            for a in notes["actions"]:
-                w.writerow([a.get("task"), a.get("owner") or "", a.get("due") or "", a.get("time") or ""])
-        with open(job.output("decisions.csv", "text/csv"), "w", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f)
-            w.writerow(["Decision", "By", "Time"])
-            for d in notes["decisions"]:
-                w.writerow([d.get("decision"), d.get("by") or "", d.get("time") or ""])
+        mimes.update({"notes.md": "text/markdown", "actions.csv": "text/csv", "decisions.csv": "text/csv"})
+        for name, text in meeting_transcript.render_notes(notes, names).items():
+            with open(job.output(name, mimes[name]), "w", newline="", encoding="utf-8") as f:  # no newline translation: the CSVs end lines with \r\n
+                f.write(text)
     job.output("meeting.json", "application/json").write_text(json.dumps(record, indent=1), encoding="utf-8")
 
 

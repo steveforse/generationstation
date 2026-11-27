@@ -1221,6 +1221,46 @@ test('a meeting transcript can be edited: rename a speaker everywhere, or fix on
   expect(saved[1]).toEqual({ revision: 1, rename: {}, segments: [{ index: 2, speaker: 'Ben' }] })
 })
 
+test('meeting notes can be edited, and what changed shows in a history', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
+  const record = { revision: 1, speakers: {}, segments: [{ speaker: 'Ben', start: 0, end: 4, text: 'Send the plan.' }], summary: ['Launch is Friday.', 'Budget is fine.'],
+    actions: [{ task: 'Send the plan', owner: 'Ben', time: '00:20' }], decisions: [{ decision: 'Ship Friday', by: 'Sam' }], history: [] as unknown[] }
+  await page.route('**/api/jobs/*/files/meeting.json', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(record) }))
+  const saved: unknown[] = []
+  await page.route('**/api/jobs/*/notes', async (route) => {
+    saved.push(route.request().postDataJSON())
+    record.revision = 2
+    record.history = [{ revision: 2, at: '2026-11-26T15:04:00+00:00', changes: [
+      { section: 'summary', kind: 'changed', before: 'Launch is Friday.', after: 'Launch is Monday.' },
+      { section: 'actions', kind: 'added', before: null, after: 'Book the room — Dana' }] }]
+    await route.fulfill({ status: 200, json: { revision: 2, changes: 2 } })
+  })
+  await go(page, '#/hosts/local/services/meeting_notes')
+  await page.getByRole('button', { name: /call\.webm|meeting|job-0000/i }).first().click()
+  // Nobody has edited it yet, so there is no history.
+  await expect(page.getByText('Change history')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Edit notes' }).click()
+  const editor = page.getByRole('region', { name: 'Edit notes' })
+  await expect(editor.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  await editor.getByRole('textbox', { name: 'Summary point 1' }).fill('Launch is Monday.')
+  await editor.getByRole('button', { name: 'Add an action item' }).click()
+  await editor.getByRole('textbox', { name: 'Task of action item 2' }).fill('Book the room')
+  await editor.getByRole('textbox', { name: 'Owner of action item 2' }).fill('Dana')
+  await editor.getByRole('button', { name: 'Remove decision 1' }).click()
+  await expect(editor.getByText('3 sections changed')).toBeVisible()
+  await editor.getByRole('button', { name: 'Save changes' }).click()
+  await expect(editor).toHaveCount(0)
+  expect(saved).toEqual([{ revision: 1, summary: ['Launch is Monday.', 'Budget is fine.'],
+    actions: [{ task: 'Send the plan', owner: 'Ben', time: '00:20' }, { task: 'Book the room', owner: 'Dana' }], decisions: [] }])
+  // The history lists the change, newest first, with what it was before.
+  await page.getByText('Change history').click()
+  const entry = page.locator('.history-entry').first()
+  await expect(entry).toContainText('Edit 1')
+  await expect(entry.locator('del')).toHaveText('Launch is Friday.')
+  await expect(entry.locator('ins').first()).toHaveText('Launch is Monday.')
+  await expect(entry).toContainText('Added · Action items')
+})
+
 test('a transcript edit the host refuses stays open with the reason', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
   await page.route('**/api/jobs/*/transcript', (route) => route.fulfill({ status: 409, json: { detail: { code: 'TRANSCRIPT_CHANGED', message: 'The transcript changed since you opened it. Reload it and edit again.' } } }))

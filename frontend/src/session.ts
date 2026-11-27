@@ -491,6 +491,19 @@ export class HostSession {
     }
   }
 
+  /** Save a person's version of a finished meeting's notes. Returns an error message, or '' when it was saved. */
+  async editNotes(job: Job, edit: { revision: number; summary?: string[]; actions?: unknown[]; decisions?: unknown[] }) {
+    const ctx = this.context()
+    if (!ctx) return 'Not connected to the host.'
+    try {
+      await requestApi(ctx.base, ctx.token, `/api/jobs/${encodeURIComponent(job.id)}/notes`, { method: 'PUT', body: JSON.stringify(edit) }, ctx.signal)
+      return ''
+    } catch (error) {
+      if (this.handleAuthError(error)) return 'Not connected to the host.'
+      return error instanceof Error ? error.message : 'The notes could not be saved.'
+    }
+  }
+
   /** Ask the host what a start with these choices would need. Display only; Start is checked again. */
   async estimateRuntime(runtime: Runtime, launch: Launch, signal?: AbortSignal): Promise<RuntimeEstimate> {
     const ctx = this.context()

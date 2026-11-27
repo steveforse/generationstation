@@ -227,6 +227,30 @@ class TranscriptEdit(BaseModel):
     rename: dict[Annotated[str, Field(max_length=80)], Annotated[str, Field(max_length=80)]] = Field(default_factory=dict, max_length=200)
 
 
+class ActionItemEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task: StrictStr = Field(max_length=400)
+    owner: StrictStr | None = Field(default=None, max_length=80)
+    due: StrictStr | None = Field(default=None, max_length=80)
+    time: StrictStr | None = Field(default=None, max_length=80)
+
+
+class DecisionEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: StrictStr = Field(max_length=400)
+    by: StrictStr | None = Field(default=None, max_length=80)
+    time: StrictStr | None = Field(default=None, max_length=80)
+
+
+class NotesEdit(BaseModel):
+    """Each list sent replaces the saved one; one left out is not touched."""
+    model_config = ConfigDict(extra="forbid")
+    revision: StrictInt
+    summary: list[Annotated[StrictStr, Field(max_length=600)]] | None = Field(default=None, max_length=50)
+    actions: list[ActionItemEdit] | None = Field(default=None, max_length=200)
+    decisions: list[DecisionEdit] | None = Field(default=None, max_length=200)
+
+
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     inputs: dict[StrictStr, StrictStr | StrictInt | list[StrictStr] | None] = Field(default_factory=dict)
@@ -421,6 +445,10 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     @api.put("/jobs/{job_id}/transcript")
     def edit_transcript(job_id: str, request: TranscriptEdit):
         return generation.edit_transcript(job_id, request.model_dump())
+
+    @api.put("/jobs/{job_id}/notes")
+    def edit_notes(job_id: str, request: NotesEdit):
+        return generation.edit_notes(job_id, request.model_dump())
 
     @api.get("/jobs/{job_id}/files/{name}")
     def job_file(job_id: str, name: str):

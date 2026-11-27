@@ -1127,3 +1127,22 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .models-sort label { display: flex; align-items: center; gap: var(--sp-2) }
 .models-sort select { font: inherit; color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px }
 .models-sort .button svg { margin-right: 4px }
+.notes-editor { gap: var(--sp-3) }
+.notes-block { display: grid; gap: var(--sp-2); margin: 0; padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0 }
+.notes-block legend { padding: 0 var(--sp-2); font-weight: 600 }
+.notes-block legend em { font-style: normal; font-weight: 400; color: var(--text-2) }
+.notes-block .button { justify-self: start }
+.notes-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2); align-items: start }
+.notes-row-fields { grid-template-columns: minmax(12rem, 3fr) minmax(6rem, 1fr) minmax(5rem, 1fr) minmax(4rem, 1fr) auto }
+.notes-row-fields:has(> :nth-child(4):last-of-type) { grid-template-columns: minmax(12rem, 3fr) minmax(6rem, 1fr) minmax(4rem, 1fr) auto }
+.notes-row textarea, .notes-row input { font: inherit; color: var(--text); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px var(--sp-2); min-width: 0 }
+@media (max-width: 720px) { .notes-row-fields, .notes-row-fields:has(> :nth-child(4):last-of-type) { grid-template-columns: minmax(0, 1fr) auto } .notes-row-fields .notes-wide { grid-column: 1 / -1 } }
+.history-entries { display: grid; gap: var(--sp-3); margin: var(--sp-3) 0 0; padding: 0; list-style: none }
+.history-entry { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md) }
+.history-entry-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-2) }
+.history-entry-head time { color: var(--text-2); font-size: var(--fs-meta) }
+.history-changes { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none }
+.history-change { display: grid; gap: 2px; font-size: var(--fs-body) }
+.history-tag { font-size: var(--fs-meta); color: var(--text-2) }
+.history-change del { color: var(--text-2); text-decoration-thickness: 1px }
+.history-change ins { text-decoration: none; background: color-mix(in srgb, var(--accent, #6d5bd0) 14%, transparent); border-radius: 3px; padding: 0 2px }
