@@ -2,7 +2,10 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 from generationstation.plugins.decide import DecidePlugin
+from generationstation.runtimes import SettingsError, describe_runtime, parse_catalog, validate_inputs
 
 WORKERS = Path(__file__).resolve().parents[2] / "workers"
 plugin = DecidePlugin()
@@ -31,7 +34,6 @@ def test_choice_needs_two_different_options():
 def test_scale_and_yes_no_rules():
     assert problems(question_type="score", levels="calm") != []
     assert problems(question_type="score", levels="calm\nangry") == []
-    assert problems(question_type="yesno", instructions="") != []
     assert problems(question_type="yesno", instructions="Wants a refund?") == []
 
 
@@ -74,3 +76,31 @@ def test_system_one_route_answers_and_refuses_in_the_hosted_apis_shapes():
     options = {f"o{i}": "" for i in range(256)}
     assert post({"state": "x", "questions": {"q": {"type": "choice", "criteria": options}}})[0] == 400
     assert decide.systemone(None, "POST", "/v1/systemone", b"{}")[0] == 503  # still loading
+
+
+def test_only_models_that_read_pictures_have_a_picture_field():
+    def entry(engine):
+        return {"kind": "decide", "name": engine, "workload": "decision", "port": 8400, "python": "p", "output_dir": "o", "default_preset": "x",
+                "presets": {"x": {"name": "x", "gpus": [0], "options": {"engine": engine, "model_dir": "m"}, "settings": {},
+                                  "estimate": {"ram_gib": 1, "gpu_min_free_gib": {}}}}}
+    catalog = parse_catalog({"runtimes": {"sees": entry("mlx_decision"), "text": entry("torchcast")}})
+    fields = lambda key: [item["key"] for item in describe_runtime(key, catalog.runtimes[key], [])["generation"]["inputs"]]
+    assert "pictures" in fields("sees") and "pictures" not in fields("text")
+    inputs = {"state": "hello", "question_type": "yesno", "instructions": "Is it?", "pictures": []}
+    validate_inputs(plugin, inputs, None, catalog.runtimes["sees"])
+    with pytest.raises(SettingsError, match="pictures is not an input"):
+        validate_inputs(plugin, inputs, None, catalog.runtimes["text"])
+
+
+def test_the_question_options_and_levels_are_required_where_they_apply():
+    from generationstation.runtimes import validate_inputs as check
+
+    def refused(**values):
+        with pytest.raises(SettingsError) as caught:
+            check(plugin, {"state": "hello", **values})
+        return " ".join(caught.value.errors)
+    assert "Ask is required" in refused(question_type="yesno")
+    assert "Options is required" in refused(question_type="choose", instructions="Which?")
+    assert "Scale levels is required" in refused(question_type="score", instructions="How angry?")
+    ok = check(plugin, {"state": "hello", "question_type": "yesno", "instructions": "Is it?"})
+    assert "options" not in ok and "levels" not in ok  # fields that do not apply to the question are not asked for

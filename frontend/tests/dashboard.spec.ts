@@ -163,11 +163,12 @@ function meetingRuntimeFixture() {
   }
 }
 
-function decideRuntimeFixture() {
+function decideRuntimeFixture(pictures = true) {
   const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
     key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
   })
   const inputs = [field('state', 'Situation', 'textarea', { required: true, max_length: 20000 }),
+    ...(pictures ? [field('pictures', 'Pictures', 'files', { accept: ['image'], max_count: 4 })] : []),
     field('question_type', 'Question', 'choice', { options: ['choose', 'yesno', 'score'], default: 'choose', option_labels: { choose: 'Choose between options', yesno: 'Yes or no', score: 'Place on a scale' } })]
   return {
     id: 'decide_karpo', kind: 'decide', plugin: 'Decide', name: 'Karpo 31B', description: 'Answers a question with a probability for each answer.', workload: 'decision', port: 8400, default_preset: 'mxfp4', last_launch: null, max_gpus: 1,
@@ -186,7 +187,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/connection', (route) => route.fulfill({ json: { bind: '127.0.0.1', port: 8000, model: route.request().url().includes('/inkling2/') ? 'inkling-2-mini' : null } }))
@@ -1632,6 +1633,13 @@ test('every decision model is used from one Decide page, with a dropdown over th
   await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()
   const picker = page.getByRole('combobox', { name: 'Model answering' })
   await expect(picker.locator('option')).toHaveText(['Karpo 31B', 'Small decider'])
+  // Only a model that reads pictures offers the picture field.
+  await expect(page.getByText('Pictures', { exact: true })).toBeVisible()
+  await picker.selectOption('decide_small')
+  await expect(page.getByRole('textbox', { name: 'Situation' })).toBeVisible()
+  await expect(page.getByText('Pictures', { exact: true })).toHaveCount(0)
+  await picker.selectOption('decide_karpo')
+  await expect(page.getByText('Pictures', { exact: true })).toBeVisible()
   // Results from every decision model are listed together, and an old model link opens the same page.
   await go(page, '#/hosts/local/services/decide_small')
   await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()

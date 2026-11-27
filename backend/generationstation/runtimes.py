@@ -185,7 +185,7 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
     generation = None
     if plugin.generates:
         fields = lambda specs: [{"key": key, **spec.model_dump()} for key, spec in specs.items()]
-        generation = {"output_kind": plugin.output_kind, "inputs": fields(plugin.inputs),
+        generation = {"output_kind": plugin.output_kind, "inputs": fields(plugin.inputs if plugin.modes else plugin.mode_inputs(None, runtime)),
                       "make_label": plugin.make_label, "result_noun": plugin.result_noun,
                       "modes": [{"key": key, "label": mode.label, "help": mode.help, "inputs": fields(mode.inputs),
                                  "output_kind": mode.output_kind or plugin.output_kind}
@@ -210,7 +210,7 @@ def _valid_crop(value: str) -> bool:
     return 0 <= x and 0 <= y and 0.05 <= w and 0.05 <= h and x + w <= 1.0001 and y + h <= 1.0001
 
 
-def validate_inputs(plugin: RuntimePlugin, inputs: dict, uploads=None) -> dict:
+def validate_inputs(plugin: RuntimePlugin, inputs: dict, uploads=None, runtime=None) -> dict:
     """Check generation-form values against the plugin's input specs. Unknown fields are refused.
 
     Plugins with modes need "mode"; only that mode's fields are accepted. `uploads(upload_id)` returns an
@@ -223,7 +223,7 @@ def validate_inputs(plugin: RuntimePlugin, inputs: dict, uploads=None) -> dict:
         mode = inputs.get("mode", next(iter(plugin.modes)))
         if mode not in plugin.modes:
             raise SettingsError([f"mode must be one of {', '.join(plugin.modes)}."])
-    specs = plugin.mode_inputs(mode)
+    specs = plugin.mode_inputs(mode, runtime)
     errors, result, files = [], {}, {}
     for key in inputs:
         if key not in specs and not (key == "mode" and plugin.modes):

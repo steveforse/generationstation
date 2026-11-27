@@ -35,6 +35,9 @@ def option_names(text: str | None) -> list[str]:
     return [line.split(":", 1)[0].strip() for line in split_lines(text)]
 
 
+READS_PICTURES = {"mlx_decision"}  # the worker engines whose models take pictures with the text (the Torchcast engines do not)
+
+
 class DecidePlugin(WorkerPlugin):
     kind = "decide"
     title = "Decide"
@@ -54,23 +57,22 @@ class DecidePlugin(WorkerPlugin):
                  "(about a second for 1,000 words)."),
         "pictures": InputSpec(
             label="Pictures", kind="files", accept=("image",), max_count=4,
-            help="Optional: a receipt, a screenshot, a photo. Only pplx-decider and H2O-Lightning read pictures; "
-                 "the Torchcast models answer from the text alone and refuse a request with a picture."),
+            help="Optional: a receipt, a screenshot, a photo, read along with the text."),
         "question_type": InputSpec(
-            label="Question", kind="choice", options=("choose", "yesno", "score"), default="choose",
+            label="Question", kind="choice", required=True, options=("choose", "yesno", "score"), default="choose",
             option_labels={"choose": "Choose between options", "yesno": "Yes or no", "score": "Place on a scale"},
             help="Choose gives a probability for each option, yes or no gives how likely yes is, a scale gives a "
                  "probability for each level and the expected level."),
         "instructions": InputSpec(
-            label="Ask", kind="text", max_length=400, placeholder="Which team should handle this?",
-            help="The question, in a few words. Optional for a choice between described options."),
+            label="Ask", kind="text", required=True, max_length=400, placeholder="Which team should handle this?",
+            help="The question, in a few words."),
         "options": InputSpec(
-            label="Options", kind="textarea", max_length=6000, show_when={"question_type": "choose"},
+            label="Options", kind="textarea", required=True, max_length=6000, show_when={"question_type": "choose"},
             placeholder="billing: charges and refunds\nshipping: deliveries\ntech support: login and bugs",
             help=f"One option per line, 2 to {MAX_OPTIONS}. After a colon you can say what the option means; the model "
                  "reads it. Names must differ."),
         "levels": InputSpec(
-            label="Scale levels", kind="textarea", max_length=2000, show_when={"question_type": "score"},
+            label="Scale levels", kind="textarea", required=True, max_length=2000, show_when={"question_type": "score"},
             placeholder="calm\nannoyed\nangry\nfurious",
             help=f"One level per line, lowest first, 2 to {MAX_LEVELS}."),
     }
@@ -81,6 +83,16 @@ class DecidePlugin(WorkerPlugin):
         TimingSpec(when={}, preset="mlx8", seconds=1, note="for a situation of a few hundred words"),
         TimingSpec(when={}, preset="q8", seconds=1, note="for a situation of a few hundred words"),
     )
+
+    def reads_pictures(self, runtime) -> bool:
+        return any(preset.options.get("engine") in READS_PICTURES for preset in runtime.presets.values())
+
+    def mode_inputs(self, mode, runtime=None):
+        """The form of a model that cannot read pictures has no picture field (and a request with one is refused)."""
+        inputs = super().mode_inputs(mode, runtime)
+        if runtime is not None and inputs is not None and not self.reads_pictures(runtime):
+            return {key: spec for key, spec in inputs.items() if key != "pictures"}
+        return inputs
 
     def check_inputs(self, mode, values, files):
         problems = []
@@ -99,6 +111,4 @@ class DecidePlugin(WorkerPlugin):
             levels = split_lines(values.get("levels"))
             if not 2 <= len(levels) <= MAX_LEVELS:
                 problems.append(f"Give 2 to {MAX_LEVELS} levels, one per line.")
-        elif not (values.get("instructions") or "").strip():
-            problems.append("Say what to answer yes or no to.")
         return problems

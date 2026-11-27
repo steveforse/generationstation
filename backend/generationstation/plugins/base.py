@@ -232,8 +232,9 @@ class RuntimePlugin:
     def generates(self) -> bool:
         return bool(self.inputs or self.modes)
 
-    def mode_inputs(self, mode: str | None) -> dict[str, InputSpec] | None:
-        """The fields of a mode (or of the only form, for plugins without modes); None for an unknown mode."""
+    def mode_inputs(self, mode: str | None, runtime: BaseRuntime | None = None) -> dict[str, InputSpec] | None:
+        """The fields of a mode (or of the only form, for plugins without modes); None for an unknown mode. A plugin whose
+        models differ in what they take (some read pictures, some do not) narrows the form to the `runtime`'s."""
         if not self.modes:
             return self.inputs
         return self.modes[mode].inputs if mode in self.modes else None

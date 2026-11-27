@@ -43,7 +43,7 @@ class GenerationManager:
         if state.get("state") != "ready":
             raise LifecycleError("MODEL_NOT_READY", f"Start {runtime.name} first, then try again.", 409)
         try:
-            values = validate_inputs(plugin, inputs, self.uploads.get if self.uploads else None)
+            values = validate_inputs(plugin, inputs, self.uploads.get if self.uploads else None, runtime)
         except SettingsError as exc:
             raise LifecycleError("INPUTS_INVALID", " ".join(exc.errors), 422,
                                  resources=[{"error": e} for e in exc.errors]) from exc
@@ -63,7 +63,7 @@ class GenerationManager:
     def _attach_files(self, plugin, runtime, job_id, values):
         """Copy a request's uploads into the job's own folder. The stored inputs name the copies; the
         worker's inputs also carry their paths."""
-        specs = plugin.mode_inputs(values.get("mode"))
+        specs = plugin.mode_inputs(values.get("mode"), runtime)
         stored, worker = dict(values), dict(values)
         folder = Path(plugin.output_dir(runtime)) / job_id / INPUTS_FOLDER
         index = 0
