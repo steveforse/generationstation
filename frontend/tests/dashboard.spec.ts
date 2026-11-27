@@ -1702,7 +1702,7 @@ test('every decision model is used from one Decide page, with a dropdown over th
   await expect(page.getByRole('link', { name: /Karpo|Small decider/ })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()
   const picker = page.getByRole('combobox', { name: 'Model answering' })
-  await expect(picker.locator('option')).toHaveText(['OmniVoice speech (Licence not reviewed)', 'Styled speech (Work use)'])
+  await expect(picker.locator('option')).toHaveText(['Karpo 31B', 'Small decider'])
   // Only a model that reads pictures offers the picture field.
   await expect(page.getByText('Pictures', { exact: true })).toBeVisible()
   await picker.selectOption('decide_small')
@@ -1812,7 +1812,7 @@ test('Speech is one page over the running speech models; the text carries over a
   await expect(page.getByRole('heading', { name: 'Speech', level: 1 })).toBeVisible()
   // The first (alphabetical by id order) model is OmniVoice: sounds in square brackets, no direction field.
   const picker = page.getByLabel('Model speaking')
-  await expect(picker.locator('option')).toHaveText(['OmniVoice speech (Licence not reviewed)'.replace('Licence not reviewed', 'X])
+  await expect(picker.locator('option')).toHaveText(['OmniVoice speech (Licence not reviewed)', 'Styled speech (Work use)'])
   await page.getByRole('textbox', { name: /^what to say/i }).fill('Come in and sit down.')
   await page.getByRole('button', { name: '[sigh]' }).click()
   await expect(page.getByRole('textbox', { name: /^what to say/i })).toHaveValue('Come in and sit down. [sigh]')
