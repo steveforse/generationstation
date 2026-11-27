@@ -9,7 +9,7 @@ import { estimateFit, GpuCard, isUnified, modelColor, modelUsage, type Preview, 
 import { fieldsFor, type FormHooks, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
 import type { FileItem } from '../components/FilePicker'
 import type { SavedHost } from '../hosts'
-import { handOff, soundtrackToWav, spokenLine, takeHandOff, voiceTargets } from '../voiceSample'
+import { soundtrackToWav, takeHandOff } from '../voiceSample'
 import { href, modelRoute } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
 import type { Job, JobFile, Operation, ReferenceModel, Runtime, RuntimeEstimate } from '../types'
@@ -157,6 +157,8 @@ export type Group = {
   above?: ReactNode
   /** Called instead of refilling the form when "Use these settings" is chosen on a result from another model of the group. */
   reuseElsewhere?: (job: Job) => void
+  /** A voice was added to the library from a result. */
+  onVoiceSaved?: () => void
 }
 
 /** Generation: the plugin's form and the results. Starting and stopping happen on the Models page. */
@@ -220,19 +222,15 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
         onCancel={(job) => session.cancelJob(job)}
         onEditTranscript={(job, edit) => session.editTranscript(job, edit)}
         onEditNotes={(job, edit) => session.editNotes(job, edit)}
-        voiceTargets={voiceTargets(state.runtimes, state.models).filter((target) => target.runtime.id !== modelId)}
-        onUseVoice={async (job, url, target) => {
+        onSaveVoice={state.runtimes?.some((item) => item.generation?.speech?.voices.clone) ? async (job, url, name, text) => {
           try {
             const wav = await soundtrackToWav(await (await fetch(url)).blob())
-            const name = `voice-${job.id.slice(0, 8)}.wav`
-            const record = await session.uploadFile(new File([wav], name, { type: 'audio/wav' }))
-            const sample: FileItem = { key: `voice-${job.id}`, name, kind: 'audio', url: URL.createObjectURL(wav), status: 'ready', id: record.id }
-            const line = spokenLine(job.inputs.prompt)
-            handOff(host.id, target.runtime.id, { mode: target.mode, inputs: { mode: target.mode, ...(target.textKey && line ? { [target.textKey]: line } : {}) }, files: { [target.sampleKey]: [sample] } })
-            window.location.hash = href(modelRoute(host.id, target.runtime.id, state.runtimes))
+            const record = await session.uploadFile(new File([wav], `voice-${job.id.slice(0, 8)}.wav`, { type: 'audio/wav' }))
+            await session.saveVoice(name, text, record.id)
+            group?.onVoiceSaved?.()
             return ''
-          } catch (reason) { return reason instanceof Error ? reason.message : 'The sound could not be taken from this clip.' }
-        }} />}
+          } catch (reason) { return reason instanceof Error ? reason.message : 'The voice could not be saved.' }
+        } : undefined} />}
     </JobModal>
     </div>}
     {state.runtimes && !runtime && <Missing title="Service not found" text="This host does not list this service any more." />}

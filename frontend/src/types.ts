@@ -89,3 +89,6 @@ export type LogText = { name: string; bytes: number; lines: string[]; truncated:
 /** Settings kept on the host; `searxng_source` says where the search address came from. */
 export type HostSettings = { searxng_url: string; searxng_source: 'settings' | 'environment' | 'none' }
 export type SearchTestResult = { ok: boolean; message: string }
+
+/** A voice saved in the host's library: a name, its sample (fetched on use) and the words the sample says. */
+export type Voice = { id: string; name: string; sample_text: string; mime: string; bytes: number }

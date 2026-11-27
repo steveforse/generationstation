@@ -10,7 +10,7 @@ import { RefusalDetails } from './Refusal'
 import { StatePill } from './StatePill'
 import { Markdown } from './Markdown'
 import { MeetingHistory, NotesEditor, type NotesEditRequest } from './MeetingNotes'
-import type { VoiceTarget } from '../voiceSample'
+import { spokenLine } from '../voiceSample'
 
 /**
  * How a dropdown option reads: the plugin's own name for it, else the value with a capital first letter.
@@ -565,17 +565,37 @@ const formatClock = (seconds: number) => {
     : `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`
 }
 
-export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, onEditNotes, voiceTargets = [], onUseVoice }: {
+/** Name a voice and say what its sample says (the model needs the words to clone well). */
+function SaveVoiceForm({ initialText, onSave, onCancel }: { initialText: string; onSave: (name: string, text: string) => Promise<string>; onCancel: () => void }) {
+  const [name, setName] = useState('')
+  const [text, setText] = useState(initialText)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState('')
+  const id = useId()
+  return <form className="job-section save-voice" aria-label="Save as voice" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setProblem(await onSave(name, text)); setBusy(false) }}>
+    <h4>Save as voice</h4>
+    <label htmlFor={`${id}-name`}>Name</label>
+    <input id={`${id}-name`} className="text-input" value={name} maxLength={80} required onChange={(event) => setName(event.target.value)} />
+    <label htmlFor={`${id}-text`}>What the sample says</label>
+    <textarea id={`${id}-text`} className="text-input" rows={3} maxLength={1000} value={text} onChange={(event) => setText(event.target.value)} />
+    <p className="field-help">Only keep voices you have permission to use.</p>
+    {problem && <p className="form-error" role="alert">{problem}</p>}
+    <div className="button-row"><button type="submit" className="button button-primary" disabled={busy || !name.trim()}>{busy ? <Loader2 size={16} className="spin" /> : null}Save voice</button>
+      <button type="button" className="button button-secondary" onClick={onCancel}>Cancel</button></div>
+  </form>
+}
+
+export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, onEditNotes, onSaveVoice }: {
   job: Job; runtime: Runtime; generation: Generation; fileUrl: GenerateHandlers['fileUrl']; inputUrl: GenerateHandlers['inputUrl']
   onReuse: (job: Job) => void | Promise<void>; onDelete: (job: Job) => Promise<string>; onCancel: (job: Job) => Promise<string>
   /** Save corrections to a transcript; returns an error message or ''. Only meeting results offer it. */
   onEditTranscript?: (job: Job, edit: TranscriptEditRequest) => Promise<string>
   /** Save a person's version of the notes (summary, action items, decisions); returns an error message or ''. */
   onEditNotes?: (job: Job, edit: NotesEditRequest) => Promise<string>
-  /** Speech models that can clone a voice; a finished clip's soundtrack can be sent to one as its voice sample. */
-  voiceTargets?: VoiceTarget[]; onUseVoice?: (job: Job, url: string, target: VoiceTarget) => Promise<string>
+  /** Keep a finished clip's or recording's sound in the voice library under a name, with the words it says; returns an error message or ''. */
+  onSaveVoice?: (job: Job, url: string, name: string, text: string) => Promise<string>
 }) {
-  const [voiceBusy, setVoiceBusy] = useState('')
+  const [savingVoice, setSavingVoice] = useState(false)
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [confirming, setConfirming] = useState(false)
@@ -675,16 +695,17 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
         <button type="button" className="button button-secondary" onClick={() => { setEditing(false); setEditingNotes(true) }}><Pencil size={16} />Edit notes</button>}
       {onEditTranscript && !editing && job.status === 'done' && urls['meeting.json'] && docs['transcript.md'] &&
         <button type="button" className="button button-secondary" onClick={() => { setEditingNotes(false); setEditing(true) }}><Pencil size={16} />Edit transcript</button>}
-      {job.status === 'done' && onUseVoice && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).flatMap((output) => voiceTargets.map((target) =>
-        <button key={target.runtime.id} type="button" className="button button-secondary" disabled={!urls[output.name] || !!voiceBusy}
-          title={`Send this clip's sound to ${target.runtime.name} as the voice to speak in${target.ready ? '' : ` (${target.runtime.name} is not running: start it on the Models page)`}`}
-          onClick={async () => { setVoiceBusy(target.runtime.id); setError(''); const problem = await onUseVoice(job, urls[output.name], target); setVoiceBusy(''); if (problem) setError(problem) }}>
-          {voiceBusy === target.runtime.id ? <Loader2 size={16} className="spin" /> : <MessageCircleMore size={16} />}Use voice in {target.runtime.name}</button>))}
+      {job.status === 'done' && onSaveVoice && media.filter((output) => output.mime.startsWith('video/') || output.mime.startsWith('audio/')).slice(0, 1).map((output) =>
+        <button key={output.name} type="button" className="button button-secondary" disabled={!urls[output.name]} aria-expanded={savingVoice}
+          title="Keep the sound of this result as a voice that speech models can speak in" onClick={() => setSavingVoice((open) => !open)}><MessageCircleMore size={16} />Save as voice</button>)}
       {groups.map((group) => <DownloadMenu key={group.label} label={group.label} items={group.items} />)}
       {[...media, ...others].filter((output) => !grouped.has(output.name)).map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={16} />{output.name}</a>)}
       {active(job) && <button type="button" className="button button-secondary job-delete" disabled={deleting || job.progress === 'Cancelling'}
         onClick={async () => { setDeleting(true); setError(await onCancel(job)); setDeleting(false) }}><X size={16} />{job.progress === 'Cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
     </div>
+    {savingVoice && onSaveVoice && <SaveVoiceForm initialText={spokenLine(job.inputs.prompt) || (typeof job.inputs.prompt === 'string' ? job.inputs.prompt.slice(0, 1000) : '')}
+      onSave={async (name, text) => { const output = media.find((item) => item.mime.startsWith('video/') || item.mime.startsWith('audio/')); const problem = output && urls[output.name] ? await onSaveVoice(job, urls[output.name], name, text) : 'The sound is not loaded yet.'; if (!problem) setSavingVoice(false); return problem }}
+      onCancel={() => setSavingVoice(false)} />}
     {fileFields.length > 0 && <section className="job-section"><h4>References</h4><div className="input-thumbs">
       {fileFields.map((field) => (job.inputs[field.key] as JobFile[]).map((file) => <div key={file.name} className="input-group"><span>{field.label}</span><InputThumb job={job} file={file} inputUrl={inputUrl} /></div>))}
     </div></section>}

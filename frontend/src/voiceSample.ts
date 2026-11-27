@@ -1,28 +1,4 @@
 import type { FormStart } from './components/Runtime'
-import type { Generation, Model, Runtime } from './types'
-
-/** A speech model that can clone a voice: its tab with a single audio sample, and the transcript field if any. */
-export type VoiceTarget = { runtime: Runtime; ready: boolean; mode: string; sampleKey: string; textKey?: string }
-
-export function voiceTargets(runtimes: Runtime[] | null | undefined, models: Model[] | null | undefined): VoiceTarget[] {
-  const targets: VoiceTarget[] = []
-  for (const runtime of runtimes ?? []) {
-    if (runtime.workload !== 'speech' || !runtime.generation) continue
-    const found = cloneTab(runtime.generation)
-    if (found) targets.push({ runtime, ready: models?.find((model) => model.id === runtime.id)?.state === 'ready', ...found })
-  }
-  return targets
-}
-
-function cloneTab(generation: Generation) {
-  for (const mode of generation.modes ?? []) {
-    const sample = mode.inputs.find((field) => field.kind === 'files' && (field.accept ?? []).includes('audio'))
-    if (!sample) continue
-    const text = mode.inputs.find((field) => field.key === 'sample_text')
-    return { mode: mode.key, sampleKey: sample.key, textKey: text?.key }
-  }
-  return undefined
-}
 
 /** The words spoken in a clip, from the quoted lines of its description ('She says: "Come in."'). */
 export function spokenLine(prompt: unknown, max = 1000): string {

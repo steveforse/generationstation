@@ -42,6 +42,7 @@ from .storage import Store
 from .telemetry import Monitor
 from .text_models import TextModelBroker
 from .uploads import UploadError, UploadStore
+from .voices import VoiceError, VoiceLibrary, VoiceNotFound
 
 
 class RequestAccessLogMiddleware:
@@ -222,6 +223,17 @@ class ChatMessageRequest(BaseModel):
     model_id: StrictStr | None = Field(default=None, min_length=1, max_length=64)
 
 
+class VoiceCreate(BaseModel):
+    name: str = Field(max_length=200)
+    sample_text: str = Field(default="", max_length=5000)
+    upload_id: str
+
+
+class VoiceUpdate(BaseModel):
+    name: str = Field(max_length=200)
+    sample_text: str = Field(default="", max_length=5000)
+
+
 class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     searxng_url: StrictStr = Field(default="", max_length=300)
@@ -296,6 +308,7 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     if hasattr(monitor, "watch_processes"):
         monitor.watch_processes(lifecycle.owned_processes, lifecycle.helper_processes)
     uploads = UploadStore(settings.runtime_dir)
+    voices = VoiceLibrary(settings.runtime_dir)
     generation = GenerationManager(store, catalog, uploads)
     host_settings = HostSettings(store, settings.searxng_url)
     web_tools = WebTools(host_settings.searxng_url)
@@ -459,6 +472,49 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
             return await uploads.save_stream(name, request.stream())
         except UploadError as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    def voice_view(record: dict):
+        return {key: record[key] for key in ("id", "name", "sample_text", "mime", "bytes")}
+
+    @api.get("/voices")
+    def list_voices():
+        return {"voices": [voice_view(record) for record in voices.list()]}
+
+    @api.post("/voices", status_code=201)
+    def create_voice(request: VoiceCreate):
+        """Save an uploaded audio sample, with the words it says, under a name."""
+        upload_record = uploads.get(request.upload_id)
+        if not upload_record:
+            raise HTTPException(422, "That sample was not found. Add it again.")
+        try:
+            return voice_view(voices.create(request.name, request.sample_text, upload_record, uploads.root / upload_record["file"]))
+        except VoiceError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @api.put("/voices/{voice_id}")
+    def update_voice(voice_id: str, request: VoiceUpdate):
+        try:
+            return voice_view(voices.update(voice_id, request.name, request.sample_text))
+        except VoiceNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except VoiceError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @api.delete("/voices/{voice_id}")
+    def delete_voice(voice_id: str):
+        try:
+            voices.delete(voice_id)
+        except VoiceNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"deleted": voice_id}
+
+    @api.get("/voices/{voice_id}/sample")
+    def voice_sample(voice_id: str):
+        try:
+            path, mime, name = voices.sample_path(voice_id)
+        except VoiceNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return FileResponse(path, media_type=mime, filename=name)
 
     @api.get("/chat-files/{file_id}")
     def chat_file(file_id: str):

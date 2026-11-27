@@ -5,7 +5,7 @@ import {
 import type { SavedHost } from './hosts'
 import {
   ApiError, type Connection, type Job, type JobOutput, type Launch, type Model,
-  type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord,
+  type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord, type Voice,
   type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult, type ReferenceModel,
 } from './types'
 
@@ -542,6 +542,44 @@ export class HostSession {
       throw new Error(typeof body?.detail === 'string' ? body.detail : `The file could not be uploaded (${response.status}).`)
     }
     return body as UploadRecord
+  }
+
+  /** The saved voices on the host. */
+  async listVoices(): Promise<Voice[]> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    const body = await requestApi(ctx.base, ctx.token, '/api/voices', {}, ctx.signal) as { voices?: Voice[] } | null
+    return Array.isArray(body?.voices) ? body.voices : []
+  }
+
+  /** Save an uploaded sample as a voice. Throws the host's reason when it is refused (a name already used, say). */
+  async saveVoice(name: string, sampleText: string, uploadId: string): Promise<Voice> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    return await requestApi(ctx.base, ctx.token, '/api/voices', { method: 'POST', body: JSON.stringify({ name, sample_text: sampleText, upload_id: uploadId }) }, ctx.signal) as Voice
+  }
+
+  async updateVoice(id: string, name: string, sampleText: string): Promise<Voice> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    return await requestApi(ctx.base, ctx.token, `/api/voices/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ name, sample_text: sampleText }) }, ctx.signal) as Voice
+  }
+
+  async deleteVoice(id: string) {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    await requestApi(ctx.base, ctx.token, `/api/voices/${encodeURIComponent(id)}`, { method: 'DELETE' }, ctx.signal)
+  }
+
+  /** A saved voice's sample. */
+  async voiceBlob(id: string) {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected.')
+    const response = await fetch(apiUrl(ctx.base, `/api/voices/${encodeURIComponent(id)}/sample`), {
+      headers: { Authorization: `Bearer ${ctx.token}` }, signal: ctx.signal, cache: 'no-store',
+    })
+    if (!response.ok) throw new Error(`The voice could not be loaded (${response.status}).`)
+    return response.blob()
   }
 
   /** A file attached to a chat message, as a local object URL. */

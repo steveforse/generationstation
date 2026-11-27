@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormHooks, FormStart } from '../components/Runtime'
 import { LICENSE_WORD } from '../components/Runtime'
 import type { SavedHost } from '../hosts'
 import { absorb, dropped, emptyDraft, modeFor, removeCues, sourceOf, startFor, strayCues, unknownCues, type Draft } from '../speechDraft'
 import { type HostStore, useSession } from '../store'
-import type { Job, Runtime } from '../types'
+import type { Job, Runtime, Voice } from '../types'
+import type { FileItem } from '../components/FilePicker'
 import { takeHandOff } from '../voiceSample'
+import { VoiceLibrary } from '../components/VoiceLibrary'
 import { ServicePage, usable } from './Service'
 
 const insert = (cue: string) => (current: string, start: number | null, end: number | null) => {
@@ -26,6 +28,10 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
   const modeRef = useRef('')
   const [picked, setMode] = useState('')
   const [command, setCommand] = useState<FormHooks['command']>()
+  const session = host ? store.session(host.id) : undefined
+  const [voices, setVoices] = useState<Voice[]>([])
+  const loadVoices = useCallback(() => { void session?.listVoices().then(setVoices, () => undefined) }, [session])
+  useEffect(() => { if (state.connection === 'connected') loadVoices() }, [state.connection, loadVoices])
   const speechRuntimes = (state.runtimes ?? []).filter((runtime) => runtime.workload === 'speech' && runtime.generation?.speech)
   const running = speechRuntimes.filter((runtime) => state.models?.find((model) => model.id === runtime.id)?.state === 'ready')
   const offered = running.filter((runtime) => !workOnly || usable('work', runtime))
@@ -100,6 +106,28 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
     {running.some((runtime) => !usable('work', runtime)) && <label className="checkbox-row"><input type="checkbox" checked={workOnly} onChange={(event) => setWorkOnly(event.target.checked)} /> Work use only</label>}
   </div>
 
+  const canClone = !!speech?.voices.clone
+  const extension: Record<string, string> = { 'audio/wav': '.wav', 'audio/mpeg': '.mp3', 'audio/flac': '.flac', 'audio/mp4': '.m4a', 'audio/ogg': '.ogg' }
+  const library = session && speech ? <VoiceLibrary voices={voices} canClone={canClone} modelName={chosen?.name ?? ''} sampleReady={draft.sample.some((item) => item.id)}
+    onUse={async (voice) => {
+      try {
+        const blob = await session.voiceBlob(voice.id)
+        const name = `${voice.name}${extension[voice.mime] ?? '.wav'}`
+        const record = await session.uploadFile(new File([blob], name, { type: voice.mime }))
+        const sample: FileItem = { key: `voice-${voice.id}-${record.id}`, name, kind: 'audio', url: URL.createObjectURL(blob), status: 'ready', id: record.id }
+        update({ values: { ...draftRef.current.values, sample_text: voice.sample_text }, sample: [sample] })
+        rebuild(chosen, 'clone')
+        return ''
+      } catch (reason) { return reason instanceof Error ? reason.message : 'The voice could not be used.' }
+    }}
+    onSaveSample={async (name) => {
+      const sample = draftRef.current.sample.find((item) => item.id)
+      if (!sample?.id) return 'There is no sample on the form.'
+      try { await session.saveVoice(name, draftRef.current.values.sample_text ?? '', sample.id); loadVoices(); return '' } catch (reason) { return reason instanceof Error ? reason.message : 'The voice could not be saved.' }
+    }}
+    onUpdate={async (voice, name, text) => { try { await session.updateVoice(voice.id, name, text); loadVoices(); return '' } catch (reason) { return reason instanceof Error ? reason.message : 'The voice could not be changed.' } }}
+    onDelete={async (voice) => { try { await session.deleteVoice(voice.id); loadVoices(); return '' } catch (reason) { return reason instanceof Error ? reason.message : 'The voice could not be deleted.' } }} /> : null
+
   const above = speech && chosen ? <div className="speech-guidance" aria-label="Directing this voice">
     <p>{speech.direction.text}</p>
     {speech.direction.style_fields[mode] && speech.direction.examples.length > 0 && <p className="speech-examples">Examples: {speech.direction.examples.join(' · ')}</p>}
@@ -110,6 +138,7 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
     {unknown.length > 0 && <p className="speech-notice" role="status">{chosen.name} does not know {unknown.join(' ')}.
       {' '}<button type="button" className="text-button" onClick={() => send((current) => removeCues(current, unknown))}>Remove them</button></p>}
     {left && <p className="speech-notice" role="status">This voice source has no place for {left}, so it is left out here and kept for when you switch back.</p>}
+    {library}
   </div> : null
 
   const reuseElsewhere = (job: Job) => {
@@ -126,7 +155,7 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
   return <ServicePage store={store} host={host} modelId={chosen?.id ?? ''}
     group={{
       title: 'Speak', noun: 'speech', description: 'Turn text into speech with whichever speech model is running. What you type carries over when you change the model.',
-      ids: speechRuntimes.map((runtime) => runtime.id), picker, above, none: speechRuntimes.length > 0 && running.length === 0,
+      ids: speechRuntimes.map((runtime) => runtime.id), picker, above, onVoiceSaved: loadVoices, none: speechRuntimes.length > 0 && running.length === 0,
       form: { key: `${chosenId}:${form.n}`, start: { mode: form.mode ?? undefined }, hooks }, reuseElsewhere,
     }} />
 }

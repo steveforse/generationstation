@@ -229,6 +229,25 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   if (options.speech2) models.push({ id: 'styled', name: 'Styled speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.speech) models.push({ id: 'omnivoice', name: 'OmniVoice speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   const uploads: Array<{ name: string; type: string; head?: string }> = []
+  // The voice library, kept in memory: list, save, rename, delete and the sample.
+  const voices: Array<{ id: string; name: string; sample_text: string; mime: string; bytes: number }> = []
+  await page.route('**/api/voices**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname.replace(/^.*\/api\/voices/, '').split('/').filter(Boolean)
+    const taken = (name: string, except?: string) => voices.some((voice) => voice.id !== except && voice.name.toLowerCase() === name.trim().toLowerCase())
+    if (!path.length && request.method() === 'GET') { await route.fulfill({ json: { voices } }); return }
+    if (!path.length && request.method() === 'POST') {
+      const body = request.postDataJSON() as { name: string; sample_text: string }
+      if (taken(body.name)) { await route.fulfill({ status: 422, json: { detail: `A voice named '${body.name.trim()}' already exists.` } }); return }
+      const voice = { id: `${voices.length + 1}`.padStart(32, 'b'), name: body.name.trim(), sample_text: body.sample_text, mime: 'audio/wav', bytes: 100 }
+      voices.push(voice); await route.fulfill({ status: 201, json: voice }); return
+    }
+    const voice = voices.find((item) => item.id === path[0])
+    if (path[1] === 'sample') { await route.fulfill({ status: 200, body: toneWav(), contentType: 'audio/wav' }); return }
+    if (!voice) { await route.fulfill({ status: 404, json: { detail: 'That voice is not in the library.' } }); return }
+    if (request.method() === 'PUT') { const body = request.postDataJSON() as { name: string; sample_text: string }; voice.name = body.name.trim(); voice.sample_text = body.sample_text; await route.fulfill({ json: voice }); return }
+    voices.splice(voices.indexOf(voice), 1); await route.fulfill({ json: { deleted: voice.id } })
+  })
   await page.route('**/api/uploads?name=*', async (route) => {
     const name = new URL(route.request().url()).searchParams.get('name') ?? ''
     if (name.endsWith('.gif')) { await route.fulfill({ status: 422, json: { detail: 'That type of file is not accepted.' } }); return }
@@ -365,7 +384,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
     if (model && runtime) model.state = 'unloading'
     await route.fulfill({ status: 202, json: operation })
   })
-  return { profiles, models, operations, get postProfileBody() { return postProfileBody }, get loadProfileId() { return loadProfileId }, get startBody() { return startBody }, get jobBody() { return jobBody }, uploads, jobs }
+  return { profiles, models, operations, get postProfileBody() { return postProfileBody }, get loadProfileId() { return loadProfileId }, get startBody() { return startBody }, get jobBody() { return jobBody }, uploads, jobs, voices }
 }
 
 async function installSseMock(page: Page) {
@@ -851,19 +870,57 @@ test('makes a video from pictures in its own tab, with one picture per end', asy
   await expect(page.getByRole('tabpanel', { name: 'From a description' }).getByLabel(/^description/i)).toHaveValue('kept while I switch tabs')
 })
 
-test('sends a clip\'s voice to a speech model as its sample, with the spoken line as the transcript', async ({ page }) => {
+test('saves a clip\'s voice in the library with the spoken line, then speaks in it on the Speak page', async ({ page }) => {
   const api = await connectFixtures(page, 'Fixture desktop', false, { videos: true, speech: true, voiceClip: true })
   await go(page, '#/hosts/local/services/minimax_h3')
   await page.getByRole('complementary').getByRole('button', { name: /^A woman with a soft Welsh accent/ }).click()
   const detail = page.getByRole('dialog').getByRole('article')
-  await detail.getByRole('button', { name: 'Use voice in OmniVoice speech' }).click()
-  await expect(page).toHaveURL(/#\/hosts\/local\/speech$/)
-  await expect(page.getByRole('tab', { name: 'From a voice sample' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('button', { name: 'Remove voice-job-0000.wav' })).toBeVisible()
-  await expect(page.getByLabel(/^what the sample says/i)).toHaveValue('Come in and get warm.')
+  await detail.getByRole('button', { name: 'Save as voice' }).click()
+  const form = detail.getByRole('form', { name: 'Save as voice' })
+  await expect(form.getByLabel('What the sample says')).toHaveValue('Come in and get warm.')
+  await form.getByLabel('Name').fill('Welsh woman')
+  await form.getByRole('button', { name: 'Save voice' }).click()
+  await expect(form).toBeHidden()
   expect(api.uploads.at(-1)).toMatchObject({ name: 'voice-job-0000.wav', type: 'audio/wav' })
   expect(api.uploads.at(-1)?.head).toMatch(/^RIFF.{4}WAVE$/s)
-  await page.screenshot({ path: 'test-results/screenshots/voice-sample-handoff.png', fullPage: true })
+  expect(api.voices).toMatchObject([{ name: 'Welsh woman', sample_text: 'Come in and get warm.' }])
+  await go(page, '#/hosts/local/speech')
+  await page.getByText('Saved voices (1)').click()
+  await page.getByRole('button', { name: 'Use Welsh woman' }).click()
+  await expect(page.getByRole('tab', { name: 'From a voice sample' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('button', { name: 'Remove Welsh woman.wav' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /^what the sample says/i })).toHaveValue('Come in and get warm.')
+  await page.screenshot({ path: 'test-results/screenshots/voice-library.png', fullPage: true })
+})
+
+test('the voice library: keep the sample on the form, refuse a repeated name, rename and delete', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { speech: true })
+  await go(page, '#/hosts/local/speech')
+  await page.getByRole('tab', { name: 'From a voice sample' }).click()
+  const panel = page.getByRole('tabpanel', { name: 'From a voice sample' })
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), panel.getByRole('button', { name: /Add audio|Add .*sample/i }).first().click()])
+  await chooser.setFiles({ name: 'mine.wav', mimeType: 'audio/wav', buffer: toneWav() })
+  await panel.getByRole('textbox', { name: /^what the sample says/i }).fill('Hello, it is me.')
+  await page.getByText('Saved voices').click()
+  await page.getByRole('button', { name: 'Save the sample on the form as a voice' }).click()
+  const save = page.getByRole('form', { name: 'Save the sample as a voice' })
+  await save.getByLabel(/^Name for the sample/).fill('Me')
+  await save.getByRole('button', { name: 'Save voice' }).click()
+  await expect(page.getByText('Saved voices (1)')).toBeVisible()
+  expect(api.voices).toMatchObject([{ name: 'Me', sample_text: 'Hello, it is me.' }])
+  await page.getByRole('button', { name: 'Save the sample on the form as a voice' }).click()
+  await save.getByLabel(/^Name for the sample/).fill('me')
+  await save.getByRole('button', { name: 'Save voice' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'already exists' })).toBeVisible()
+  await page.getByRole('button', { name: 'Rename Me' }).click()
+  const rename = page.getByRole('form', { name: 'Rename Me' })
+  await rename.getByLabel('Name', { exact: true }).fill('Me, calm')
+  await rename.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Me, calm')).toBeVisible()
+  await page.getByRole('button', { name: 'Delete Me, calm' }).click()
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByText('None yet.')).toBeVisible()
+  expect(api.voices).toEqual([])
 })
 
 test('frames a wide picture for a portrait clip on a preview: drag, keys and zoom', async ({ page }) => {
