@@ -1,4 +1,4 @@
-import { Clapperboard, Image, MessageCircleMore, MessageSquare, Music, Scale, Server } from 'lucide-react'
+import { Clapperboard, Image, MessageSquare, Music, Scale, Server, Volume2 } from 'lucide-react'
 
 /** The icon for a model by what it makes, from the host's `workload` (text, decision, music, image, video, speech). */
 export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?: number }) {
@@ -8,7 +8,7 @@ export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?:
     case 'music': return <Music size={size} aria-hidden="true" />
     case 'image': return <Image size={size} aria-hidden="true" />
     case 'video': return <Clapperboard size={size} aria-hidden="true" />
-    case 'speech': return <MessageCircleMore size={size} aria-hidden="true" />
+    case 'speech': return <Volume2 size={size} aria-hidden="true" />
     default: return <Server size={size} aria-hidden="true" />
   }
 }

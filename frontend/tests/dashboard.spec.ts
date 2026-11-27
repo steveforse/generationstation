@@ -870,7 +870,7 @@ test('makes a video from pictures in its own tab, with one picture per end', asy
   await expect(page.getByRole('tabpanel', { name: 'From a description' }).getByLabel(/^description/i)).toHaveValue('kept while I switch tabs')
 })
 
-test('saves a clip\'s voice in the library with the spoken line, then speaks in it on the Speak page', async ({ page }) => {
+test('saves a clip\'s voice in the library with the spoken line, then speaks in it on the Speech page', async ({ page }) => {
   const api = await connectFixtures(page, 'Fixture desktop', false, { videos: true, speech: true, voiceClip: true })
   await go(page, '#/hosts/local/services/minimax_h3')
   await page.getByRole('complementary').getByRole('button', { name: /^A woman with a soft Welsh accent/ }).click()
@@ -1027,10 +1027,10 @@ test('groups the sidebar by what each model makes, with running shown in words',
   await go(page, '#/hosts/local/speech')
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
   const groups = nav.getByRole('group')
-  await expect(groups).toHaveCount(3)
-  expect(await groups.evaluateAll((items) => items.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')!)?.textContent))).toEqual(['Speech', 'Video', 'Music'])
-  await expect(nav.getByRole('group', { name: 'Speech' }).getByRole('link', { name: /^Speak/ })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link', { name: /^Speak/ })).toContainText('On')
+  await expect(groups).toHaveCount(2)  // Speech is a tool in the sidebar itself, not a section
+  expect(await groups.evaluateAll((items) => items.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')!)?.textContent))).toEqual(['Video', 'Music'])
+  await expect(nav.getByRole('link', { name: /^Speech/ })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link', { name: /^Speech/ })).toContainText('On')
   await page.screenshot({ path: 'test-results/screenshots/sidebar-groups.png', fullPage: true })
   // Keyboard focus shows the accent ring on every nav link, in order.
   const links = await nav.getByRole('link').count()
@@ -1044,7 +1044,7 @@ test('groups the sidebar by what each model makes, with running shown in words',
     expect(ring).toBe('solid 2px rgb(90, 63, 212)')
   }
   await page.setViewportSize({ width: 900, height: 900 })
-  await expect(nav.getByRole('link', { name: /^Speak/ })).toBeVisible()
+  await expect(nav.getByRole('link', { name: /^Speech/ })).toBeVisible()
   await page.screenshot({ path: 'test-results/screenshots/sidebar-rail.png' })
 })
 
@@ -1161,7 +1161,7 @@ test('chats with the text model, which starts a song; conversations can be attac
     ]) })
   })
 
-  await expect(page.getByRole('navigation').getByRole('group', { name: 'Text' }).getByRole('link', { name: /^Chat/ })).toBeVisible()
+  await expect(page.getByRole('navigation').getByRole('link', { name: /^Chat/ })).toBeVisible()
   await go(page, '#/hosts/local/chat')
   await expect(page.getByRole('heading', { name: 'What would you like to talk about?' })).toBeVisible()
   await expect(page.getByText('YuE2 songs', { exact: false }).first()).toBeVisible()
@@ -1238,7 +1238,7 @@ test('offers only the thinking levels the running model takes, sends the chosen 
 test('a meeting\'s notes show on the page, the transcript folds out, and every file downloads', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
   await go(page, '#/hosts/local/services/meeting_notes')
-  await expect(page.getByRole('navigation').getByRole('group', { name: 'Text' }).getByRole('link', { name: /Meeting notes/ })).toBeVisible()
+  await expect(page.getByRole('navigation').getByRole('link', { name: /Meeting notes/ })).toBeVisible()
   await page.getByRole('button', { name: /call\.webm|meeting|job-0000/i }).first().click()
   const notes = page.getByRole('region', { name: 'Notes' })
   await expect(notes.getByRole('heading', { name: 'Action items' })).toBeVisible()
@@ -1648,9 +1648,9 @@ test('models within a section sort by name or by the chosen ranking, either way'
   await go(page, '#/hosts/local/models')
   const speech = page.getByRole('region', { name: 'Speech' })
   const names = () => speech.locator('section.model-server').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
-  // Alphabetical by default (the fixture lists Voice B first). The sidenav has one Speak entry for all of them.
+  // Alphabetical by default (the fixture lists Voice B first). The sidenav has one Speech entry for all of them.
   expect(await names()).toEqual(['Voice A', 'Voice B', 'Voice C'])
-  await expect(page.getByRole('navigation').getByRole('group', { name: 'Speech' }).getByRole('link')).toHaveText([/^Speak/])
+  await expect(page.getByRole('navigation').getByRole('link', { name: /^Speech/ })).toHaveText([/^Speech/])
   await speech.getByLabel('Sort').selectOption('name')
   await speech.getByRole('button', { name: /Z to A|A to Z/ }).click()
   expect(await names()).toEqual(['Voice C', 'Voice B', 'Voice A'])
@@ -1698,7 +1698,7 @@ test('every decision model is used from one Decide page, with a dropdown over th
   await connectFixtures(page, 'Fixture desktop', false, { decide: true })
   await go(page, '#/hosts/local/decide')
   // One entry in the sidenav, under Text, not one per model.
-  await expect(page.getByRole('group', { name: 'Text' }).getByRole('link', { name: /^Decide/ })).toHaveCount(1)
+  await expect(page.getByRole('navigation').getByRole('link', { name: /^Decide/ })).toHaveCount(1)
   await expect(page.getByRole('link', { name: /Karpo|Small decider/ })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()
   const picker = page.getByRole('combobox', { name: 'Model answering' })
@@ -1718,12 +1718,13 @@ test('every decision model is used from one Decide page, with a dropdown over th
   await expect(decision.getByText('Confidence: 88.2%')).toBeVisible()
 })
 
-test('the Text group in the sidenav is alphabetical, with Decide as one entry', async ({ page }) => {
-  await connectFixtures(page, 'Fixture desktop', false, { llm: true, meeting: true, decide: true })
+test('the multi-model tools sit directly in the sidenav, alphabetical, with no Text or Speech section', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, meeting: true, decide: true, speech: true })
   await go(page, '#/overview')
-  const links = page.getByRole('group', { name: 'Text' }).getByRole('link')
-  const names = (await links.allInnerTexts()).map((text) => text.split('\n')[0].trim())
-  expect(names).toEqual(['Chat', 'Decide', 'Meeting notes'])
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  const names = (await nav.getByRole('link').allInnerTexts()).map((text) => text.split('\n')[0].trim())
+  expect(names.filter((name) => ['Chat', 'Decide', 'Meeting notes', 'Speech'].includes(name))).toEqual(['Chat', 'Decide', 'Meeting notes', 'Speech'])
+  await expect(nav.getByRole('group')).toHaveCount(0)
 })
 
 test('Decide shows the model own address and a snippet for the tool picked', async ({ page }) => {
@@ -1804,11 +1805,11 @@ test('links to a decision result, in the recent results and elsewhere, open the 
   await expect(page.locator('.overview-recent a').first()).toHaveAttribute('href', '#/hosts/local/decide')
 })
 
-test('Speak is one page over the running speech models; the text carries over and cues are checked per model', async ({ page }) => {
+test('Speech is one page over the running speech models; the text carries over and cues are checked per model', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { speech: true, speech2: true })
   await go(page, '#/hosts/local/speech')
-  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Speak/ })).toHaveCount(1)
-  await expect(page.getByRole('heading', { name: 'Speak', level: 1 })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Speech/ })).toHaveCount(1)
+  await expect(page.getByRole('heading', { name: 'Speech', level: 1 })).toBeVisible()
   // The first (alphabetical by id order) model is OmniVoice: sounds in square brackets, no direction field.
   const picker = page.getByLabel('Model speaking')
   await expect(picker.locator('option')).toHaveText(['OmniVoice speech (Licence not reviewed)'.replace('Licence not reviewed', 'Personal use only'), 'Styled speech (Work use)'])
@@ -1831,7 +1832,7 @@ test('Speak is one page over the running speech models; the text carries over an
   await page.screenshot({ path: 'test-results/screenshots/speak.png', fullPage: true })
 })
 
-test('Speak: a tab opened by hand starts from what the other tab held, and "Work use only" narrows the models', async ({ page }) => {
+test('Speech: a tab opened by hand starts from what the other tab held, and "Work use only" narrows the models', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { speech: true, speech2: true })
   await go(page, '#/hosts/local/speech')
   await page.getByRole('textbox', { name: /^what to say/i }).fill('Hello there.')

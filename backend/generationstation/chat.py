@@ -632,7 +632,7 @@ class ChatManager:
             lines.append(f"- **{runtime.name}** (menu: {group}; now {word}; id {model_id}): {about}")
             if plugin.speech:
                 info = plugin.speech
-                lines.append("  - Used from the **Speak** page, shared by every speech model. Voices: " + ", ".join(info.voices) + f". {info.direction.text}")
+                lines.append("  - Used from the **Speech** page, shared by every speech model. Voices: " + ", ".join(info.voices) + f". {info.direction.text}")
                 if info.direction.cues:
                     lines.append(f"  - Cues in the text: {info.direction.cues.text} {', '.join(info.direction.cues.examples)}")
                 continue

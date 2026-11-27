@@ -104,7 +104,7 @@ The generation page lists every result of the model in a sidebar with its thumbn
 
 ## Speech capabilities
 
-A speech plugin declares `speech: ClassVar[SpeechInfo]` (`plugins/speech.py`) so the Speak page can serve it: `voices` (which of builtin, design, clone, own it has, each mapped to the mode that serves it), `scene` (the mode for several voices, if any), `direction` (what the model does with direction, examples for its plain-words field, which field takes them per mode, and `cues` written into the text with their open or closed vocabulary) and `roles` (mode, then role, then the field that holds it: text, language, seed, speed, direction, builtin_voice, voice_description, sample, sample_text). `SpeechInfo.check(plugin)` reports a declaration that names a missing mode or field; a test runs it for every speech plugin.
+A speech plugin declares `speech: ClassVar[SpeechInfo]` (`plugins/speech.py`) so the Speech page can serve it: `voices` (which of builtin, design, clone, own it has, each mapped to the mode that serves it), `scene` (the mode for several voices, if any), `direction` (what the model does with direction, examples for its plain-words field, which field takes them per mode, and `cues` written into the text with their open or closed vocabulary) and `roles` (mode, then role, then the field that holds it: text, language, seed, speed, direction, builtin_voice, voice_description, sample, sample_text). `SpeechInfo.check(plugin)` reports a declaration that names a missing mode or field; a test runs it for every speech plugin.
 
 ## A worker's own API
 

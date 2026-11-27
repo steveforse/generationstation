@@ -1174,3 +1174,22 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .chat-chip-name { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .chat-chip-failed { border-color: var(--danger, #c0392b) }
 
+
+/* Speech page: guidance under the model picker, cue chips, notices and the saved voices */
+.decide-picker-row { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap }
+.decide-picker-row .checkbox-row { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-meta); color: var(--text-2) }
+.speech-guidance { display: grid; gap: var(--sp-2); margin-bottom: var(--sp-4); font-size: var(--fs-small); color: var(--text-2) }
+.speech-guidance p { margin: 0; max-width: 68ch }
+.speech-cues { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap }
+.speech-cues .chip { font: inherit; font-size: var(--fs-meta); color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; cursor: pointer }
+.speech-cues .chip:hover { border-color: var(--accent) }
+.speech-notice { padding: var(--sp-2) var(--sp-3); background: var(--bg-subtle, var(--bg-surface)); border: 1px solid var(--border); border-radius: var(--r-md) }
+.speech-library { margin-top: var(--sp-2) }
+.voice-list { list-style: none; margin: var(--sp-2) 0; padding: 0; display: grid; gap: var(--sp-2) }
+.voice-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-surface) }
+.voice-name { display: grid; min-width: 0 }
+.voice-text { color: var(--text-3); font-size: var(--fs-meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40ch }
+.voice-actions { display: flex; align-items: center; gap: var(--sp-2) }
+.voice-edit, .save-voice { display: grid; gap: var(--sp-2); width: 100% }
+.save-voice { margin-top: var(--sp-3) }
+.button-row { display: flex; gap: var(--sp-2); flex-wrap: wrap }

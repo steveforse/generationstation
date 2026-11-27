@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, FileText, Loader2, Menu, MessagesSquare, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Activity, FileText, Loader2, Menu, MessagesSquare, NotebookPen, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { AssistantBubble } from './components/Assistant'
 import { hostName, StatusDot, stateText } from './components/HostBits'
 import { groupByWorkload, WorkloadIcon } from './components/WorkloadIcon'
@@ -95,14 +95,14 @@ export default function App() {
 function AssistantSlot({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
   const page = route.page === 'service' ? `the ${state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId} page`
-    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decide page' : route.page === 'speech' ? 'the Speak page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
+    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decide page' : route.page === 'speech' ? 'the Speech page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
       : route.page === 'settings' ? 'the Host settings page' : route.page === 'connections' ? 'the Connections page' : 'a page'
   return <AssistantBubble store={store} host={host} where={page} />
 }
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
-  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decide' : route.page === 'speech' ? 'Speak' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
+  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decide' : route.page === 'speech' ? 'Speech' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
     : state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId
   return <div className="breadcrumb"><span className="crumb-host">{host ? hostName(host, state) : 'Workspace'}</span><span className="crumb-slash" aria-hidden="true">/</span><strong>{title}</strong></div>
 }
@@ -142,9 +142,9 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation && runtime.workload !== 'decision' && runtime.workload !== 'speech'), (runtime) => runtime.workload, (runtime) => runtime.name)
   const decideOn = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
   const decideLoading = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
-  const decideLink = decisionRuntimes.length > 0 ? <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><WorkloadIcon workload="decision" /></span>} label="Decide"
+  const decideLink = decisionRuntimes.length > 0 ? <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<WorkloadIcon workload="decision" />} label="Decide"
     title={decideOn ? 'Decide: a model is running' : 'Decide'} badge={<NavState state={decideOn ? 'ready' : decideLoading ? 'loading' : undefined} />} /> : null
-  // Speech models share one Speak entry in their own section.
+  // Speech models share one Speech entry.
   const speechRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'speech')
   const speechOn = speechRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
   const speechLoading = speechRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
@@ -152,34 +152,28 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const chatRuntimes = runtimes.filter((runtime) => runtime.chat)
   const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? chatRuntimes[0]
   const chatState = state.models?.find((item) => item.id === chatRuntime?.id)?.state
-  const chatId = `nav-${host.id}-chat`
-  // The Text section, alphabetical: Chat, Decide (every decision model, one entry) and the other text tools (meeting notes).
-  const textEntries = [
-    ...(chatRuntime ? [{ label: 'Chat', node: <NavLink key="chat" route={{ page: 'chat', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><MessagesSquare size={20} /></span>} label="Chat"
+    // The tools that serve several models (or one tool, like meeting notes) sit directly in the sidebar, alphabetical:
+  // Chat, Decide, Meeting notes, Speech. Only generators with their own page are grouped by what they make.
+  const toolEntries = [
+    ...(chatRuntime ? [{ label: 'Chat', node: <NavLink key="chat" route={{ page: 'chat', hostId: host.id }} current={current} icon={<MessagesSquare size={20} />} label="Chat"
       title={navStatus(chatState) ? `Chat: ${chatRuntime.name} ${navStatus(chatState)?.toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} /> }] : []),
     ...(decideLink ? [{ label: 'Decide', node: <Fragment key="decide">{decideLink}</Fragment> }] : []),
     ...(groups.find((group) => group.key === 'text')?.items ?? []).map((runtime) => {
       const model = state.models?.find((item) => item.id === runtime.id)
       const status = navStatus(model?.state)
       return { label: runtime.name, node: <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
-        icon={<span className="nav-rail-icon"><FileText size={20} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
+        icon={<NotebookPen size={20} />} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
         badge={<NavState state={model?.state} />} /> }
     }),
+    ...(speechRuntimes.length > 0 ? [{ label: 'Speech', node: <NavLink key="speech" route={{ page: 'speech', hostId: host.id }} current={current} icon={<WorkloadIcon workload="speech" />} label="Speech"
+      title={speechOn ? 'Speech: a model is running' : 'Speech'} badge={<NavState state={speechOn ? 'ready' : speechLoading ? 'loading' : undefined} />} /> }] : []),
   ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
   return <div className="nav-host" aria-label={`Host ${name}`}>
     <div className="nav-host-label"><StatusDot state={state} /><span className="nav-host-name">{name}</span></div>
     {runtimes.length > 0 && <NavLink route={{ page: 'models', hostId: host.id }} current={current} icon={<Server size={20} />} label="Models"
       title={running ? `Models: ${running} running` : 'Models'}
       badge={running ? <span className="nav-state" title={`${running} running`}><span className="nav-state-dot" aria-hidden="true" /><span className="nav-state-text">{running} on</span></span> : undefined} />}
-    {textEntries.length > 0 && <div className="nav-group" role="group" aria-labelledby={chatId}>
-      <div className="nav-group-label" id={chatId}><WorkloadIcon workload="text" size={18} /><span>Text</span></div>
-      {textEntries.map((entry) => entry.node)}
-    </div>}
-    {speechRuntimes.length > 0 && <div className="nav-group" role="group" aria-labelledby={`nav-${host.id}-speech`}>
-      <div className="nav-group-label" id={`nav-${host.id}-speech`}><WorkloadIcon workload="speech" size={18} /><span>Speech</span></div>
-      <NavLink route={{ page: 'speech', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><WorkloadIcon workload="speech" /></span>} label="Speak"
-        title={speechOn ? 'Speak: a model is running' : 'Speak'} badge={<NavState state={speechOn ? 'ready' : speechLoading ? 'loading' : undefined} />} />
-    </div>}
+    {toolEntries.map((entry) => entry.node)}
     {groups.filter((group) => group.key !== 'text').map((group) => {
       const id = `nav-${host.id}-${group.key}`
       return <div className="nav-group" role="group" aria-labelledby={id} key={group.key}>

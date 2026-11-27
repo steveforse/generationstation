@@ -103,7 +103,7 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
     {offered.length > 1 && <label className="decide-picker"><span>Model speaking</span>
       <select aria-label="Model speaking" value={chosen?.id} onChange={(event) => setPickedId(event.target.value)}>
         {offered.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.name} ({LICENSE_WORD[runtime.license?.use ?? 'personal'] ?? 'Licence not reviewed'})</option>)}</select></label>}
-    {running.some((runtime) => !usable('work', runtime)) && <label className="checkbox-row"><input type="checkbox" checked={workOnly} onChange={(event) => setWorkOnly(event.target.checked)} /> Work use only</label>}
+    {running.length > 1 && running.some((runtime) => !usable('work', runtime)) && <label className="checkbox-row"><input type="checkbox" checked={workOnly} onChange={(event) => setWorkOnly(event.target.checked)} /> Work use only</label>}
   </div>
 
   const canClone = !!speech?.voices.clone
@@ -154,7 +154,7 @@ export function SpeechPage({ store, host, modelId }: { store: HostStore; host?: 
 
   return <ServicePage store={store} host={host} modelId={chosen?.id ?? ''}
     group={{
-      title: 'Speak', noun: 'speech', description: 'Turn text into speech with whichever speech model is running. What you type carries over when you change the model.',
+      title: 'Speech', noun: 'speech', description: 'Turn text into speech with whichever speech model is running. What you type carries over when you change the model.',
       ids: speechRuntimes.map((runtime) => runtime.id), picker, above, onVoiceSaved: loadVoices, none: speechRuntimes.length > 0 && running.length === 0,
       form: { key: `${chosenId}:${form.n}`, start: { mode: form.mode ?? undefined }, hooks }, reuseElsewhere,
     }} />
