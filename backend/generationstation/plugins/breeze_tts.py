@@ -22,8 +22,8 @@ SEED = InputSpec(label="Seed", kind="seed", minimum=0, maximum=2**31 - 1, advanc
 TEXT = InputSpec(
     label="What to say", kind="textarea", required=True, max_length=3000,
     placeholder="Good evening, and welcome aboard. (laugh) Mind the gap!",
-    help="English or Chinese. Sounds in round brackets work in English: (laugh), (sigh), (cough), (clears throat). "
-         "In Chinese use [笑].")
+    help="Put a sound in round brackets where it should happen: (laugh), (sigh), (cough), (clears throat). "
+         "These are the ones the model's card shows; others may work.")
 
 
 class BreezeTTSPlugin(WorkerPlugin):
@@ -45,13 +45,13 @@ class BreezeTTSPlugin(WorkerPlugin):
         voices={"design": "design", "clone": "clone"},
         direction=Direction(
             text=("Describe the voice and its manner in plain words: 'a warm middle-aged woman, calm and clear', or "
-                  "'quietly, with a smile' (the Direction field, when you clone). It can also put a sound in the text: "
-                  "in round brackets for English, in square brackets for Chinese; only the listed ones work."),
+                  "'quietly, with a smile' (the Direction field, when you clone). It can also put a sound in the text, in round "
+                  "brackets. The model's card shows four; others may work."),
             examples=["quietly, with a smile", "calm and clear", "tired and slow"],
             style_fields={"design": "voice", "clone": "voice"},
-            cues=Cues(open="(", close=")", kind="sounds", open_vocabulary=False,
+            cues=Cues(open="(", close=")", kind="sounds", open_vocabulary=True,
                       examples=["(laugh)", "(sigh)", "(cough)", "(clears throat)"],
-                      text="Put a sound in round brackets where it should happen (English). In Chinese use [笑].")),
+                      text="Put a sound in round brackets where it should happen. The model's card shows these four; others may work.")),
         roles={
             "design": {"text": "prompt", "seed": "seed", "voice_description": "voice"},
             "clone": {"text": "prompt", "seed": "seed", "direction": "voice", "sample": "sample", "sample_text": "sample_text"},
