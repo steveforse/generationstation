@@ -180,7 +180,8 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
     const body = route.request().postDataJSON() as { preset: string; settings: Record<string, unknown>; gpus: number[] }
     const url = route.request().url()
     const runtime = url.includes('/runtimes/basalt/') ? runtimeFixture() : url.includes('/runtimes/inkling2/') ? llmRuntimeFixture() : songRuntimeFixture()
-    const preset = (runtime.presets as Record<string, { estimate: { ram_gib: number; gpu_min_free_gib: Record<number, number> } }>)[body.preset]
+    const presets = runtime.presets as Record<string, { estimate: { ram_gib: number; gpu_min_free_gib: Record<number, number> } }>
+    const preset = presets[body.preset] ?? Object.values(presets)[0]  // a fixture model without its own key still gets an estimate
     const budget = typeof body.settings.resident_budget_gib === 'number' ? body.settings.resident_budget_gib : 0
     const ids = [gpuUuid, 'GPU-second']
     return route.fulfill({ json: {
