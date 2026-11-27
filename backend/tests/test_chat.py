@@ -399,22 +399,41 @@ def test_the_help_assistant_keeps_one_thread_knows_the_app_and_the_page(setup):
     assert not chat._context(store.get_conversation(plain["id"]), {})[0]["content"].startswith("You are the help assistant")
 
 
-def test_the_assistant_runs_on_the_model_marked_for_it(setup, tmp_path):
-    """Not the first text model, nor whichever is running: the one marked `assistant` (Inkling on the desktop)."""
+def test_the_assistant_uses_a_running_model_and_prefers_the_one_marked_for_it(setup, tmp_path):
+    """A running chat model answers, the marked one (`assistant`, Inkling on the desktop) if it is among them; with
+    none running, the marked one is the one to start."""
     store, _, generation, uploads = setup
     entry = {"kind": "basalt", "workload": "text", "executable": "basalt.exe", "default_preset": "fn", "presets": {"fn": {
         "name": "FN", "alias": "FN", "model_path": "D:/fn.basalt", "gpus": [0], "settings": {},
         "estimate": {"ram_gib": 4, "gpu_min_free_gib": {"0": 4}}}}}
     cat = parse_catalog({"runtimes": {"big": {**entry, "name": "Big model", "port": 8160},
                                       "helper": {**entry, "name": "Helper", "port": 8161, "assistant": True}}})
-    store.states = {"big": {"state": "ready"}, "helper": {"state": "unloaded"}}
     chat = ChatManager(store, cat, generation, uploads, opener=Server())
-    assert chat.assistant()["conversation"]["model_id"] == "helper"
-    assert chat.create()["model_id"] == "big"  # the Chat page still takes a running model
-    # A thread made before the mark moves to the marked model.
+    store.states = {"big": {"state": "unloaded"}, "helper": {"state": "unloaded"}}
+    assert chat.assistant_model() == "helper"  # nothing running: the one to start
+    store.states = {"big": {"state": "ready"}, "helper": {"state": "unloaded"}}
+    assert chat.assistant()["conversation"]["model_id"] == "big"  # a running model answers, whatever it is
+    assert chat.create()["model_id"] == "big"
+    store.states = {"big": {"state": "ready"}, "helper": {"state": "ready"}}
+    assert chat.assistant()["conversation"]["model_id"] == "helper"  # both running: the marked one
     row = store.latest_conversation("assistant")
     store.update_conversation(row["id"], model_id="big")
     assert chat.assistant()["conversation"]["model_id"] == "helper"
+
+
+def test_only_the_assistant_calls_itself_the_assistant(setup, tmp_path):
+    store, _, generation, uploads = setup
+    entry = {"kind": "basalt", "workload": "text", "executable": "basalt.exe", "default_preset": "fn", "presets": {"fn": {
+        "name": "FN", "alias": "FN", "model_path": "D:/fn.basalt", "gpus": [0], "settings": {},
+        "estimate": {"ram_gib": 4, "gpu_min_free_gib": {"0": 4}}}}}
+    cat = parse_catalog({"runtimes": {"big": {**entry, "name": "Big model", "port": 8160}}})
+    store.states = {"big": {"state": "ready"}}
+    chat = ChatManager(store, cat, generation, uploads, opener=Server())
+    general = chat._conversation(chat.create()["id"])
+    helper = chat._conversation(chat.assistant()["conversation"]["id"])
+    system = lambda conversation: chat._context(conversation, {})[0]["content"]
+    assert "You are the assistant" not in system(general) and "chat model running on the user's own computer" in system(general)
+    assert system(helper).count("You are the assistant inside Generation Station") == 1
 
 
 def test_a_message_can_move_the_conversation_to_another_running_chat_model(setup, tmp_path):

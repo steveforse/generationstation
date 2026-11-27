@@ -37,8 +37,14 @@ ASSISTANT_TITLE = "Assistant"
 GUIDE = (Path(__file__).with_name("assistant_guide.md")).read_text(encoding="utf-8").strip()
 GROUPS = {"text": "Text", "speech": "Speech", "image": "Pictures", "video": "Video", "music": "Music"}
 
-SYSTEM = """You are the assistant inside Generation Station, which runs AI models on the user's own desktop.
-Reply in Markdown. Be direct and helpful.
+# What every chat is told it can do. Only the help assistant's own conversation is told it is "the assistant" (INTRO_ASSISTANT);
+# the general chat is just a model running on the user's computer and does not call itself the assistant.
+INTRO_CHAT = """You are a chat model running on the user's own computer, through Generation Station, which runs AI models there.
+Reply in Markdown. Be direct and helpful."""
+INTRO_ASSISTANT = """You are the assistant inside Generation Station, which runs AI models on the user's own desktop.
+Reply in Markdown. Be direct and helpful."""
+
+SYSTEM = """
 
 Making things: the tools start jobs on the other models that are running now (pictures, video, songs, speech).
 Use a tool only when the user asks for something to be made, or clearly agrees to it. A job runs in the
@@ -141,14 +147,13 @@ class ChatManager:
                                   for row in self.store.list_conversations()]}
 
     def assistant_model(self):
-        """The model the help assistant runs on: the one marked `assistant` in the runtimes file, else (for a
-        host without one) a running chat model, else the first. None when the host has no chat model."""
+        """The model the help assistant runs on: a running chat model (the one marked `assistant` in the runtimes file if it is
+        running), else the marked one, else the first. None when the host has no chat model."""
         models = self.chat_models()
         marked = [m for m in models if getattr(self.catalog.runtimes[m], "assistant", False)]
-        if marked:
-            return marked[0]
         states = self.store.runtime_states()
-        return next((m for m in models if states.get(m, {}).get("state") == "ready"), models[0] if models else None)
+        running = [m for m in models if states.get(m, {}).get("state") == "ready"]
+        return next((m for m in marked if m in running), None) or (running[0] if running else None) or (marked[0] if marked else None) or (models[0] if models else None)
 
     def create(self, model_id=None, kind="chat"):
         models = self.chat_models()
@@ -447,8 +452,9 @@ class ChatManager:
         running = sorted({h["runtime"].name for h in handlers.values() if "runtime" in h})
         stopped = sorted(r.name for m, r in self.catalog.runtimes.items()
                          if self.catalog.plugin(m).generates and r.name not in running)
-        system = SYSTEM + f"\nRunning now: {', '.join(running) or 'none'}. Not running: {', '.join(stopped) or 'none'}."
-        if conversation.get("kind") == "assistant":
+        assistant = conversation.get("kind") == "assistant"
+        system = (INTRO_ASSISTANT if assistant else INTRO_CHAT) + SYSTEM + f"\nRunning now: {', '.join(running) or 'none'}. Not running: {', '.join(stopped) or 'none'}."
+        if assistant:
             system = f"{GUIDE}\n\n{self._model_guide()}\n\n# Your tools\n\n{system}"
             if where:
                 system += f"\nThe person is looking at: {where}."

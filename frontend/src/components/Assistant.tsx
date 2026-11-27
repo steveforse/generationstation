@@ -33,15 +33,16 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
   const launcher = useRef<HTMLButtonElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const connected = state.connection === 'connected'
-  // The thread's own model once loaded; before that, the model marked as the assistant (Inkling), never just the
-  // first text model in the list.
-  const runtime = state.runtimes?.find((item) => item.chat && item.id === loaded?.conversation.model_id)
-    ?? state.runtimes?.find((item) => item.chat && item.assistant)
-    ?? state.runtimes?.find((item) => item.chat && state.models?.find((model) => model.id === item.id)?.state === 'ready')
-    ?? state.runtimes?.find((item) => item.chat)
-  const model = state.models?.find((item) => item.id === runtime?.id)
-  const ready = model?.state === 'ready'
-  const starting = state.pendingModelId === runtime?.id || model?.state === 'loading'
+  // Like the Chat page: only a running text model is named or used. The thread's own model if it is running, else the one
+  // marked for the assistant, else any other that is running. With none running, the button starts the assistant's model
+  // (the marked one, else the first) without naming it.
+  const chats = state.runtimes?.filter((item) => item.chat) ?? []
+  const isReady = (id: string) => state.models?.find((model) => model.id === id)?.state === 'ready'
+  const running = chats.filter((item) => isReady(item.id))
+  const runtime = running.find((item) => item.id === loaded?.conversation.model_id) ?? running.find((item) => item.assistant) ?? running[0]
+  const target = runtime ?? chats.find((item) => item.assistant) ?? chats[0]
+  const ready = !!runtime
+  const starting = chats.some((item) => state.pendingModelId === item.id || state.models?.find((model) => model.id === item.id)?.state === 'loading')
   const conversationId = loaded?.conversation.id
 
   const setOpenSaved = (next: boolean) => {
@@ -95,7 +96,7 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
   </button>
 
   const busy = sending || !!loaded?.conversation.busy
-  const refusal = runtime ? state.refusals[runtime.id] : undefined
+  const refusal = target ? state.refusals[target.id] : undefined
   return <section ref={panel} className="assistant-panel" aria-label="Assistant"
     onKeyDown={(event) => { if (event.key === 'Escape') setOpenSaved(false) }}>
     <header className="assistant-head">
@@ -109,11 +110,11 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
     </header>
     <div className="assistant-thread" ref={thread} aria-live="polite" aria-busy={busy}><div className="chat-thread-body" ref={body}>
       {!connected && <p className="assistant-note">This browser is not connected to the desktop. <a href={href({ page: 'connections' })}>Open Connections</a></p>}
-      {connected && state.runtimes && !runtime && <p className="assistant-note">This desktop has no text model for the assistant.</p>}
-      {connected && runtime && !ready && <div className="assistant-off">
-        <p>The assistant runs on <strong>{runtime.name}</strong>, which is {starting ? 'starting' : 'off'}.</p>
-        <button type="button" className="button button-primary" disabled={starting} onClick={() => void session.runRuntime(runtime, 'start')}>
-          {starting ? <Loader2 size={16} className="spin" aria-hidden="true" /> : <Power size={16} aria-hidden="true" />}{starting ? 'Starting…' : `Start ${runtime.name}`}</button>
+      {connected && state.runtimes && !target && <p className="assistant-note">This desktop has no text model for the assistant.</p>}
+      {connected && target && !ready && <div className="assistant-off">
+        <p>{starting ? 'A text model is starting.' : 'No text model is running.'}</p>
+        <button type="button" className="button button-primary" disabled={starting} onClick={() => void session.runRuntime(target, 'start')}>
+          {starting ? <Loader2 size={16} className="spin" aria-hidden="true" /> : <Power size={16} aria-hidden="true" />}{starting ? 'Starting…' : 'Start a text model'}</button>
         {refusal && !starting && <p className="operation-error" role="alert">{refusal.message}</p>}
       </div>}
       {loadError && <p className="operation-error" role="alert">{loadError}</p>}
@@ -131,7 +132,7 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
     <form className="assistant-composer" onSubmit={(event) => { event.preventDefault(); void ask(text) }}>
       <label className="sr-only" htmlFor="assistant-input">Ask the assistant</label>
       <textarea id="assistant-input" ref={input} rows={1} value={text} maxLength={20000} disabled={!ready || !connected}
-        placeholder={ready ? 'Ask anything about Generation Station' : 'Start the assistant to ask'}
+        placeholder={ready ? 'Ask anything about Generation Station' : 'Start a text model to ask'}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void ask(text) } }} />
       {busy ? <button type="button" className="icon-button assistant-send" aria-label="Stop" title="Stop" disabled={!sending || stopping}

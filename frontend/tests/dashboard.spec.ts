@@ -1459,17 +1459,18 @@ test('a model that also paints pictures labels each tab and result by what it ma
 })
 
 test('the assistant bubble opens on every page but Chat, offers to start its model, and keeps one thread', async ({ page }) => {
-  // Two text models: the bubble uses the one marked as the assistant (Inkling), not the first in the list.
+  // Nothing running: the bubble offers to start a text model (the one marked for the assistant) without naming any.
   await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, songs: true })
   const thread = (id: string) => ({ conversation: { id, title: 'Assistant', kind: 'assistant', model_id: 'inkling2', created_at: '2026-11-23T10:00:00Z', updated_at: '2026-11-23T10:00:00Z', busy: false }, messages: [] })
   await page.route('**/api/assistant', (route) => route.fulfill({ json: thread('help-1') }))
   await go(page, '#/overview')
   await page.getByRole('button', { name: 'Open the assistant' }).click()
   const panel = page.getByRole('region', { name: 'Assistant' })
-  await expect(panel.getByText('The assistant runs on Inkling 2 Mini')).toBeVisible()
+  await expect(panel.getByText('No text model is running.')).toBeVisible()
+  await expect(panel.getByText(/Inkling|Basalt/)).toHaveCount(0)
   await expect(panel.getByLabel('Ask the assistant')).toBeDisabled()
   const start = page.waitForRequest((request) => request.url().includes('/api/runtimes/inkling2/start') && request.method() === 'POST')
-  await panel.getByRole('button', { name: 'Start Inkling 2 Mini' }).click()
+  await panel.getByRole('button', { name: 'Start a text model' }).click()
   await start
   await panel.getByRole('button', { name: 'Close the assistant' }).click()
   await expect(panel).toHaveCount(0)
