@@ -10,6 +10,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, TimingSpec
+from .speech import Cues, Direction, SpeechInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 LINE = re.compile(r"^\s*([^:\n]{1,40}):\s*\S")
@@ -74,6 +75,19 @@ class FishDrama3Plugin(WorkerPlugin):
         TimingSpec(when={"mode": "speak"}, preset="full", seconds=5, note="for about 10 s of speech"),
         TimingSpec(when={"mode": "scene"}, preset="full", seconds=7, note="for a short scene"),
     )
+    speech: ClassVar[SpeechInfo] = SpeechInfo(
+        voices={"own": "speak", "clone": "speak"}, scene="scene",
+        direction=Direction(
+            text=("Direct it with cues in square brackets in the text. Any short description works, and it applies from "
+                  "that point on."),
+            cues=Cues(open="[", close="]", kind="emotion", open_vocabulary=True,
+                      examples=["[whispers]", "[laughs]", "[sighs]", "[angry]", "[super happy]", "[nervous]", "[pause]",
+                                "[shouting]", "[crying]", "[sarcastic]"],
+                      text="Put a cue in square brackets where it should happen, in plain words.")),
+        roles={
+            "speak": {"text": "prompt", "seed": "seed", "sample": "sample", "sample_text": "sample_text"},
+            "scene": {"text": "script", "seed": "seed", "sample": "voices", "sample_text": "voice_texts"},
+        })
     modes: ClassVar[dict[str, ModeSpec]] = {
         "speak": ModeSpec(
             label="Speak a text",

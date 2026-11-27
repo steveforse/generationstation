@@ -6,19 +6,19 @@ import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
 import { chosenChart, QualityChart, qualityCharts, scoresOn } from '../components/QualityChart'
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
 import { estimateFit, GpuCard, isUnified, modelColor, modelUsage, type Preview, ramSegments, ResourceCard } from '../components/Resources'
-import { fieldsFor, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
+import { fieldsFor, type FormHooks, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
 import type { FileItem } from '../components/FilePicker'
 import type { SavedHost } from '../hosts'
 import { handOff, soundtrackToWav, spokenLine, takeHandOff, voiceTargets } from '../voiceSample'
 import { href, modelRoute } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
-import type { JobFile, Operation, ReferenceModel, Runtime, RuntimeEstimate } from '../types'
+import type { Job, JobFile, Operation, ReferenceModel, Runtime, RuntimeEstimate } from '../types'
 
 /** The Models page's licence filter: everything, what is fine for work, or what is personal use only. */
 const USE_FILTERS = [['', 'All'], ['work', 'Work use'], ['personal', 'Personal use only']] as const
 /** The uses a model's versions allow: a model with several versions counts under each use one of them allows. */
 const usesOf = (runtime: Runtime) => new Set(Object.values(runtime.presets).map((preset) => (preset.license ?? runtime.license)?.use))
-const usable = (filter: string, runtime: Runtime) => {
+export const usable = (filter: string, runtime: Runtime) => {
   const uses = usesOf(runtime)
   return !filter || (filter === 'work' ? uses.has('work') || uses.has('conditions') : uses.has('personal'))
 }
@@ -146,10 +146,18 @@ export function DecidePage({ store, host, modelId }: { store: HostStore; host?: 
       <select aria-label="Model answering" value={chosen?.id} onChange={(event) => setPickedId(event.target.value)}>{running.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.name}</option>)}</select></label>
     : null
   return <ServicePage store={store} host={host} modelId={chosen?.id ?? ''}
-    group={{ title: 'Decide', description: 'Ask a question about a situation and get a probability for each answer, from whichever decision model is running.', ids: decide.map((runtime) => runtime.id), picker, none: decide.length > 0 && running.length === 0 }} />
+    group={{ title: 'Decide', description: 'Ask a question about a situation and get a probability for each answer, from whichever decision model is running.', ids: decide.map((runtime) => runtime.id), picker, connect: true, none: decide.length > 0 && running.length === 0 }} />
 }
 
-type Group = { title: string; description: string; ids: string[]; picker: ReactNode; none: boolean }
+/** A page that serves several models as one (Decide, Speech): which models, the control to pick one, and what it adds around the form. */
+export type Group = {
+  title: string; description: string; ids: string[]; picker: ReactNode; none: boolean; noun?: string; connect?: boolean
+  /** The form is remounted when `key` changes; `start` is where it opens; `hooks` let the page follow and change it. */
+  form?: { key: string; start?: FormStart; hooks?: FormHooks }
+  above?: ReactNode
+  /** Called instead of refilling the form when "Use these settings" is chosen on a result from another model of the group. */
+  reuseElsewhere?: (job: Job) => void
+}
 
 /** Generation: the plugin's form and the results. Starting and stopping happen on the Models page. */
 export function ServicePage({ store, host, modelId, group }: { store: HostStore; host?: SavedHost; modelId: string; group?: Group }) {
@@ -159,7 +167,7 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // "Use these settings" refills the form by remounting it with that result's inputs.
   // A voice sample sent from another model's result arrives as this page's first form start.
-  const [reuse, setReuse] = useState<{ n: number; start?: FormStart }>(() => ({ n: 0, start: host ? takeHandOff(host.id, modelId) : undefined }))
+  const [reuse, setReuse] = useState<{ n: number; start?: FormStart }>(() => ({ n: 0, start: host && !group ? takeHandOff(host.id, modelId) : undefined }))
   if (!host || !session) return <Missing title="Host not found" text="This host is no longer saved on this device." />
   const runtime = state.runtimes?.find((item) => item.id === modelId)
   const model = state.models?.find((item) => item.id === modelId)
@@ -170,15 +178,16 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
   const ready = modelState === 'ready'
   const status = ready ? `${group && runtime ? `${runtime.name} is running` : 'Running'} on ${runtime ? gpuNames(runtime) : 'this host'}.`
     : ['loading', 'unloading'].includes(modelState) ? `${stateText[modelState]}. This can take several minutes.`
-      : group ? 'No decision model is running. Start one on the Models page first.' : `${runtime?.name ?? modelId} is not running. Start it on the Models page first.`
+      : group ? `No ${group.noun ?? 'decision'} model is running. Start one on the Models page first.` : `${runtime?.name ?? modelId} is not running. Start it on the Models page first.`
   return <>
     <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state)}</div><h1>{group?.title ?? runtime?.name ?? modelId}</h1><p>{group ? group.description : runtime ? runtime.description || `${runtime.workload} · runs on ${hostName(host, state)}` : 'Waiting for this host’s model list.'}</p></div></section>
     {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={16} /></a></div>}
     {runtime && !runtime.generation && <Missing title="Nothing to make here" text={`${runtime.name} is started and stopped on the Models page.`} />}
     {runtime?.generation && <div className="service-layout"><div className="service-main"><article className="profile-card service-panel">
       <div className="service-status" aria-live="polite"><StatePill state={modelState}>{stateText[modelState] ?? 'Unknown'}</StatePill><span>{status}</span><a className="text-button" href={modelsHref}>{ready ? 'Model settings' : 'Go to Models'} <ArrowUpRight size={16} /></a></div>
-      {group && ready && <div className="decide-bar"><ConnectLink kind="decide" runtime={runtime} host={host} session={session} />{group.picker}</div>}
-      {ready && <GenerateForm key={reuse.n} runtime={runtime} generation={runtime.generation} initial={reuse.start} error={state.jobErrors[runtime.id]}
+      {group && ready && <div className="decide-bar">{group.connect && <ConnectLink kind="decide" runtime={runtime} host={host} session={session} />}{group.picker}</div>}
+      {ready && group?.above}
+      {ready && <GenerateForm key={`${group?.form?.key ?? ''}:${reuse.n}`} runtime={runtime} generation={runtime.generation} initial={reuse.n ? reuse.start : reuse.start ?? group?.form?.start} hooks={group?.form?.hooks} error={state.jobErrors[runtime.id]}
         upload={(file) => session.uploadFile(file)}
         ahead={jobs.filter((job) => job.status === 'queued' || job.status === 'running').length}
         onGenerate={(r, inputs) => session.runJob(r, inputs)} />}
@@ -190,6 +199,7 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
       {selected && <JobDetail job={selected} runtime={state.runtimes?.find((item) => item.id === selected.model_id) ?? runtime} generation={(state.runtimes?.find((item) => item.id === selected.model_id) ?? runtime).generation ?? runtime.generation} fileUrl={(job, output) => session.fileUrl(job, output)}
         inputUrl={(job, name) => session.inputUrl(job, name)}
         onReuse={async (job) => {
+          if (group?.reuseElsewhere && job.model_id !== modelId) { group.reuseElsewhere(job); setSelectedId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
           // Pictures and other references go back into the form: fetched from the job and uploaded again.
           const files: Record<string, FileItem[]> = {}
           for (const field of fieldsFor(runtime.generation!, job.inputs.mode).filter((item) => item.kind === 'files')) {
@@ -219,7 +229,7 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
             const sample: FileItem = { key: `voice-${job.id}`, name, kind: 'audio', url: URL.createObjectURL(wav), status: 'ready', id: record.id }
             const line = spokenLine(job.inputs.prompt)
             handOff(host.id, target.runtime.id, { mode: target.mode, inputs: { mode: target.mode, ...(target.textKey && line ? { [target.textKey]: line } : {}) }, files: { [target.sampleKey]: [sample] } })
-            window.location.hash = href({ page: 'service', hostId: host.id, modelId: target.runtime.id })
+            window.location.hash = href(modelRoute(host.id, target.runtime.id, state.runtimes))
             return ''
           } catch (reason) { return reason instanceof Error ? reason.message : 'The sound could not be taken from this clip.' }
         }} />}

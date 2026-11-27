@@ -110,17 +110,28 @@ export function fieldsFor(generation: Generation, mode?: unknown) {
 }
 
 export type FormStart = { mode?: string; inputs?: Job['inputs']; files?: Record<string, FileItem[]> }
+/** A change a page makes to one field of the form: insert at the cursor, or replace the whole value. `n` makes each one new. */
+export type FieldCommand = { n: number; mode: string; field: string; apply: (current: string, start: number | null, end: number | null) => string }
+/** What a page that hosts the form may want from it: the values as they change, which tab is open, starting values for each tab, and field changes. */
+export type FormHooks = {
+  starts?: Record<string, FormStart>; onValues?: (mode: string, values: Record<string, string>, files: Record<string, FileItem[]>) => void
+  onMode?: (mode: string) => void; command?: FieldCommand
+}
 
 /** The generation form; with several modes, one tab per mode, each keeping its own entries. */
-export function GenerateForm({ runtime, generation, onGenerate, error, initial, ahead = 0, upload }: {
+export function GenerateForm({ runtime, generation, onGenerate, error, initial, ahead = 0, upload, hooks }: {
   runtime: Runtime; generation: Generation; error?: string; onGenerate: GenerateHandlers['onGenerate']
-  initial?: FormStart; ahead?: number; upload: (file: File) => Promise<UploadRecord>
+  initial?: FormStart; ahead?: number; upload: (file: File) => Promise<UploadRecord>; hooks?: FormHooks
 }) {
   const modes = generation.modes ?? []
   const [mode, setMode] = useState(() => modes.find((item) => item.key === initial?.mode)?.key ?? modes[0]?.key ?? '')
   const label = labelOf(generation)
-  if (!modes.length) return <ModeForm runtime={runtime} generation={generation} fields={generation.inputs} onGenerate={onGenerate} error={error} initial={initial} ahead={ahead} upload={upload} label={label} />
   const current = modes.find((item) => item.key === mode) ?? modes[0]
+  const currentKey = current?.key ?? ''
+  // The hosting page hears only changes of tab, not the tab the form opened on (and not the effect run twice in development).
+  const reported = useRef(currentKey)
+  useEffect(() => { if (currentKey !== reported.current) { reported.current = currentKey; hooks?.onMode?.(currentKey) } }, [currentKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!modes.length) return <ModeForm runtime={runtime} generation={generation} fields={generation.inputs} onGenerate={onGenerate} error={error} initial={initial} ahead={ahead} upload={upload} label={label} hooks={hooks} active />
   return <div className="generate-modes">
     {modes.length > 1 && <div className="mode-tabs" role="tablist" aria-label="How to make it">
       {modes.map((item) => <button key={item.key} type="button" role="tab" id={`${runtime.id}-tab-${item.key}`} aria-selected={item.key === current.key}
@@ -129,14 +140,15 @@ export function GenerateForm({ runtime, generation, onGenerate, error, initial, 
     {modes.map((item) => <div key={item.key} role="tabpanel" id={`${runtime.id}-panel-${item.key}`} aria-labelledby={modes.length > 1 ? `${runtime.id}-tab-${item.key}` : undefined} hidden={item.key !== current.key}>
       <p className="mode-help">{item.help}</p>
       <ModeForm runtime={runtime} generation={generation} fields={item.inputs} mode={item.key} onGenerate={onGenerate} error={item.key === current.key ? error : undefined}
-        initial={initial?.mode === item.key || (!initial?.mode && item.key === modes[0].key) ? initial : undefined} ahead={ahead} upload={upload} label={labelOf(generation, item.output_kind ?? generation.output_kind)} />
+        initial={hooks?.starts?.[item.key] ?? (initial?.mode === item.key || (!initial?.mode && item.key === modes[0].key) ? initial : undefined)} ahead={ahead} upload={upload}
+        label={labelOf(generation, item.output_kind ?? generation.output_kind)} hooks={hooks} active={item.key === current.key} />
     </div>)}
   </div>
 }
 
-function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initial, ahead, upload, label }: {
+function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initial, ahead, upload, label, hooks, active }: {
   runtime: Runtime; generation: Generation; fields: InputField[]; mode?: string; onGenerate: GenerateHandlers['onGenerate']; error?: string
-  initial?: FormStart; ahead: number; upload: (file: File) => Promise<UploadRecord>; label: string
+  initial?: FormStart; ahead: number; upload: (file: File) => Promise<UploadRecord>; label: string; hooks?: FormHooks; active?: boolean
 }) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(fields.filter((field) => field.kind !== 'files').map((field) => {
     let start = initial?.inputs?.[field.key] ?? field.default
@@ -144,6 +156,19 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
     return [field.key, start == null || Array.isArray(start) ? '' : String(start)]
   })))
   const [files, setFiles] = useState<Record<string, FileItem[]>>(() => initial?.files ?? {})
+  // A page hosting the form hears the open tab's values as they change, and may change a field (insert a cue, clear one).
+  // A tab that has just become the open one is not heard until its values change, so its blank fields do not overwrite what the page holds.
+  const wasActive = useRef(active)
+  useEffect(() => { if (active && wasActive.current) hooks?.onValues?.(mode ?? '', values, files); wasActive.current = !!active }, [values, files, active]) // eslint-disable-line react-hooks/exhaustive-deps
+  const lastCommand = useRef(hooks?.command?.n)
+  useEffect(() => {
+    const command = hooks?.command
+    if (!command || command.n === lastCommand.current) return
+    lastCommand.current = command.n
+    if (command.mode !== (mode ?? '')) return
+    const element = document.getElementById(`${runtime.id}-${mode ?? 'input'}-${command.field}`) as HTMLInputElement | HTMLTextAreaElement | null
+    setValues((current) => ({ ...current, [command.field]: command.apply(current[command.field] ?? '', element?.selectionStart ?? null, element?.selectionEnd ?? null) }))
+  }, [hooks?.command?.n]) // eslint-disable-line react-hooks/exhaustive-deps
   const [advanced, setAdvanced] = useState(() => fields.some((field) => field.advanced && initial?.inputs?.[field.key] != null && initial.inputs[field.key] !== field.default))
   const [sending, setSending] = useState(false)
   // Width and height pairs stay in the clip's proportions unless unlocked.
@@ -704,7 +729,7 @@ export function JobModal({ open, onClose, title, children }: { open: boolean; on
   </dialog>
 }
 
-const LICENSE_WORD: Record<RuntimeLicense['use'], string> = { work: 'Work use', conditions: 'Check terms', personal: 'Personal use only' }
+export const LICENSE_WORD: Record<RuntimeLicense['use'], string> = { work: 'Work use', conditions: 'Check terms', personal: 'Personal use only' }
 const LICENSE_MEANING: Record<RuntimeLicense['use'], string> = {
   work: 'Free for a company\'s own use as far as its licences say.',
   conditions: 'Free for company use with limits to check, listed below.',

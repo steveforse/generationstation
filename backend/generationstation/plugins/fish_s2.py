@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, TimingSpec
+from .speech import Cues, Direction, SpeechInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -32,6 +33,15 @@ class FishS2Plugin(WorkerPlugin):
     timings: ClassVar[tuple[TimingSpec, ...]] = (
         TimingSpec(preset="mlx", gpu=0, seconds=10, note="for a sentence or two"),
     )
+    speech: ClassVar[SpeechInfo] = SpeechInfo(
+        voices={"own": "speak", "clone": "speak"},
+        direction=Direction(
+            text=("Direct it with cues in square brackets in the text. Any short description works, and it applies from "
+                  "that point on."),
+            cues=Cues(open="[", close="]", kind="emotion", open_vocabulary=True,
+                      examples=["[whisper]", "[laughing]", "[pause]", "[excited]", "[sad]"],
+                      text="Put a cue in square brackets where it should happen, in plain words.")),
+        roles={"speak": {"text": "prompt", "seed": "seed", "sample": "sample", "sample_text": "sample_text"}})
     modes: ClassVar[dict[str, ModeSpec]] = {
         "speak": ModeSpec(
             label="Speak a text",

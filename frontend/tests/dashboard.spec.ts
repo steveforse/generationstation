@@ -104,11 +104,31 @@ function speechRuntimeFixture() {
   return {
     id: 'omnivoice', kind: 'omnivoice', plugin: 'OmniVoice', name: 'OmniVoice speech', description: 'Speaks text.', workload: 'speech', port: 8200, default_preset: 'omnivoice', last_launch: { preset: 'omnivoice', settings: {}, gpus: [1] }, max_gpus: 1,
     presets: { omnivoice: { name: 'OmniVoice', gpus: [1], allowed_gpus: [{ index: 1, name: 'Second GPU' }], estimate: { ram_gib: 6, gpu_min_free_gib: { 1: 5 } }, settings: [] } },
-    generation: { output_kind: 'audio', inputs: [], make_label: 'Make speech', result_noun: 'recording', timings: [], modes: [
+    generation: { output_kind: 'audio', inputs: [], make_label: 'Make speech', result_noun: 'recording', timings: [], speech: {
+      voices: { design: 'design', clone: 'clone' }, scene: null,
+      direction: { text: 'Fixture direction text.', examples: [], style_fields: {}, cues: { open: '[', close: ']', kind: 'sounds', open_vocabulary: false, examples: ['[laughter]', '[sigh]'], text: 'Put a sound in square brackets.' } },
+      roles: { design: { text: 'prompt' }, clone: { text: 'prompt', sample: 'sample', sample_text: 'sample_text' } } }, modes: [
       { key: 'design', label: 'Describe a voice', help: 'Choose traits.', inputs: [field('gender', 'Gender', 'choice', { options: ['any', 'female', 'male'], default: 'any' }), text] },
       { key: 'clone', label: 'From a voice sample', help: 'Give a sample.', inputs: [field('sample', 'Voice sample', 'files', { accept: ['audio'], max_count: 1 }),
         field('sample_text', 'What the sample says', 'text', { max_length: 1000 }), text] },
     ] },
+  }
+}
+
+/** A second speech model: no cues in the text, a plain-words style field, work use. */
+function styledSpeechFixture() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const base = speechRuntimeFixture()
+  return {
+    ...base, id: 'styled', name: 'Styled speech', plugin: 'Styled', license: { use: 'work', weights: 'Apache-2.0', note: 'Free for company use.' },
+    generation: { ...base.generation, speech: {
+      voices: { design: 'design' }, scene: null,
+      direction: { text: 'Say how it should be spoken under How to say it.', examples: ['Whisper, slowly'], style_fields: { design: 'style' }, cues: null },
+      roles: { design: { text: 'prompt', direction: 'style', voice_description: 'voice' } } },
+      modes: [{ key: 'design', label: 'Describe a voice', help: 'Describe it.', inputs: [field('voice', 'Voice', 'text', { max_length: 300 }), field('style', 'How to say it', 'text', { max_length: 300 }),
+        field('prompt', 'What to say', 'textarea', { required: true, max_length: 5000 })] }] },
   }
 }
 
@@ -177,7 +197,7 @@ function decideRuntimeFixture(pictures = true) {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; speech2?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -187,7 +207,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/connection', (route) => route.fulfill({ json: { bind: '127.0.0.1', port: 8000, model: route.request().url().includes('/inkling2/') ? 'inkling-2-mini' : null } }))
@@ -206,6 +226,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
     } })
   })
   if (options.videos) models.push({ id: 'minimax_h3', name: 'MiniMax H3 videos', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.speech2) models.push({ id: 'styled', name: 'Styled speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.speech) models.push({ id: 'omnivoice', name: 'OmniVoice speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   const uploads: Array<{ name: string; type: string; head?: string }> = []
   await page.route('**/api/uploads?name=*', async (route) => {
@@ -836,7 +857,7 @@ test('sends a clip\'s voice to a speech model as its sample, with the spoken lin
   await page.getByRole('complementary').getByRole('button', { name: /^A woman with a soft Welsh accent/ }).click()
   const detail = page.getByRole('dialog').getByRole('article')
   await detail.getByRole('button', { name: 'Use voice in OmniVoice speech' }).click()
-  await expect(page).toHaveURL(/#\/hosts\/local\/services\/omnivoice$/)
+  await expect(page).toHaveURL(/#\/hosts\/local\/speech$/)
   await expect(page.getByRole('tab', { name: 'From a voice sample' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('button', { name: 'Remove voice-job-0000.wav' })).toBeVisible()
   await expect(page.getByLabel(/^what the sample says/i)).toHaveValue('Come in and get warm.')
@@ -946,13 +967,13 @@ test('keeps host memory pinned beside the model list while scrolling on a wide s
 test('groups the sidebar by what each model makes, with running shown in words', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await connectFixtures(page, 'Fixture desktop', false, { songs: true, videos: true, speech: true })
-  await go(page, '#/hosts/local/services/omnivoice')
+  await go(page, '#/hosts/local/speech')
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
   const groups = nav.getByRole('group')
   await expect(groups).toHaveCount(3)
   expect(await groups.evaluateAll((items) => items.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')!)?.textContent))).toEqual(['Speech', 'Video', 'Music'])
-  await expect(nav.getByRole('group', { name: 'Speech' }).getByRole('link', { name: /OmniVoice speech/ })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link', { name: /OmniVoice speech/ })).toContainText('On')
+  await expect(nav.getByRole('group', { name: 'Speech' }).getByRole('link', { name: /^Speak/ })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link', { name: /^Speak/ })).toContainText('On')
   await page.screenshot({ path: 'test-results/screenshots/sidebar-groups.png', fullPage: true })
   // Keyboard focus shows the accent ring on every nav link, in order.
   const links = await nav.getByRole('link').count()
@@ -966,7 +987,7 @@ test('groups the sidebar by what each model makes, with running shown in words',
     expect(ring).toBe('solid 2px rgb(90, 63, 212)')
   }
   await page.setViewportSize({ width: 900, height: 900 })
-  await expect(nav.getByRole('link', { name: /OmniVoice speech/ })).toBeVisible()
+  await expect(nav.getByRole('link', { name: /^Speak/ })).toBeVisible()
   await page.screenshot({ path: 'test-results/screenshots/sidebar-rail.png' })
 })
 
@@ -1570,9 +1591,9 @@ test('models within a section sort by name or by the chosen ranking, either way'
   await go(page, '#/hosts/local/models')
   const speech = page.getByRole('region', { name: 'Speech' })
   const names = () => speech.locator('section.model-server').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
-  // Alphabetical by default (the fixture lists Voice B first), and in the sidenav too.
+  // Alphabetical by default (the fixture lists Voice B first). The sidenav has one Speak entry for all of them.
   expect(await names()).toEqual(['Voice A', 'Voice B', 'Voice C'])
-  await expect(page.getByRole('navigation').getByRole('group', { name: 'Speech' }).getByRole('link')).toHaveText([/Voice A/, /Voice B/, /Voice C/])
+  await expect(page.getByRole('navigation').getByRole('group', { name: 'Speech' }).getByRole('link')).toHaveText([/^Speak/])
   await speech.getByLabel('Sort').selectOption('name')
   await speech.getByRole('button', { name: /Z to A|A to Z/ }).click()
   expect(await names()).toEqual(['Voice C', 'Voice B', 'Voice A'])
@@ -1724,4 +1745,42 @@ test('links to a decision result, in the recent results and elsewhere, open the 
   await connectFixtures(page, 'Fixture desktop', false, { decide: true })
   await go(page, '#/overview')
   await expect(page.locator('.overview-recent a').first()).toHaveAttribute('href', '#/hosts/local/decide')
+})
+
+test('Speak is one page over the running speech models; the text carries over and cues are checked per model', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { speech: true, speech2: true })
+  await go(page, '#/hosts/local/speech')
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Speak/ })).toHaveCount(1)
+  await expect(page.getByRole('heading', { name: 'Speak', level: 1 })).toBeVisible()
+  // The first (alphabetical by id order) model is OmniVoice: sounds in square brackets, no direction field.
+  const picker = page.getByLabel('Model speaking')
+  await expect(picker.locator('option')).toHaveText(['OmniVoice speech (Licence not reviewed)'.replace('Licence not reviewed', 'Personal use only'), 'Styled speech (Work use)'])
+  await page.getByRole('textbox', { name: /^what to say/i }).fill('Come in and sit down.')
+  await page.getByRole('button', { name: '[sigh]' }).click()
+  await expect(page.getByRole('textbox', { name: /^what to say/i })).toHaveValue('Come in and sit down. [sigh]')
+  // The words cross over to a model with no cues, which would read the bracket aloud: it offers to remove it.
+  await picker.selectOption('styled')
+  await expect(page.getByRole('textbox', { name: /^what to say/i })).toHaveValue('Come in and sit down. [sigh]')
+  await expect(page.getByText('would read [sigh] aloud')).toBeVisible()
+  await page.getByRole('button', { name: 'Remove cues' }).click()
+  await expect(page.getByRole('textbox', { name: /^what to say/i })).toHaveValue('Come in and sit down.')
+  await expect(page.getByText('would read')).toHaveCount(0)
+  // Direction typed here is not a thing on OmniVoice: it says what it left out and keeps it for the way back.
+  await page.getByRole('textbox', { name: /^how to say it/i }).fill('Whisper, slowly')
+  await picker.selectOption('omnivoice')
+  await expect(page.getByText('no place for the direction')).toBeVisible()
+  await picker.selectOption('styled')
+  await expect(page.getByRole('textbox', { name: /^how to say it/i })).toHaveValue('Whisper, slowly')
+  await page.screenshot({ path: 'test-results/screenshots/speak.png', fullPage: true })
+})
+
+test('Speak: a tab opened by hand starts from what the other tab held, and "Work use only" narrows the models', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { speech: true, speech2: true })
+  await go(page, '#/hosts/local/speech')
+  await page.getByRole('textbox', { name: /^what to say/i }).fill('Hello there.')
+  await page.getByRole('tab', { name: 'From a voice sample' }).click()
+  await expect(page.getByRole('tabpanel', { name: 'From a voice sample' }).getByRole('textbox', { name: /^what to say/i })).toHaveValue('Hello there.')
+  await page.getByLabel('Work use only').check()
+  await expect(page.getByLabel('Model speaking')).toHaveCount(0)  // one model left: no dropdown
+  await expect(page.getByRole('textbox', { name: /^how to say it/i })).toBeVisible()
 })

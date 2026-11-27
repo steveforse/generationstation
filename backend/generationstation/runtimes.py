@@ -190,7 +190,8 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
                       "modes": [{"key": key, "label": mode.label, "help": mode.help, "inputs": fields(mode.inputs),
                                  "output_kind": mode.output_kind or plugin.output_kind}
                                 for key, mode in plugin.modes.items()],
-                      "timings": [timing.model_dump() for timing in plugin.timings]}
+                      "timings": [timing.model_dump() for timing in plugin.timings],
+                      "speech": plugin.speech.model_dump() if plugin.speech else None}
     return {"id": model_id, "kind": runtime.kind, "plugin": plugin.title, "name": runtime.name,
             "description": runtime.description or plugin.description or None,
             "workload": runtime.workload, "port": runtime.port, "bind": runtime.host, "default_preset": runtime.default_preset,

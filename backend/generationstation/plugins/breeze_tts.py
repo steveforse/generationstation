@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, TimingSpec
+from .speech import Cues, Direction, SpeechInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -40,6 +41,21 @@ class BreezeTTSPlugin(WorkerPlugin):
     timings: ClassVar[tuple[TimingSpec, ...]] = (
         TimingSpec(preset="mlx", gpu=0, seconds=8, note="for a sentence or two"),
     )
+    speech: ClassVar[SpeechInfo] = SpeechInfo(
+        voices={"design": "design", "clone": "clone"},
+        direction=Direction(
+            text=("Describe the voice and its manner in plain words: 'a warm middle-aged woman, calm and clear', or "
+                  "'quietly, with a smile' (the Direction field, when you clone). It can also put a sound in the text: "
+                  "in round brackets for English, in square brackets for Chinese; only the listed ones work."),
+            examples=["quietly, with a smile", "calm and clear", "tired and slow"],
+            style_fields={"design": "voice", "clone": "voice"},
+            cues=Cues(open="(", close=")", kind="sounds", open_vocabulary=False,
+                      examples=["(laugh)", "(sigh)", "(cough)", "(clears throat)"],
+                      text="Put a sound in round brackets where it should happen (English). In Chinese use [笑].")),
+        roles={
+            "design": {"text": "prompt", "seed": "seed", "voice_description": "voice"},
+            "clone": {"text": "prompt", "seed": "seed", "direction": "voice", "sample": "sample", "sample_text": "sample_text"},
+        })
     modes: ClassVar[dict[str, ModeSpec]] = {
         "design": ModeSpec(
             label="Describe a voice",

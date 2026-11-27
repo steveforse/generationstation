@@ -5,6 +5,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, TimingSpec
+from .speech import Cues, Direction, SpeechInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 # The sounds OmniVoice knows (omnivoice/models/omnivoice.py, _NONVERBAL_PATTERN), with what each one is.
@@ -115,6 +116,19 @@ class OmniVoicePlugin(WorkerPlugin):
         TimingSpec(when={"quality": "standard"}, gpu=1, seconds=1.5, note="for about 15 s of speech"),
         TimingSpec(when={"quality": "high"}, gpu=1, seconds=3, note="for about 15 s of speech"),
     )
+    speech: ClassVar[SpeechInfo] = SpeechInfo(
+        voices={"design": "design", "clone": "clone"},
+        direction=Direction(
+            text=("OmniVoice does not act emotions: it follows the words and punctuation, and has a speed setting and a "
+                  "whisper switch. It can put a sound in the text (a laugh, a sigh), but only from its own list; any other "
+                  "word in brackets is refused."),
+            cues=Cues(open="[", close="]", kind="sounds", open_vocabulary=False,
+                      examples=[f"[{tag}]" for tag in SOUNDS],
+                      text="Put a sound in square brackets where it should happen. Only these sounds work.")),
+        roles={
+            "clone": {"text": "prompt", "language": "language", "seed": "seed", "speed": "speed", "sample": "sample", "sample_text": "sample_text"},
+            "design": {"text": "prompt", "language": "language", "seed": "seed", "speed": "speed"},
+        })
     modes: ClassVar[dict[str, ModeSpec]] = {
         "clone": ModeSpec(
             label="From a voice sample",

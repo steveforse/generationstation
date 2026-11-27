@@ -35,7 +35,15 @@ export type UploadRecord = { id: string; name: string; kind: 'image' | 'video' |
 export type JobFile = { name: string; kind: string; mime: string; original: string }
 /** A measured time for one result; the first whose conditions all match applies. */
 export type Timing = { seconds: number; first_seconds: number | null; when: Record<string, string>; preset: string | null; gpu: number | null; note: string | null }
-export type Generation = { output_kind: 'audio' | 'image' | 'video' | 'document'; inputs: InputField[]; modes?: GenerationMode[]; timings?: Timing[]; make_label?: string | null; result_noun?: string | null }
+/** Cues written into the text of a speech request, such as [whispers] or (laugh). */
+export type SpeechCues = { open: string; close: string; kind: 'emotion' | 'sounds'; open_vocabulary: boolean; examples: string[]; text: string }
+/** What a speech model can do: its voice sources (each served by one of its modes), how it takes direction, and which field plays which role in each mode. */
+export type SpeechInfo = {
+  voices: Record<string, string>; scene: string | null
+  direction: { text: string; examples: string[]; style_fields: Record<string, string>; cues: SpeechCues | null }
+  roles: Record<string, Record<string, string>>
+}
+export type Generation = { output_kind: 'audio' | 'image' | 'video' | 'document'; inputs: InputField[]; modes?: GenerationMode[]; timings?: Timing[]; make_label?: string | null; result_noun?: string | null; speech?: SpeechInfo | null }
 /** What a model may be used for: free for company use, free with limits to check, or personal/non-commercial/territory-limited. */
 export type RuntimeLicense = { use: 'work' | 'conditions' | 'personal'; weights: string; code?: string | null; note?: string | null; url?: string | null }
 export type Runtime = { id: string; kind: string; name: string; description?: string | null; workload: string; port: number; /** Where the model's own server listens: this computer only, or every interface. */ bind?: string; default_preset: string; presets: Record<string, RuntimePreset>; last_launch: Launch | null; max_gpus?: number | null; generation?: Generation | null; license?: RuntimeLicense | null; quality?: RuntimeQuality | null; rankings?: RuntimeQuality[]; chat?: boolean; /** The help assistant runs on this model. */ assistant?: boolean; /** Thinking levels the chat may ask for where the model last started (lowest first). */ thinking?: Thinking | null }

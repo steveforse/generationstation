@@ -15,6 +15,8 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .speech import SpeechInfo
+
 GIB = 1024**3
 
 SettingValue = str | int | bool | None
@@ -216,6 +218,7 @@ class RuntimePlugin:
     # chosen mode arrives as the input "mode".
     inputs: ClassVar[dict[str, InputSpec]] = {}
     modes: ClassVar[dict[str, ModeSpec]] = {}
+    speech: ClassVar[SpeechInfo | None] = None  # a speech model's capabilities (plugins/speech.py), for the shared Speech page
     output_kind: ClassVar[str | None] = None  # "audio", "image", "video" or "document" (text files)
     text_model_jobs: ClassVar[bool] = False  # its jobs may ask the host for a running text model (text_models.py)
     # Other programs whose GPU memory belongs to this model while it runs (display only): Drama 3 runs inside WSL,
