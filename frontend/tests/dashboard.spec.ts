@@ -1839,3 +1839,49 @@ test('Speech: a tab opened by hand starts from what the other tab held', async (
   await page.getByRole('tab', { name: 'From a voice sample' }).click()
   await expect(page.getByRole('tabpanel', { name: 'From a voice sample' }).getByRole('textbox', { name: /^what to say/i })).toHaveValue('Hello there.')
 })
+
+test('a voice sample can be recorded from the microphone, and the sidebar rules off the tools from Models', async ({ page }) => {
+  // A stand-in microphone: the recorder hands back a tone as WAV, which the page decodes as it would a browser recording.
+  const tone = toneWav().toString('base64')
+  await page.addInitScript((data) => {
+    const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0))
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } })
+    class FakeRecorder {
+      state = 'inactive'; mimeType = 'audio/wav'; ondataavailable: ((event: { data: Blob }) => void) | null = null; onstop: (() => void) | null = null
+      start() { this.state = 'recording' }
+      stop() { this.state = 'inactive'; this.ondataavailable?.({ data: new Blob([bytes], { type: 'audio/wav' }) }); setTimeout(() => this.onstop?.(), 0) }
+    }
+    ;(window as unknown as { MediaRecorder: unknown }).MediaRecorder = FakeRecorder
+  }, tone)
+  const api = await connectFixtures(page, 'Fixture desktop', false, { speech: true, songs: true })
+  await go(page, '#/hosts/local/speech')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav.getByRole('separator')).toHaveCount(1)
+  await page.getByRole('tab', { name: 'From a voice sample' }).click()
+  const panel = page.getByRole('tabpanel', { name: 'From a voice sample' })
+  // The describe tab has no sample field, so no recorder; the clone tab has one.
+  await expect(page.getByRole('tabpanel', { name: 'Describe a voice' }).getByRole('button', { name: /Record from the microphone/ })).toHaveCount(0)
+  await panel.getByRole('button', { name: /Record from the microphone/ }).click()
+  await expect(panel.getByRole('button', { name: /Stop recording/ })).toBeVisible()
+  await panel.getByRole('button', { name: /Stop recording/ }).click()
+  await expect(panel.getByRole('button', { name: /^Remove recording-.*\.wav$/ })).toBeVisible()
+  await page.screenshot({ path: 'test-results/screenshots/record-sample.png', fullPage: true })
+  expect(api.uploads.at(-1)).toMatchObject({ type: 'audio/wav' })
+  expect(api.uploads.at(-1)?.name).toMatch(/^recording-\d{6}\.wav$/)
+  expect(api.uploads.at(-1)?.head).toMatch(/^RIFF.{4}WAVE$/s)
+  // Other pages that take audio (a song's reference, say) do not get a recorder.
+  await go(page, '#/hosts/local/services/yue2')
+  await expect(page.getByRole('button', { name: /Record from the microphone/ })).toHaveCount(0)
+})
+
+test('a blocked microphone says so instead of failing silently', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => { throw new DOMException('no', 'NotAllowedError') } } })
+    ;(window as unknown as { MediaRecorder: unknown }).MediaRecorder = class {}
+  })
+  await connectFixtures(page, 'Fixture desktop', false, { speech: true })
+  await go(page, '#/hosts/local/speech')
+  await page.getByRole('tab', { name: 'From a voice sample' }).click()
+  await page.getByRole('tabpanel', { name: 'From a voice sample' }).getByRole('button', { name: /Record from the microphone/ }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'microphone is blocked' })).toBeVisible()
+})

@@ -1193,3 +1193,11 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .voice-edit, .save-voice { display: grid; gap: var(--sp-2); width: 100% }
 .save-voice { margin-top: var(--sp-3) }
 .button-row { display: flex; gap: var(--sp-2); flex-wrap: wrap }
+
+/* Sidebar: a rule between the Models page and the tools below it */
+.nav-separator { border: 0; border-top: 1px solid var(--border); margin: var(--sp-2) var(--sp-3) }
+.file-recording { color: var(--danger, #b42318); border-color: currentColor }
+.file-recording svg { animation: file-pulse 1.2s ease-in-out infinite }
+@keyframes file-pulse { 50% { opacity: .35 } }
+.file-problem { flex-basis: 100%; margin: 0; color: var(--danger, #b42318) }
+@media (prefers-reduced-motion: reduce) { .file-recording svg { animation: none } }

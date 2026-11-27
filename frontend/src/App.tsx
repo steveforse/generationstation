@@ -173,6 +173,7 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
     {runtimes.length > 0 && <NavLink route={{ page: 'models', hostId: host.id }} current={current} icon={<Server size={20} />} label="Models"
       title={running ? `Models: ${running} running` : 'Models'}
       badge={running ? <span className="nav-state" title={`${running} running`}><span className="nav-state-dot" aria-hidden="true" /><span className="nav-state-text">{running} on</span></span> : undefined} />}
+    {toolEntries.length > 0 && runtimes.length > 0 && <hr className="nav-separator" />}
     {toolEntries.map((entry) => entry.node)}
     {groups.filter((group) => group.key !== 'text').map((group) => {
       const id = `nav-${host.id}-${group.key}`

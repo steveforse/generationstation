@@ -258,7 +258,7 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
     const shown = field.kind === 'files' ? problem(field) : value && problem(field)
     return <div className={`field ${field.kind === 'textarea' ? 'field-wide' : ''} ${field.kind === 'files' ? 'field-files' : ''}`} key={field.key}>
       <FieldLabel htmlFor={id} label={field.label} suffix={field.required || field.kind === 'files' ? '' : ' (optional)'} help={field.help} />
-      {field.kind === 'files' ? <><FilePicker id={id} field={field} items={files[field.key] ?? []} upload={upload}
+      {field.kind === 'files' ? <><FilePicker id={id} field={field} record={runtime.workload === 'speech' && (field.accept ?? []).join() === 'audio'} items={files[field.key] ?? []} upload={upload}
           onChange={(update) => setFiles((current) => ({ ...current, [field.key]: update(current[field.key] ?? []) }))} />{framing(field)}</>
         : field.kind === 'textarea' ? <textarea id={id} className="text-input generate-textarea" rows={10} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? undefined} value={value} onChange={(event) => set(event.target.value)} />
         : field.kind === 'choice' ? <select id={id} className="text-input" value={value} onChange={(event) => set(event.target.value)}>{field.options.map((option) => <option key={option} value={option}>{optionLabel(option, field.option_labels)}</option>)}</select>
