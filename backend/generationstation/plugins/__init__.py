@@ -17,6 +17,7 @@ from .minimax_music import MiniMaxMusicPlugin
 from .omnivoice import OmniVoicePlugin
 from .qwen3_tts import Qwen3TTSPlugin
 from .qwen_image import QwenImagePlugin
+from .speech_to_text import NemotronPlugin, ParakeetPlugin, Qwen3AsrPlugin, WhisperPlugin
 from .wan_video import WanVideoPlugin
 from .yue2 import YuE2Plugin
 
@@ -40,6 +41,10 @@ _PLUGINS: dict[str, RuntimePlugin] = {plugin.kind: plugin for plugin in (
     FastMetalVideoPlugin(),
     LongCatVideoPlugin(),
     MeetingNotesPlugin(),
+    Qwen3AsrPlugin(),
+    WhisperPlugin(),
+    ParakeetPlugin(),
+    NemotronPlugin(),
 )}
 
 

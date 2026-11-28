@@ -21,6 +21,7 @@ from .make_image import ImageTool
 from .make_song import SongTool
 from .make_video import VideoTool
 from .speak import SpeakTool
+from .transcribe_tool import TranscribeTool
 from .uploads import UploadError, kind_of
 from .voices import VoiceNotFound
 
@@ -127,6 +128,7 @@ class ChatManager:
         self.image_tool = ImageTool()
         self.song_tool = SongTool()
         self.video_tool = VideoTool()
+        self.transcribe_tool = TranscribeTool()
         self.host_tools = host_tools
         self.job_tools = job_tools
         self.web_tools = web_tools
@@ -465,7 +467,8 @@ class ChatManager:
     def _document_text(self, job):
         """The words of a finished meeting (notes, then transcript) or decision, for a result attached from the library."""
         runtime = self.catalog.runtimes.get(job["model_id"])
-        names = {"meeting_notes": ("notes.md", "transcript.md"), "decide": ("result.md",)}.get(runtime.kind if runtime else None)
+        names = {"meeting_notes": ("notes.md", "transcript.md"), "decide": ("result.md",), "qwen3_asr": ("transcript.txt",), "whisper_asr": ("transcript.txt",),
+                 "parakeet_asr": ("transcript.txt",), "nemotron_asr": ("transcript.txt",)}.get(runtime.kind if runtime else None)
         if not names:
             return None
         chunks, budget = [], MAX_DOC_CHARS
@@ -516,7 +519,7 @@ class ChatManager:
     def _context(self, conversation, handlers, where=None):
         rows = self.store.list_messages(conversation["id"])
         vision = self._vision(conversation)
-        shared = [item for h in handlers.values() for key in ("image", "speak", "song", "video") for item in h.get(key, [])]  # models behind one shared tool
+        shared = [item for h in handlers.values() for key in ("image", "speak", "song", "video", "transcribe") for item in h.get(key, [])]  # models behind one shared tool
         running = sorted({h["runtime"].name for h in handlers.values() if "runtime" in h} | {runtime.name for _, runtime, _ in shared})
         stopped = sorted(r.name for m, r in self.catalog.runtimes.items()
                          if self.catalog.plugin(m).generates and r.name not in running)
@@ -576,6 +579,9 @@ class ChatManager:
                     image = picture(row_id, job, name)
                     if image:
                         parts.append(image)
+                    document = self._document_text(job)
+                    if document:
+                        parts.append({"type": "text", "text": document})
                 finished = []
                 parts.append({"type": "text", "text": row["content"] or "(attached files)"})
                 for item in row.get("attachments") or []:
@@ -648,6 +654,9 @@ class ChatManager:
             if plugin.music:
                 lines.append("  - Used from the **Music** page, shared by every song model. " + plugin.music.guidance)
                 continue
+            if plugin.transcribe:
+                lines.append("  - Used from the **Transcribe** page, shared by every speech-to-text model. " + plugin.transcribe.guidance)
+                continue
             if plugin.video:
                 lines.append("  - Used from the **Video** page, shared by every video model. " + plugin.video.guidance)
                 video_tabs = set(plugin.video.roles)
@@ -684,10 +693,13 @@ class ChatManager:
         """One tool per way of making something on each running generator."""
         states = self.store.runtime_states()
         tools, handlers = [], {}
-        speaking, picturing, composing, filming = [], [], [], []
+        speaking, picturing, composing, filming, listening = [], [], [], [], []
         for model_id, runtime in self.catalog.runtimes.items():
             plugin = self.catalog.plugin(model_id)
             if not plugin.generates or states.get(model_id, {}).get("state") != "ready":
+                continue
+            if plugin.transcribe:  # every speech-to-text model is reached through the one transcribe tool
+                listening.append((model_id, runtime, plugin))
                 continue
             if plugin.speech:  # every speech model is reached through the one speak tool
                 speaking.append((model_id, runtime, plugin))
@@ -724,6 +736,10 @@ class ChatManager:
         if make_image:
             tools.append(make_image)
             handlers["make_image"] = {"image": picturing}
+        transcribe = self.transcribe_tool.schema(listening)
+        if transcribe:
+            tools.append(transcribe)
+            handlers["transcribe"] = {"transcribe": listening}
         make_video = self.video_tool.schema(filming)
         if make_video:
             tools.append(make_video)
@@ -801,6 +817,17 @@ class ChatManager:
                 return {"text": f"Not started: {getattr(exc, 'message', None) or exc}"}
             left = f" Left out: {'; '.join(notes)}." if notes else ""
             return {"text": f"Started job {job['id'][:8]} on {runtime.name}. It will appear in the chat when it is done.{left}", "job_id": job["id"], "job": job}
+        if handler.get("transcribe"):
+            try:
+                model_id, runtime, plugin, mode, inputs, references, notes = self.transcribe_tool.plan(arguments, handler["transcribe"])
+                for field, refs in references.items():
+                    spec = self.transcribe_tool.fields_of(plugin, runtime)[field]
+                    inputs[field] = [self._upload_result(ref, spec) for ref in refs]
+                job = self.generation.create(model_id, inputs)
+            except (LifecycleError, UploadError, ValueError) as exc:
+                return {"text": f"Not started: {getattr(exc, 'message', None) or exc}"}
+            left = f" Left out: {'; '.join(notes)}." if notes else ""
+            return {"text": f"Started job {job['id'][:8]} on {runtime.name}. The transcript will appear in the chat when it is done.{left}", "job_id": job["id"], "job": job}
         if handler.get("video"):
             try:
                 model_id, runtime, plugin, mode, inputs, references, notes = self.video_tool.plan(arguments, handler["video"])

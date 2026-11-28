@@ -76,6 +76,29 @@ function videoRuntimeFixture() {
   }
 }
 
+/** Two speech-to-text models: Whisper (language, words to expect, who spoke) and Nemotron (words to expect and its own speaker labels, no times). */
+function transcribeFixtures() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const recording = field('recording', 'Recording', 'files', { required: true, accept: ['audio', 'video'], max_count: 1 })
+  const language = field('language', 'Language', 'choice', { options: ['auto', 'English', 'French'], default: 'auto', option_labels: { auto: 'Detect it' } })
+  const terms = field('terms', 'Words to expect', 'textarea', { max_length: 500 })
+  const speakers = field('speakers', 'Who spoke', 'choice', { options: ['no', 'yes'], default: 'no', option_labels: { no: 'Just the words', yes: 'Label the speakers' } })
+  const base = (id: string, name: string, inputs: unknown[], info: Record<string, unknown>, port: number) => ({
+    id, kind: id, plugin: name, name, description: 'Writes down speech.', workload: 'transcription', port, default_preset: 'mlx', last_launch: { preset: 'mlx', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use: 'work', weights: 'MIT', note: 'Fixture.' },
+    presets: { mlx: { name, gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 6, gpu_min_free_gib: {} }, settings: [] } },
+    generation: { output_kind: 'document', inputs, modes: [], timings: [], make_label: 'Transcribe', result_noun: 'transcript', transcribe: info },
+  })
+  return [
+    base('whisper_asr', 'Whisper', [recording, language, terms, speakers], { guidance: 'Whisper: the widest choice of languages.', times: 'lines', speakers: 'turns', checked_minutes: 56,
+      roles: { '': { recording: 'recording', language: 'language', terms: 'terms', speakers: 'speakers' } } }, 8340),
+    base('nemotron_asr', 'Nemotron 3.5 Transcribe', [recording, terms], { guidance: 'Nemotron: the most accurate.', times: 'none', speakers: 'none', checked_minutes: 56,
+      roles: { '': { recording: 'recording', terms: 'terms' } } }, 8360),
+  ]
+}
+
 /** A second video model: LongCat, with a length in seconds, a picture tab and a tab that continues a clip. */
 function longcatFixture() {
   const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
@@ -285,7 +308,7 @@ function decideRuntimeFixture(pictures = true) {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; music?: boolean; songState?: string; videos?: boolean; clips?: boolean; speech?: boolean; speech2?: boolean; images?: boolean; h3images?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; music?: boolean; songState?: string; videos?: boolean; clips?: boolean; asr?: boolean; speech?: boolean; speech2?: boolean; images?: boolean; h3images?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -295,7 +318,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.music ? musicRuntimeFixtures() : []), ...(options.videos ? [options.h3images ? videoWithPicturesFixture() : videoRuntimeFixture()] : []), ...(options.clips ? [longcatFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.images ? imageRuntimeFixtures() : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.music ? musicRuntimeFixtures() : []), ...(options.videos ? [options.h3images ? videoWithPicturesFixture() : videoRuntimeFixture()] : []), ...(options.clips ? [longcatFixture()] : []), ...(options.asr ? transcribeFixtures() : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.images ? imageRuntimeFixtures() : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/connection', (route) => route.fulfill({ json: { bind: '127.0.0.1', port: 8000, model: route.request().url().includes('/inkling2/') ? 'inkling-2-mini' : null } }))
@@ -313,6 +336,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
       ram_headroom_bytes: 4 * 1024 ** 3, gpu_headroom_bytes: 2 * 1024 ** 3, reserved_ram_bytes: 0, reserved_gpu_vram_bytes_by_id: {},
     } })
   })
+  if (options.asr) for (const [id, name] of [['whisper_asr', 'Whisper'], ['nemotron_asr', 'Nemotron 3.5 Transcribe']]) models.push({ id, name, workload: 'transcription', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.clips) models.push({ id: 'longcat_video', name: 'LongCat video', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.videos) models.push({ id: 'minimax_h3', name: 'MiniMax H3 videos', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.music) for (const [id, name] of [['yue2', 'YuE2 songs'], ['ace_step', 'ACE-Step'], ['minimax_music', 'MiniMax Music 3']]) models.push({ id, name, workload: 'music', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
@@ -560,7 +584,7 @@ async function signIn(page: Page, value = token, address?: string) {
   await page.getByRole('button', { name: 'Save and connect' }).click()
 }
 
-async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; clips?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean } = {}) {
+async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; clips?: boolean; asr?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean } = {}) {
   await installSseMock(page)
   const api = await installM2Api(page, options)
   const host = fixtureHost(label, stale)
@@ -2163,4 +2187,49 @@ test('Images: a custom size shows its width and height, and a starting picture i
   await expect(page.getByLabel(/^width/i)).toHaveValue('1280')
   await expect(page.getByRole('button', { name: 'Remove start.png' })).toBeVisible()  // this model can start from a picture too
   expect(api.uploads.at(-1)?.name).toBe('start.png')
+})
+
+test('Transcribe is one entry in the sidebar and one page over the running speech-to-text models; the words to expect carry over', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { asr: true })
+  await go(page, '#/hosts/local/transcribe')
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Transcribe/ })).toContainText('On')
+  const picker = page.getByLabel('Model transcribing')
+  await expect(picker.locator('option')).toHaveText(['Whisper (Work use)', 'Nemotron 3.5 Transcribe (Work use)'])
+  await expect(page.getByText('Each line has its time, and captions (.srt and .vtt) are written.')).toBeVisible()
+  await page.getByRole('combobox', { name: /^language/i }).selectOption('French')
+  await page.getByRole('textbox', { name: /^words to expect/i }).fill('Zephyrine, Priya')
+  await picker.selectOption('nemotron_asr')
+  await expect(page.getByText('There are no times, so no captions are written.')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /^words to expect/i })).toHaveValue('Zephyrine, Priya')
+  await expect(page.getByRole('combobox', { name: /^language/i })).toHaveCount(0)
+  await expect(page.getByText('has no place for the language')).toBeVisible()
+  await picker.selectOption('whisper_asr')
+  await expect(page.getByRole('combobox', { name: /^language/i })).toHaveValue('French')  // kept for the way back
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /^Add (audio|file|recording)/i }).first().click()])
+  await chooser.setFiles({ name: 'talk.wav', mimeType: 'audio/wav', buffer: Buffer.from('RIFF0000WAVE') })
+  await expect(page.getByRole('button', { name: 'Remove talk.wav' })).toBeVisible()
+  await page.getByRole('button', { name: 'Transcribe', exact: true }).click()
+  await expect.poll(() => api.jobBody).not.toBeNull()
+  expect(api.jobBody).toMatchObject({ inputs: { language: 'French', terms: 'Zephyrine, Priya', speakers: 'no' } })
+  await page.screenshot({ path: 'test-results/screenshots/transcribe.png', fullPage: true })
+})
+
+test('a transcript is shown open, can be copied, and offers its files', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { asr: true })
+  api.jobs.unshift({ id: 'job-00000061', model_id: 'whisper_asr', inputs: { recording: [{ name: '01-talk.wav', kind: 'audio', mime: 'audio/wav', original: 'talk.wav' }], language: 'auto', speakers: 'no' }, status: 'done', progress: 'Done', error_message: null,
+    outputs: ['transcript.md', 'transcript.txt', 'transcript.srt', 'transcript.vtt', 'transcript.json'].map((name) => ({ name, mime: 'text/plain', bytes: 40 })),
+    created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:01:00Z', details: { engine: 'whisper', audio_seconds: 12, words: 5, language: 'en', times: 'yes' }, launch: { preset: 'mlx', settings: {}, gpus: [0] }, ticks: 9 })
+  await page.route('**/api/jobs/job-00000061/files/transcript.*', (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: 'x' }))
+  await page.route('**/api/jobs/job-00000061/files/transcript.md', (route) => route.fulfill({ status: 200, contentType: 'text/markdown', body: '# Transcript\n\n**[00:00]** Good morning everyone.\n' }))
+  await page.route('**/api/jobs/job-00000061/files/transcript.txt', (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: '[00:00] Good morning everyone.\n' }))
+  await page.reload()
+  await go(page, '#/hosts/local/transcribe')
+  await expect.poll(() => pushFrame(page, fixtureHost())).toBe(true)
+  await page.getByRole('complementary').getByRole('button', { name: /talk\.wav|job-0000/ }).first().click()
+  const detail = page.getByRole('dialog').getByRole('article')
+  await expect(detail.getByText('Good morning everyone.')).toBeVisible()  // open, not folded away
+  await expect(detail.getByRole('button', { name: 'Copy the text' })).toBeVisible()
+  await detail.getByRole('button', { name: /^Download transcript/ }).click()
+  await expect(page.getByRole('link', { name: /Plain text/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Captions \(\.srt\)/ })).toBeVisible()
 })

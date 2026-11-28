@@ -1598,6 +1598,186 @@
         "note": "Torchcast 31B on JevBench at full precision; this is the 8-bit copy, which stayed within 0.008 of the bf16 probabilities on our checks."
       },
       "rankings": []
+    },
+    "qwen3_asr": {
+      "kind": "qwen3_asr",
+      "name": "Qwen3-ASR",
+      "workload": "transcription",
+      "description": "Speech to text in 30 languages, with times. Fast, and takes names to expect.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/qwen3-asr",
+      "port": 8330,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Qwen3-ASR (MLX)",
+          "description": "Stays loaded; the recording is read once and written down in parts.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "qwen3_asr",
+            "model_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit",
+            "diar_python": "/Users/YOU/ai/envs/meeting-worker/bin/python",
+            "segmentation_model": "/Users/YOU/ai/models/diar/sherpa-onnx-pyannote-segmentation-3-0/model.onnx",
+            "embedding_model": "/Users/YOU/ai/models/diar/nemo_en_titanet_small.onnx",
+            "diar_threshold": 0.9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Qwen3-ASR and mlx-audio: Apache-2.0 and MIT",
+        "note": "Apache-2.0 weights and code.",
+        "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B"
+      }
+    },
+    "whisper_asr": {
+      "kind": "whisper_asr",
+      "name": "Whisper large-v3-turbo",
+      "workload": "transcription",
+      "description": "Speech to text in 99 languages, a line at a time with times.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/whisper-asr",
+      "port": 8340,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Whisper large-v3-turbo (MLX)",
+          "description": "Stays loaded; the recording is read once and written down in parts.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "whisper",
+            "model_dir": "/Users/YOU/ai/models/asr/whisper-large-v3-turbo-fp16",
+            "diar_python": "/Users/YOU/ai/envs/meeting-worker/bin/python",
+            "segmentation_model": "/Users/YOU/ai/models/diar/sherpa-onnx-pyannote-segmentation-3-0/model.onnx",
+            "embedding_model": "/Users/YOU/ai/models/diar/nemo_en_titanet_small.onnx",
+            "diar_threshold": 0.9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 5,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "MIT",
+        "code": "Whisper and mlx-audio: MIT",
+        "note": "MIT weights and code.",
+        "url": "https://huggingface.co/openai/whisper-large-v3-turbo"
+      }
+    },
+    "parakeet_asr": {
+      "kind": "parakeet_asr",
+      "name": "Parakeet TDT v3",
+      "workload": "transcription",
+      "description": "The fastest speech to text here: 25 European languages, detected.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/parakeet-asr",
+      "port": 8350,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Parakeet TDT v3 (MLX)",
+          "description": "Stays loaded; the recording is read once and written down in parts.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "parakeet",
+            "model_dir": "/Users/YOU/ai/models/asr/parakeet-tdt-0.6b-v3",
+            "diar_python": "/Users/YOU/ai/envs/meeting-worker/bin/python",
+            "segmentation_model": "/Users/YOU/ai/models/diar/sherpa-onnx-pyannote-segmentation-3-0/model.onnx",
+            "embedding_model": "/Users/YOU/ai/models/diar/nemo_en_titanet_small.onnx",
+            "diar_threshold": 0.9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "conditions",
+        "weights": "CC-BY-4.0",
+        "code": "mlx-audio: MIT",
+        "note": "CC-BY-4.0 allows commercial use if NVIDIA is credited, as the licence asks.",
+        "url": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"
+      }
+    },
+    "nemotron_asr": {
+      "kind": "nemotron_asr",
+      "name": "Nemotron 3.5 Transcribe",
+      "workload": "transcription",
+      "description": "The most accurate speech to text here, in 40 languages. No times and no speaker labels.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/nemotron-asr",
+      "port": 8360,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Nemotron 3.5 Transcribe (MLX)",
+          "description": "Stays loaded; the recording is read once and written down in parts.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "nemotron",
+            "model_dir": "/Users/YOU/ai/models/asr/Nemotron-3.5-Transcribe-EA-4bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 22,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "conditions",
+        "weights": "OpenMDW-1.1",
+        "code": "mlx-audio: MIT",
+        "note": "The model card says it is ready for commercial or non-commercial use under the OpenMDW licence; the licence text has not been reviewed here. This is the community 4-bit export of the early-access checkpoint.",
+        "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
+      },
+      "quality": {
+        "metric": "Open ASR leaderboard, English word error rate (lower is better)",
+        "score": 4.71,
+        "estimated": false,
+        "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B",
+        "as_of": "2026-11-27",
+        "note": "Published by NVIDIA for the full-precision checkpoint, nine-dataset mean; the 4-bit export measured 3.1% on this project's own synthetic test (names the model had not seen, numbers ignored)."
+      }
     }
   },
   "references": [

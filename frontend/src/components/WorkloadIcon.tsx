@@ -1,4 +1,4 @@
-import { Clapperboard, Image, MessageSquare, Music, Scale, Server, Volume2 } from 'lucide-react'
+import { AudioLines, Clapperboard, Image, MessageSquare, Music, Scale, Server, Volume2 } from 'lucide-react'
 
 /** The icon for a model by what it makes, from the host's `workload` (text, decision, music, image, video, speech). */
 export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?: number }) {
@@ -8,6 +8,7 @@ export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?:
     case 'music': return <Music size={size} aria-hidden="true" />
     case 'image': return <Image size={size} aria-hidden="true" />
     case 'video': return <Clapperboard size={size} aria-hidden="true" />
+    case 'transcription': return <AudioLines size={size} aria-hidden="true" />
     case 'speech': return <Volume2 size={size} aria-hidden="true" />
     default: return <Server size={size} aria-hidden="true" />
   }
@@ -15,7 +16,7 @@ export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?:
 
 /** Sidebar, Overview and Models page group by what a model makes, in this order (text models, which chat, first);
  * anything else goes under "Other", last. */
-export const WORKLOAD_GROUPS: ReadonlyArray<readonly [string, string]> = [['text', 'Text'], ['decision', 'Decide'], ['speech', 'Speech'], ['image', 'Images'], ['video', 'Video'], ['music', 'Music']]
+export const WORKLOAD_GROUPS: ReadonlyArray<readonly [string, string]> = [['text', 'Text'], ['decision', 'Decide'], ['speech', 'Speech'], ['transcription', 'Speech to text'], ['image', 'Images'], ['video', 'Video'], ['music', 'Music']]
 
 /** Items grouped by workload in WORKLOAD_GROUPS order, keeping their order within a group; empty groups are left out. */
 export function groupByWorkload<T>(items: T[], workloadOf: (item: T) => string, nameOf?: (item: T) => string) {

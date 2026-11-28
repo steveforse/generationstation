@@ -13,6 +13,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use while the app stays internal) | |
 | Decide: Torchcast 4B and 31B (text), pplx-decider 27B and H2O-Lightning 4B (read pictures), all Apache-2.0 and work use; one probability per answer in well under a second | |
 | Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
+| Speech to text through mlx-audio: Qwen3-ASR, Whisper large-v3-turbo, Parakeet TDT v3, Nemotron 3.5 Transcribe (4-bit); a 17 minute recording in 5 to 35 s | |
 | Text models: Qwen3.8 27B, Qwen3.8 Flash-Next, Tencent Hy4-Flash, Inkling 2 Mini | The Basalt runtime and the Windows meeting engines (Nemotron, VibeVoice, DiariZen) |
 | Meeting notes: speaker detection, speech recognition, correction, notes, name reading from Zoom video, transcript editing | |
 | Web search for the chat through a local SearXNG | |
@@ -417,6 +418,26 @@ export HF_HOME=~/ai/models/decision/.hf-cache
 | H2O-Lightning 4B (bf16) | about 10 GB at peak | 0.15 s for 300 words, 1 s for 3,000 | Reads pictures. The 31B is non-commercial; this is the 4B. |
 
 Inputs are capped at 20,000 characters and 255 options. The worker keeps every MLX call on one thread, because MLX streams belong to the thread that made them. Karpo 31B (a community 4-bit MLX port) was tried and removed: Torchcast 31B scores higher and Torchcast 4B and pplx-decider cover the lighter and picture cases. Rankings come from JevBench, the Decision Index and Artificial Analysis; the hosted Jev is the baseline, and a few other open models (two of them personal-use only) are reference bars. The full survey is in `docs/context.md`.
+
+## 6b. Speech to text
+
+Four models write down a recording, on one **Transcribe** page, through the same mlx-audio environment as Speech (`~/ai/envs/mlx-tts`). The Qwen3-ASR folder is the one the meeting notes already use.
+
+```sh
+HF=~/ai/envs/meeting-worker/bin/hf; A=~/ai/models/asr
+$HF download mlx-community/whisper-large-v3-turbo-asr-fp16 --local-dir $A/whisper-large-v3-turbo-fp16
+$HF download mlx-community/parakeet-tdt-0.6b-v3 --local-dir $A/parakeet-tdt-0.6b-v3
+$HF download nativ-community/Nemotron-3.5-Transcribe-30B-A4B-EA-4bit --local-dir $A/Nemotron-3.5-Transcribe-EA-4bit   # 19 GB
+```
+
+| Model | Licence | Notes |
+| --- | --- | --- |
+| Qwen3-ASR 1.7B (8-bit) | Apache-2.0 | 30 languages, words to expect, times in parts of 30 s. 17 minutes in about 21 s. |
+| Whisper large-v3-turbo | MIT | 99 languages, words to expect (as its prompt), times on each line. 17 minutes in about 8 s. |
+| Parakeet TDT v3 | CC-BY-4.0 (credit NVIDIA) | 25 European languages, detected; no word list; times on each sentence. 17 minutes in about 4 s. |
+| Nemotron 3.5 Transcribe (community 4-bit export) | OpenMDW-1.1 (the card says commercial and non-commercial use; the text has not been reviewed here) | The most accurate in the tests, 40 languages, words to expect; no times and no speaker labels. Peaks near 20 GiB. 17 minutes in about 35 s. |
+
+Each model works in parts, because whole recordings go wrong: Qwen3-ASR loops on 18 minutes in one piece, Parakeet needs 32 GiB, and Nemotron repeats and skips on an hour (word error 35 % against 3.7 % in parts of two minutes). Who spoke uses the speaker detection set up for the meeting notes (`diar_python`, `segmentation_model`, `embedding_model` in the preset options); the form's advanced "How many speakers" moves that step's threshold by 0.15 or 0.2. The result is a transcript with `.txt`, `.md`, `.json`, and `.srt` and `.vtt` where the model gives times. In the chat, every running model is reached through one `transcribe` tool.
 
 ## Files in the chat
 

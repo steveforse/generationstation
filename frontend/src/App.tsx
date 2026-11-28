@@ -11,6 +11,7 @@ import { LogsPage } from './pages/Logs'
 import { HostSettingsPage } from './pages/HostSettings'
 import { ImagesPage } from './pages/Images'
 import { MusicPage } from './pages/Music'
+import { TranscribePage } from './pages/Transcribe'
 import { VideoPage } from './pages/Video'
 import { SpeechPage } from './pages/Speech'
 import { DecidePage, ModelsPage, ServicePage } from './pages/Service'
@@ -84,6 +85,7 @@ export default function App() {
         {route.page === 'images' && <ImagesPage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'music' && <MusicPage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'video' && <VideoPage key={route.hostId} store={store} host={routeHost} />}
+        {route.page === 'transcribe' && <TranscribePage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'speech' && <SpeechPage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'decide' && <DecidePage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'models' && <ModelsPage key={route.hostId} store={store} host={routeHost} />}
@@ -101,14 +103,14 @@ export default function App() {
 function AssistantSlot({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
   const page = route.page === 'service' ? `the ${state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId} page`
-    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decide page' : route.page === 'speech' ? 'the Speech page' : route.page === 'images' ? 'the Images page' : route.page === 'music' ? 'the Music page' : route.page === 'video' ? 'the Video page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
+    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decide page' : route.page === 'speech' ? 'the Speech page' : route.page === 'images' ? 'the Images page' : route.page === 'music' ? 'the Music page' : route.page === 'video' ? 'the Video page' : route.page === 'transcribe' ? 'the Transcribe page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
       : route.page === 'settings' ? 'the Host settings page' : route.page === 'connections' ? 'the Connections page' : 'a page'
   return <AssistantBubble store={store} host={host} where={page} />
 }
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
-  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decide' : route.page === 'speech' ? 'Speech' : route.page === 'images' ? 'Images' : route.page === 'music' ? 'Music' : route.page === 'video' ? 'Video' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
+  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decide' : route.page === 'speech' ? 'Speech' : route.page === 'images' ? 'Images' : route.page === 'music' ? 'Music' : route.page === 'video' ? 'Video' : route.page === 'transcribe' ? 'Transcribe' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
     : state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId
   return <div className="breadcrumb"><span className="crumb-host">{host ? hostName(host, state) : 'Workspace'}</span><span className="crumb-slash" aria-hidden="true">/</span><strong>{title}</strong></div>
 }
@@ -145,7 +147,7 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const name = hostName(host, state)
   // Decision models sit under Text, as one Decide entry (they all share a page).
   const decisionRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'decision')
-  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation && runtime.workload !== 'decision' && runtime.workload !== 'speech' && runtime.workload !== 'image' && runtime.workload !== 'music' && runtime.workload !== 'video'), (runtime) => runtime.workload, (runtime) => runtime.name)
+  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation && runtime.workload !== 'decision' && runtime.workload !== 'speech' && runtime.workload !== 'image' && runtime.workload !== 'music' && runtime.workload !== 'video' && runtime.workload !== 'transcription'), (runtime) => runtime.workload, (runtime) => runtime.name)
   const decideOn = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
   const decideLoading = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
   const decideLink = decisionRuntimes.length > 0 ? <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<WorkloadIcon workload="decision" />} label="Decide"
@@ -166,6 +168,10 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const videoRuntimes = runtimes.filter((runtime) => runtime.generation?.video)
   const videoOn = videoRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
   const videoLoading = videoRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
+  // Speech-to-text models share one Transcribe entry.
+  const transcribeRuntimes = runtimes.filter((runtime) => runtime.generation?.transcribe)
+  const transcribeOn = transcribeRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+  const transcribeLoading = transcribeRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
   // Chat sits first under Text: it talks to the text model, which can use every other running model.
   const chatRuntimes = runtimes.filter((runtime) => runtime.chat)
   const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? chatRuntimes[0]
@@ -189,6 +195,8 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
       title={musicOn ? 'Music: a model is running' : 'Music'} badge={<NavState state={musicOn ? 'ready' : musicLoading ? 'loading' : undefined} />} /> }] : []),
     ...(videoRuntimes.length > 0 ? [{ label: 'Video', node: <NavLink key="video" route={{ page: 'video', hostId: host.id }} current={current} icon={<WorkloadIcon workload="video" />} label="Video"
       title={videoOn ? 'Video: a model is running' : 'Video'} badge={<NavState state={videoOn ? 'ready' : videoLoading ? 'loading' : undefined} />} /> }] : []),
+    ...(transcribeRuntimes.length > 0 ? [{ label: 'Transcribe', node: <NavLink key="transcribe" route={{ page: 'transcribe', hostId: host.id }} current={current} icon={<WorkloadIcon workload="transcription" />} label="Transcribe"
+      title={transcribeOn ? 'Transcribe: a model is running' : 'Transcribe'} badge={<NavState state={transcribeOn ? 'ready' : transcribeLoading ? 'loading' : undefined} />} /> }] : []),
     ...(speechRuntimes.length > 0 ? [{ label: 'Speech', node: <NavLink key="speech" route={{ page: 'speech', hostId: host.id }} current={current} icon={<WorkloadIcon workload="speech" />} label="Speech"
       title={speechOn ? 'Speech: a model is running' : 'Speech'} badge={<NavState state={speechOn ? 'ready' : speechLoading ? 'loading' : undefined} />} /> }] : []),
   ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))

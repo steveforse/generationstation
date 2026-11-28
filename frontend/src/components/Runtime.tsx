@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Download, FileText, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, Pencil, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Copy, Download, FileText, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, Pencil, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
 import { formatBytes } from '../api'
 import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeLicense, RuntimeSetting, SettingValue, UploadRecord } from '../types'
 import { FilePicker, type FileItem } from './FilePicker'
@@ -487,7 +487,7 @@ function InputThumb({ job, file, inputUrl }: { job: Job; file: JobFile; inputUrl
 
 /** Files a result offers as one menu per kind, so six or eight downloads are two buttons. Others keep their own button. */
 const DOWNLOAD_GROUPS: { label: string; files: Record<string, string> }[] = [
-  { label: 'Download transcript', files: { 'transcript.md': 'Readable text (.md)', 'transcript.srt': 'Captions (.srt)', 'transcript.vtt': 'Captions for the web (.vtt)', 'transcript-raw.json': 'Before correction (.json)' } },
+  { label: 'Download transcript', files: { 'transcript.md': 'Readable text (.md)', 'transcript.srt': 'Captions (.srt)', 'transcript.vtt': 'Captions for the web (.vtt)', 'transcript.txt': 'Plain text (.txt)', 'transcript.json': 'With times and speakers, for programs (.json)', 'transcript-raw.json': 'Before correction (.json)' } },
   { label: 'Download notes', files: { 'notes.md': 'Notes (.md)', 'actions.csv': 'Action items, for a spreadsheet (.csv)', 'decisions.csv': 'Decisions, for a spreadsheet (.csv)', 'meeting.json': 'Everything, for programs (.json)' } },
 ]
 
@@ -641,7 +641,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
   const media = files.filter((output) => /^(audio|image|video)\//.test(output.mime))
   const others = files.filter((output) => !media.includes(output))
   // Documents shown on the page as well as offered for download: the notes open, the transcript folded away.
-  const shown = ['notes.md', 'transcript.md', 'result.md'].filter((name) => others.some((output) => output.name === name))
+  const shown = ['notes.md', 'transcript.md', 'transcript.txt', 'result.md'].filter((name) => others.some((output) => output.name === name))
   const [docs, setDocs] = useState<Record<string, string>>({})
   useEffect(() => {
     setDocs({})
@@ -653,7 +653,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     return () => { cancelled = true }
     // Read each shown document once its file link is ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job.id, urls['notes.md'], urls['transcript.md'], urls['result.md']])
+  }, [job.id, urls['notes.md'], urls['transcript.md'], urls['transcript.txt'], urls['result.md']])
 
   useEffect(() => { setEditing(false); setEditingNotes(false) }, [job.id])
   useEffect(() => {
@@ -721,7 +721,7 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
       : <section className="job-section job-document" aria-label="Notes"><Markdown text={docs['notes.md']} /></section>)}
     {docs['transcript.md'] && (editing && urls['meeting.json'] && onEditTranscript
       ? <TranscriptEditor url={urls['meeting.json']} onSave={(edit) => onEditTranscript(job, edit)} onClose={(saved) => { setEditing(false); if (saved) setRevision((count) => count + 1) }} />
-      : <details className="job-section job-document disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Transcript</summary><Markdown text={docs['transcript.md'].replace(/^# .*\n+/, '')} /></details>)}
+      : <details className="job-section job-document disclosure" open={!urls['meeting.json'] || undefined}><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Transcript</summary><Markdown text={docs['transcript.md'].replace(/^# .*\n+/, '')} /></details>)}
     {urls['meeting.json'] && (onEditNotes || onEditTranscript) && job.status === 'done' && <MeetingHistory url={urls['meeting.json']} version={revision} />}
     <div className="job-actions">
       <button type="button" className="button button-secondary" onClick={() => void onReuse(job)}><RotateCcw size={16} />Use these settings</button>
@@ -729,6 +729,8 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
         <button type="button" className="button button-secondary" onClick={() => { setEditing(false); setEditingNotes(true) }}><Pencil size={16} />Edit notes</button>}
       {onEditTranscript && !editing && job.status === 'done' && urls['meeting.json'] && docs['transcript.md'] &&
         <button type="button" className="button button-secondary" onClick={() => { setEditingNotes(false); setEditing(true) }}><Pencil size={16} />Edit transcript</button>}
+      {job.status === 'done' && !urls['meeting.json'] && docs['transcript.txt'] &&
+        <button type="button" className="button button-secondary" onClick={() => { void navigator.clipboard.writeText(docs['transcript.txt']).then(() => setError(''), () => setError('The transcript could not be copied.')) }}><Copy size={16} />Copy the text</button>}
       {job.status === 'done' && onSaveVoice && media.filter((output) => output.mime.startsWith('video/') || output.mime.startsWith('audio/')).slice(0, 1).map((output) =>
         <button key={output.name} type="button" className="button button-secondary" disabled={!urls[output.name]} aria-expanded={savingVoice}
           title="Keep the sound of this result as a voice that speech models can speak in" onClick={() => setSavingVoice((open) => !open)}><MessageCircleMore size={16} />Save as voice</button>)}

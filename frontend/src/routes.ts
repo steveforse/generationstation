@@ -10,6 +10,7 @@ export type Route =
   | { page: 'images'; hostId: string }
   | { page: 'music'; hostId: string }
   | { page: 'video'; hostId: string }
+  | { page: 'transcribe'; hostId: string }
   | { page: 'chat'; hostId: string; conversationId?: string }
   | { page: 'logs'; hostId: string; name?: string }
   | { page: 'settings'; hostId: string }
@@ -23,6 +24,7 @@ export function parseRoute(hash: string): Route {
   if (parts[0] === 'hosts' && parts[1] && parts[2] === 'images') return { page: 'images', hostId: parts[1] }
   if (parts[0] === 'hosts' && parts[1] && parts[2] === 'music') return { page: 'music', hostId: parts[1] }
   if (parts[0] === 'hosts' && parts[1] && parts[2] === 'video') return { page: 'video', hostId: parts[1] }
+  if (parts[0] === 'hosts' && parts[1] && parts[2] === 'transcribe') return { page: 'transcribe', hostId: parts[1] }
   if (parts[0] === 'hosts' && parts[1] && parts[2] === 'speech') return { page: 'speech', hostId: parts[1] }
   if (parts[0] === 'hosts' && parts[1] && parts[2] === 'settings') return { page: 'settings', hostId: parts[1] }
   if (parts[0] === 'hosts' && parts[1] && parts[2] === 'logs') return { page: 'logs', hostId: parts[1], name: parts[3] || undefined }
@@ -38,6 +40,7 @@ export function href(route: Route) {
     case 'images': return `#/hosts/${encodeURIComponent(route.hostId)}/images`
     case 'music': return `#/hosts/${encodeURIComponent(route.hostId)}/music`
     case 'video': return `#/hosts/${encodeURIComponent(route.hostId)}/video`
+    case 'transcribe': return `#/hosts/${encodeURIComponent(route.hostId)}/transcribe`
     case 'speech': return `#/hosts/${encodeURIComponent(route.hostId)}/speech`
     case 'models': return `#/hosts/${encodeURIComponent(route.hostId)}/models`
     case 'settings': return `#/hosts/${encodeURIComponent(route.hostId)}/settings`
@@ -50,7 +53,7 @@ export function href(route: Route) {
 /** Where a model's own page is: decision models share the Decide page, speech models the Speech page, picture models the Images page, any other has a page of its own. */
 export function modelRoute(hostId: string, modelId: string, runtimes?: { id: string; workload: string }[] | null): Route {
   const workload = runtimes?.find((runtime) => runtime.id === modelId)?.workload
-  return workload === 'decision' ? { page: 'decide', hostId } : workload === 'speech' ? { page: 'speech', hostId } : workload === 'image' ? { page: 'images', hostId } : workload === 'music' ? { page: 'music', hostId } : workload === 'video' ? { page: 'video', hostId } : { page: 'service', hostId, modelId }
+  return workload === 'decision' ? { page: 'decide', hostId } : workload === 'speech' ? { page: 'speech', hostId } : workload === 'image' ? { page: 'images', hostId } : workload === 'music' ? { page: 'music', hostId } : workload === 'video' ? { page: 'video', hostId } : workload === 'transcription' ? { page: 'transcribe', hostId } : { page: 'service', hostId, modelId }
 }
 
 export function useRoute() {
