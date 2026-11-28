@@ -17,6 +17,9 @@ from mlx_runtime import MLXThread
 TOKENS_PER_SECOND = 25  # one semantic token per 40 ms of audio
 
 
+# Blank lyrics do not make an instrumental (the model then invents words and sings them). Sections that name no singing do.
+INSTRUMENTAL = "[Intro: Instrumental]\n\n[Instrumental Break]\n\n[Outro: Instrumental]"
+
 def load(config):
     from lyra.pipeline import YuE2Pipeline
 
@@ -42,7 +45,7 @@ def sing(pipe, inputs, job):
     from yue2.protocol import SongRequest
 
     seed = inputs.get("seed")
-    request = SongRequest(style=inputs["style"], lyrics=inputs["lyrics"], cot=inputs.get("mode") or "full",
+    request = SongRequest(style=inputs["style"], lyrics=inputs.get("lyrics") or INSTRUMENTAL, cot=inputs.get("mode") or "full",
                           seed=seed if isinstance(seed, int) else random.randrange(1, 2**31),
                           cfg_scale=inputs.get("cfg_scale"), id="song")
     cancelled = lambda: job.cancel_requested  # noqa: E731 - the library raises InterruptedError; serve() reports it as a cancel

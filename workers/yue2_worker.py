@@ -8,6 +8,9 @@ import random
 from gs_worker import serve
 
 
+# Blank lyrics do not make an instrumental (the model then invents words and sings them). Sections that name no singing do.
+INSTRUMENTAL = "[Intro: Instrumental]\n\n[Instrumental Break]\n\n[Outro: Instrumental]"
+
 def _flash_attention_works():
     """Windows PyTorch wheels ship the FlashAttention op without its kernels; try it once."""
     import warnings
@@ -64,7 +67,7 @@ def generate(pipe, inputs, job):
     from yue2.protocol import SongRequest
 
     seed = inputs.get("seed")
-    request = SongRequest(style=inputs["style"], lyrics=inputs["lyrics"], cot=inputs.get("mode") or "full",
+    request = SongRequest(style=inputs["style"], lyrics=inputs.get("lyrics") or INSTRUMENTAL, cot=inputs.get("mode") or "full",
                           seed=seed if isinstance(seed, int) else random.randrange(1, 2**31),
                           cfg_scale=inputs.get("cfg_scale"), id="song")
     job.report("Writing the melody")

@@ -8,7 +8,9 @@ Config options (from runtimes.json, per preset):
     dit        The diffusion model folder name inside checkpoints/ (default "acestep-v15-turbo").
     lm         The language model folder name inside checkpoints/ (default "acestep-5Hz-lm-1.7B").
     steps      Diffusion steps (default 8, the turbo schedule).
-Inputs: style (the caption), lyrics (empty makes an instrumental), language, length (seconds), seed.
+Inputs: mode (song, cover, repaint), style (the caption), lyrics (empty makes an instrumental), language, length (seconds), seed,
+    tempo, key, time_signature (optional); cover and repaint take source (a song), cover also strength (percent, high stays close to
+    the original), repaint also start and end (seconds; no end means to the end of the song).
 """
 import os
 import random
@@ -54,6 +56,7 @@ def compose(model, inputs, job, seed, folder):
     from acestep.inference import GenerationConfig, GenerationParams, generate_music
 
     lyrics = (inputs.get("lyrics") or "").strip()
+    mode = inputs.get("mode") or "song"
 
     def progress(value=None, desc=None, **_):
         if job.cancel_requested:
@@ -61,10 +64,32 @@ def compose(model, inputs, job, seed, folder):
         if desc:
             job.progress = str(desc)[:200]
 
-    params = GenerationParams(task_type="text2music", thinking=True, caption=inputs["style"], lyrics=lyrics or "[Instrumental]",
-                              instrumental=not lyrics, duration=float(inputs.get("length") or 60),
-                              vocal_language=inputs.get("language") or "en", inference_steps=model["steps"],
-                              guidance_scale=1.0, seed=seed)
+    common = dict(caption=inputs["style"], lyrics=lyrics or "[Instrumental]", instrumental=not lyrics,
+                  vocal_language=inputs.get("language") or "en", inference_steps=model["steps"], guidance_scale=1.0, seed=seed)
+    # Tempo, key and time signature are left to the planning model unless the person gave them.
+    meta = {}
+    if inputs.get("tempo"):
+        meta["bpm"] = int(inputs["tempo"])
+    key = inputs.get("key")
+    if key and key != "auto":
+        meta["keyscale"] = key
+    signature = inputs.get("time_signature")
+    if signature and signature != "auto":
+        meta["timesignature"] = signature.split("/")[0]
+    if mode == "song":
+        params = GenerationParams(task_type="text2music", thinking=True, duration=float(inputs.get("length") or 60), **common, **meta)
+    else:
+        source = (inputs.get("source") or [{}])[0].get("path")
+        if not source:
+            raise RuntimeError("Add the song to start from.")
+        if mode == "cover":
+            # The strength the person sees is how closely the new version follows the original (high = close).
+            params = GenerationParams(task_type="cover", src_audio=source, thinking=False, audio_cover_strength=int(inputs.get("strength") or 50) / 100,
+                                      **common, **meta)
+        else:
+            start, end = float(inputs.get("start") or 0), inputs.get("end")
+            params = GenerationParams(task_type="repaint", src_audio=source, thinking=False, repainting_start=start,
+                                      repainting_end=float(end) if end not in (None, "") else -1, **common, **meta)
     result = generate_music(model["dit"], model["lm"], params=params, config=GenerationConfig(batch_size=1, audio_format="wav"),
                             save_dir=str(folder), progress=progress)
     if job.cancel_requested:
@@ -93,7 +118,7 @@ def generate(model, inputs, job):
         folder.rmdir()
     seconds = len(audio) / rate
     job.detail(seed=seed, audio_seconds=round(seconds, 1), instrumental=not (inputs.get("lyrics") or "").strip(),
-               language=inputs.get("language") or "en", steps=model["steps"])
+               language=inputs.get("language") or "en", steps=model["steps"], task=inputs.get("mode") or "song")
     job.report(f"Done: {seconds:.0f} seconds of music in {time.perf_counter() - started:.0f} s, seed {seed}")
 
 

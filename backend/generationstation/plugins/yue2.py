@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, SettingSpec, TimingSpec
+from .music import MusicInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -49,9 +50,9 @@ class YuE2Plugin(WorkerPlugin):
             placeholder="Upbeat indie pop, female vocals, acoustic guitar, warm, summery",
             help="Describe the genre, mood, instruments and voice, separated by commas."),
         "lyrics": InputSpec(
-            label="Lyrics", kind="textarea", required=True, max_length=8000,
+            label="Lyrics", kind="textarea", max_length=8000,
             placeholder="[Verse]\nFirst line of the song\nSecond line\n\n[Chorus]\nThe part everyone sings",
-            help=LYRICS_HELP),
+            help=LYRICS_HELP + " Leave this empty for an instrumental (this model sings, so a few vocal moments can still appear)."),
         "mode": InputSpec(
             label="Melody planning", kind="choice", options=("full", "melody", "off"), default="full",
             help="'full' plans melody and chords first (best). 'off' is faster but less structured.",
@@ -61,3 +62,9 @@ class YuE2Plugin(WorkerPlugin):
             help="Leave empty for a new song each time. Reuse a seed to get the same song again.",
             advanced=True),
     }
+
+    music: ClassVar[MusicInfo] = MusicInfo(
+        guidance=("Describe the genre, mood, instruments and voice in the style box, separated by commas, and write the lyrics under "
+                  "[Verse] and [Chorus] tags. The song is as long as the lyrics: more parts, a longer song. Leave the lyrics empty "
+                  "for an instrumental (this model sings, so a few vocal moments can still appear)."),
+        create="", roles={"": {"style": "style", "lyrics": "lyrics", "seed": "seed"}})

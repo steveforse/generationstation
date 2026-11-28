@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, TimingSpec
+from .music import MusicInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -39,6 +40,13 @@ class MiniMaxMusicPlugin(WorkerPlugin):
             help="Put each part under a tag: [Verse], [Chorus], [Bridge], [Outro]. Leave this empty for an instrumental."),
         "length": InputSpec(label="Length", kind="choice", options=("30", "60", "120", "180"), default="60",
                             help="The most seconds of music to make; the song may end sooner."),
+        "steps": InputSpec(label="Steps", kind="int", minimum=1, maximum=30, placeholder="30", advanced=True,
+                           help="How many refinement steps the sound takes (30 if empty). Fewer is faster and rougher."),
         "seed": InputSpec(label="Seed", kind="seed", minimum=0, maximum=2**31 - 1, advanced=True,
                           help="Reuse a seed to get the same song again. Leave empty for a new one."),
     }
+
+    music: ClassVar[MusicInfo] = MusicInfo(
+        guidance=("Describe the genre, mood, instruments, voice and tempo in the style box, and write the lyrics under [Verse] and "
+                  "[Chorus] tags (empty for an instrumental). The length is a maximum: the song may end sooner."),
+        create="", roles={"": {"style": "style", "lyrics": "lyrics", "length": "length", "steps": "steps", "seed": "seed"}})

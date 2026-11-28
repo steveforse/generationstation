@@ -5,7 +5,7 @@ needs MiniMax's written authorisation.
 
 Config options (from runtimes.json, per preset):
     model_dir   The mlx-community/MiniMax-Music3-mxfp8 folder (about 13 GB).
-Inputs: style (the caption), lyrics (empty makes an instrumental), length (seconds, a maximum), seed.
+Inputs: style (the caption), lyrics (empty makes an instrumental), length (seconds, a maximum), steps (1 to 30), seed.
 """
 import os
 import random
@@ -31,7 +31,7 @@ def compose(model, inputs, job, seed):
     import mlx.core as mx
     import numpy as np
 
-    kwargs = {"text": inputs["style"], "seed": seed, "duration": float(inputs.get("length") or 60)}
+    kwargs = {"text": inputs["style"], "seed": seed, "duration": float(inputs.get("length") or 60), "steps": int(inputs.get("steps") or 30)}
     # The model refuses an empty lyric; it wants the marker spelled out for a piece without singing.
     kwargs["lyrics"] = (inputs.get("lyrics") or "").strip() or "[instrumental]"
     job.report("Composing the song")
@@ -57,7 +57,7 @@ def generate(model, inputs, job):
     job.report("Saving")
     sf.write(job.output("song.flac", "audio/flac"), audio, rate, subtype="PCM_24")
     seconds = len(audio) / rate
-    job.detail(seed=seed, audio_seconds=round(seconds, 1), instrumental=not (inputs.get("lyrics") or "").strip())
+    job.detail(seed=seed, audio_seconds=round(seconds, 1), instrumental=not (inputs.get("lyrics") or "").strip(), steps=int(inputs.get("steps") or 30))
     job.report(f"Done: {seconds:.0f} seconds of music in {time.perf_counter() - started:.0f} s, seed {seed}")
 
 
