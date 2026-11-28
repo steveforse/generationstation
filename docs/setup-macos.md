@@ -433,7 +433,7 @@ $HF download mlx-community/parakeet-tdt-0.6b-v3 --local-dir $A/parakeet-tdt-0.6b
 | --- | --- | --- |
 | Qwen3-ASR 1.7B (8-bit) | Apache-2.0 | 30 languages, words to expect, times in parts of 30 s. 17 minutes in about 21 s. |
 | Whisper large-v3-turbo | MIT | 99 languages, words to expect (as its prompt), times on each line. 17 minutes in about 8 s. |
-| Parakeet TDT v3 | CC-BY-4.0 (credit NVIDIA) | 25 European languages, detected; no word list; times on each sentence. 17 minutes in about 4 s. |
+| Parakeet TDT v3 | CC-BY-4.0 (work use: credit NVIDIA if the app is ever shipped to others) | 25 European languages, detected; no word list; times on each sentence. 17 minutes in about 4 s. |
 
 Each model works in parts, because whole recordings go wrong: Qwen3-ASR loops on 18 minutes in one piece, Parakeet needs 32 GiB (Nemotron 3.5 Transcribe, tried and removed, repeated and skipped on an hour). Who spoke uses the speaker detection set up for the meeting notes (`diar_python`, `segmentation_model`, `embedding_model` in the preset options); the form's advanced "How many speakers" moves that step's threshold by 0.15 or 0.2. The result is a transcript with `.txt`, `.md`, `.json`, and `.srt` and `.vtt` where the model gives times. In the chat, every running model is reached through one `transcribe` tool.
 

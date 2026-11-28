@@ -1724,10 +1724,10 @@
         }
       },
       "license": {
-        "use": "conditions",
+        "use": "work",
         "weights": "CC-BY-4.0",
         "code": "mlx-audio: MIT",
-        "note": "CC-BY-4.0 allows commercial use if NVIDIA is credited, as the licence asks.",
+        "note": "CC-BY-4.0 allows commercial use if NVIDIA is credited when the weights are shared. This app runs them internally and its transcripts are not covered by the licence, so it is work use here. Add a credit line (NVIDIA Parakeet TDT 0.6B v3, CC-BY-4.0, converted for MLX by mlx-community) if the app is ever shipped to others.",
         "url": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"
       }
     }
