@@ -1,11 +1,14 @@
 """Picture worker for Apple silicon, through mflux (MLX). Runs in the mflux environment.
 
-Each picture is one mflux process with `--low-ram`, so nothing stays in memory between pictures (Qwen Image 2.1 Turbo:
-about 8.5 GiB at the peak for a 1024x1024 picture, 8 steps, about 20 s on an M5 Max). The worker holds no model.
+The model is loaded once, when the worker starts, and stays in memory: a picture then costs only its painting time (Z-Image
+Turbo at 1344x768: about 12 s, against about 28 s when each picture started its own mflux process). All MLX work runs on one
+thread, because MLX's GPU stream belongs to the thread that made it. The commands' own argument parsers and helpers are used,
+so defaults, validation and each model family's scheduler are mflux's; a cancel stops the picture at the next step.
 
 Config options (from runtimes.json, per preset):
     model_dir    An mflux model folder (a community conversion, or one made with `mflux-save`).
-    command      The mflux command, a name beside this Python or a path (default mflux-generate-qwen-2.1).
+    command      Which mflux command's model this is: mflux-generate-qwen-2.1 (default), mflux-generate-qwen or
+                 mflux-generate-z-image-turbo.
     steps        Denoising steps (default 8, the Turbo schedule).
     guidance     Optional guidance scale; omit for distilled (Turbo) models.
     base_model   Optional `--base-model`: the built-in model a third-party folder is based on.
@@ -14,18 +17,18 @@ Inputs: prompt, size ("square" | "portrait" | "landscape" | "wide" | "custom" wi
     "WxH"), picture ([{"path"}], an init image) with strength (percent, how closely it follows the picture), steps (default
     the preset's), negative_prompt, seed. `quality` is ignored: a preset is one quality.
 """
+import copy
 import random
-import re
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 from gs_worker import serve
+from mlx_runtime import MLXThread
 
 SHAPES = {"square": (1024, 1024), "portrait": (768, 1152), "landscape": (1152, 768), "wide": (1344, 768)}
-STEP = re.compile(rb"(\d+)/(\d+) \[")
-PEAK = re.compile(rb"Peak MLX memory: ([\d.]+) GB")
+DEFAULT_COMMAND = "mflux-generate-qwen-2.1"
+FAMILIES = {"mflux-generate-qwen-2.1": "qwen21", "mflux-generate-qwen": "qwen", "mflux-generate-z-image-turbo": "zimage"}
 
 
 def _size(text):
@@ -38,12 +41,78 @@ def _size(text):
     return width // 16 * 16, height // 16 * 16  # the model works in 16-pixel blocks
 
 
-def _command(options):
-    path = Path(options.get("command") or "mflux-generate-qwen-2.1")
-    path = path if path.is_absolute() else Path(sys.executable).parent / path
-    if not path.exists():
-        raise FileNotFoundError(f"mflux command not found: {path}")
-    return str(path)
+class _Painting:
+    """An mflux callback: reports each step to the job (which stops the picture when the job was cancelled)."""
+    job = None
+
+    def call_in_loop(self, t, seed, prompt, latents, config, time_steps):
+        if self.job is not None:
+            self.job.report(f"Painting, step {t + 1} of {config.num_inference_steps}")
+
+
+def _parse(parser, argv):
+    """mflux's parser reads sys.argv, so each picture's arguments are put there for the parse (only the MLX thread calls this)."""
+    saved = sys.argv
+    sys.argv = ["mflux", *argv]
+    try:
+        return parser.parse_args()
+    finally:
+        sys.argv = saved
+
+
+def _base_args(options):
+    """The argv every picture shares: the model folder and what it is based on."""
+    argv = ["--model", str(options["model_dir"])]
+    if options.get("base_model"):
+        argv += ["--base-model", str(options["base_model"])]
+    return argv
+
+
+def _family(options):
+    command = Path(options.get("command") or DEFAULT_COMMAND).name
+    if command not in FAMILIES:
+        raise ValueError(f"Unknown mflux command {command!r}; use one of {', '.join(FAMILIES)}.")
+    return FAMILIES[command]
+
+
+def _modules(family):
+    """(parser module, how to build the model from parsed args, how to paint one picture from them)."""
+    from mflux.cli.parser.parsers import lora_init_kwargs_from_args
+    from mflux.models.common.compute_precision import ComputePrecision
+    from mflux.utils.dimension_resolver import DimensionResolver
+    from mflux.utils.prompt_util import PromptUtil
+
+    if family == "zimage":
+        from mflux.models.z_image.cli import z_image_turbo_generate as cli
+
+        return cli, cli.ZImageTurboCommand.load, lambda model, args, seed, prompt: cli.ZImageTurboCommand.generate(model, args, seed, prompt)
+    if family == "qwen":
+        from mflux.models.qwen.cli import qwen_image_generate as cli
+
+        def paint(model, args, seed, prompt):
+            run = copy.copy(args)
+            run.width, run.height = DimensionResolver.resolve(width=args.width, height=args.height, reference_image_path=args.image_path)
+            return cli.QwenImageCommand.generate(model, run, seed, prompt)
+
+        return cli, cli.QwenImageCommand.load, paint
+
+    from mflux.models.common.resolution.config_resolution import ConfigResolution
+    from mflux.models.qwen21.variants.txt2img.qwen_image_21 import QwenImage21
+    from mflux.models.qwen21.cli import qwen21_generate as cli
+
+    def load(args):
+        config = ConfigResolution.resolve_restricted(args.model, cli.DEFAULT_MODEL, model_path=args.model_path, base_model=args.base_model, extra_keys=cli.FAMILY_MODELS)
+        return QwenImage21(quantize=args.quantize, model_path=args.model_path, model_config=config,
+                           compute_precision=ComputePrecision.dtype_for(args.compute_precision), small_text_encoder=args.small_text_encoder,
+                           **lora_init_kwargs_from_args(args))
+
+    def paint(model, args, seed, prompt):
+        width, height = DimensionResolver.resolve(width=args.width, height=args.height, reference_image_path=args.image_path)
+        return model.generate_image(seed=seed, prompt=prompt, negative_prompt=PromptUtil.read_negative_prompt(args), width=width, height=height,
+                                    guidance=args.guidance if args.guidance is not None else 1.0, scheduler=args.scheduler, image_path=args.image_path,
+                                    num_inference_steps=args.steps, image_strength=args.image_strength, step_cache_ratio=args.step_cache_ratio)
+
+    return cli, load, paint
 
 
 def load(config):
@@ -51,14 +120,34 @@ def load(config):
     model_dir = Path(options["model_dir"])
     if not (model_dir / "transformer").is_dir():
         raise FileNotFoundError(f"No mflux model in {model_dir} (expected a transformer/ folder)")
-    return {"command": _command(options), "model_dir": str(model_dir), "steps": int(options.get("steps", 8)),
-            "guidance": options.get("guidance"), "base_model": options.get("base_model"),
-            "negative": bool(options.get("negative"))}
+    family = _family(options)
+    thread = MLXThread()
+    painting = _Painting()
+
+    def build():
+        cli, load_model, paint = _modules(family)
+        parser = cli.build_parser()
+        first = _parse(parser, [*_base_args(options), "--prompt", "warm up", "--seed", "1", "--steps", "2", "--width", "256", "--height", "256", "--output", "/dev/null"])
+        model = load_model(first)
+        model.callbacks.register(painting)
+        # Weights load lazily; one tiny picture now brings them into memory, so "ready" means loaded and the first real picture is not slow.
+        try:
+            paint(model, first, 1, "warm up")
+        except Exception as exc:  # noqa: BLE001 - the model still works; the first picture will load what is missing
+            print(f"[worker] warm-up failed: {exc}", flush=True)
+        import mlx.core as mx
+        mx.clear_cache()
+        return {"cli": cli, "parser": parser, "model": model, "paint": paint}
+
+    state = thread.call(build)
+    return {**state, "thread": thread, "painting": painting, "options": options, "steps": int(options.get("steps", 8)),
+            "guidance": options.get("guidance"), "negative": bool(options.get("negative"))}
 
 
 def generate(model, inputs, job):
     from PIL import Image
 
+    options = model["options"]
     picture = (inputs.get("picture") or [{}])[0].get("path")
     size = str(inputs.get("size") or "square").lower()
     # "match picture" leaves the size to the starting picture; "custom" takes the width and height fields.
@@ -69,46 +158,38 @@ def generate(model, inputs, job):
     out = job.output(f"picture-{seed}.png", "image/png")
     job.report("Reading the description")
     started = time.perf_counter()
-    command = [model["command"], "--model", model["model_dir"], "--prompt", inputs["prompt"], "--seed", str(seed),
-               "--steps", str(step_count), "--low-ram", "--no-metadata", "--output", str(out)]
+    argv = [*_base_args(options), "--prompt", inputs["prompt"], "--seed", str(seed), "--steps", str(step_count), "--output", str(out)]
     if width:
-        command += ["--width", str(width), "--height", str(height)]
+        argv += ["--width", str(width), "--height", str(height)]
     if picture:
-        command += ["--image", str(picture), str(int(inputs.get("strength") or 40) / 100)]
-    if model["base_model"]:
-        command += ["--base-model", model["base_model"]]
+        argv += ["--image", str(picture), str(int(inputs.get("strength") or 40) / 100)]
     if model["guidance"] is not None:
-        command += ["--guidance", str(model["guidance"])]
+        argv += ["--guidance", str(model["guidance"])]
     if model["negative"] and inputs.get("negative_prompt"):
-        command += ["--negative-prompt", inputs["negative_prompt"]]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    tail, peak = b"", None
-    try:
-        while True:
-            chunk = process.stdout.read1(4096)  # tqdm redraws one line with carriage returns, so read raw bytes
-            if not chunk:
-                break
-            tail = (tail + chunk)[-4000:]
-            steps = STEP.findall(tail)
-            if steps:
-                done, total = (int(n) for n in steps[-1])
-                job.report(f"Painting, step {done} of {total}")
-            found = PEAK.search(tail)
-            if found:
-                peak = float(found.group(1))
-            if job.cancel_requested:
-                break
-        if job.cancel_requested:
-            job.report("Cancelling")  # raises JobCancelled
-        if process.wait() != 0 or not out.exists():
-            raise RuntimeError("mflux failed: " + tail.decode(errors="replace").strip().splitlines()[-1][:300])
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait()
+        argv += ["--negative-prompt", inputs["negative_prompt"]]
+    peak = {}
+
+    def paint():
+        import mlx.core as mx
+        from mflux.utils.exceptions import StopImageGenerationException
+
+        args = _parse(model["parser"], argv)
+        mx.reset_peak_memory()
+        model["painting"].job = job
+        try:
+            image = model["paint"](model["model"], args, seed, inputs["prompt"])
+            image.save(path=str(out), export_json_metadata=False)
+        except StopImageGenerationException as exc:
+            raise RuntimeError(str(exc)) from exc
+        finally:
+            model["painting"].job = None
+            peak["gib"] = mx.get_peak_memory() / 2**30
+            mx.clear_cache()
+
+    model["thread"].call(paint)
     image = Image.open(out)
     job.detail(seed=seed, steps=step_count, width=image.width, height=image.height, **({"start_strength": int(inputs.get("strength") or 40)} if picture else {}),
-               **({"peak_gib": round(peak, 1)} if peak else {}))
+               **({"peak_gib": round(peak["gib"], 1)} if peak else {}))
     job.thumbnail(image, size=1024)
     job.report(f"Done in {time.perf_counter() - started:.0f} s, seed {seed}")
 

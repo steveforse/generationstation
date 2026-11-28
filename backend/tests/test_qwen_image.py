@@ -77,7 +77,7 @@ def test_mac_entries_are_one_per_model_and_use_the_mflux_worker():
         assert set(entry.presets) == presets and entry.default_preset in presets
         assert QWEN.script_path(entry) == ROOT / "workers" / "qwen_image_mflux_worker.py"
         assert all(p.allowed_gpus == [0] for p in entry.presets.values())
-    assert QWEN.estimate(catalog.runtimes["qwen_image"], catalog.runtimes["qwen_image"].presets["mlx"], {}, [0]) == (10, {})
+    assert QWEN.estimate(catalog.runtimes["qwen_image"], catalog.runtimes["qwen_image"].presets["mlx"], {}, [0]) == (30, {})  # the model stays loaded, so a start asks for its peak
 
 
 def test_mflux_worker_sizes_follow_the_shapes_and_snap_to_sixteen(monkeypatch):

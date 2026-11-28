@@ -205,7 +205,7 @@ All picture models share one **Images** page (in the sidebar, with Chat, Decide,
 
 ### Qwen Image 2.1 Turbo (mflux)
 
-[mflux](https://github.com/filipstrand/mflux) runs Qwen Image on MLX. The worker starts one `mflux-generate-qwen-2.1 --low-ram` process per picture, so the model's memory (about 8.5 GiB at the peak) is held only while a picture is being made, and the process start adds a few seconds. Turbo has one quality and no negative prompt, so those form fields have no effect.
+[mflux](https://github.com/filipstrand/mflux) runs Qwen Image on MLX. The worker loads the model once, when it starts, and keeps it loaded (all three picture models work this way): a picture costs only its painting time, about half of what starting a fresh mflux process per picture took (Z-Image Turbo at 1344x768: 12 s against 28 s). The price is memory held while the model runs, and a higher peak than the `--low-ram` mode that drops parts of the model between pictures. Measured on the M5 Max (held while idle / peak during a 1344x768 picture): Z-Image Turbo 4.4 / 11.5 GiB, Qwen Image 2.1 Turbo 15.6 / 28.5 GiB, Qwen Image 2.1 full 16 / 29 GiB, Qwen-Image 2512 34 / 48 GiB. The catalog's estimates are set to the peaks plus a margin (12, 30, 30 and 50 GiB), so a start is refused when the peak would not fit. Turbo has one quality and no negative prompt, so those form fields have no effect.
 
 ```sh
 uv venv ~/ai/envs/mflux --python 3.12
@@ -239,7 +239,7 @@ $HF download mflux-community/z-image-turbo-mflux-q8 --local-dir ~/ai/models/qwen
 $HF download mflux-community/qwen-image-2512-mflux-q8 --local-dir ~/ai/models/qwen-image-mac/qwen-image-2512-mflux-q8
 ```
 
-Qwen Image 2.1 full is the quality option next to Turbo: 15.8 GiB peak, 100 s for 1024x1024 at 30 steps. Z-Image Turbo (Tongyi-MAI, Apache-2.0) is the fast alternative: 7.5 GiB peak, 16-22 s. Qwen-Image 2512 (Apache-2.0) is a base model with a negative prompt and 20 guided steps. Even at 8 bits it peaks near 37 GiB and takes about 3 minutes for a portrait picture (4.5 minutes for 1024x1024); the 4-bit conversion still peaked near 29 GiB and was slower, so only start it with the other large models stopped.
+Qwen Image 2.1 full is the quality option next to Turbo: about 100 to 140 s per picture at 30 steps. Z-Image Turbo (Tongyi-MAI, Apache-2.0) is the fast alternative: about 12 s. Qwen-Image 2512 (Apache-2.0) is a base model with a negative prompt and 20 guided steps. Even at 8 bits it holds about 34 GiB and peaks near 48 GiB, taking about 8 s per step (a 4-bit conversion peaked lower but was slower), so only start it with the other large models stopped.
 
 ### MiniMax Music 3 songs
 
