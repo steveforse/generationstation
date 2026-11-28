@@ -614,7 +614,7 @@ function SaveVoiceForm({ initialText, onSave, onCancel }: { initialText: string;
   </form>
 }
 
-export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, onEditNotes, onSaveVoice, onUseSong }: {
+export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, onEditNotes, onSaveVoice, onUseSong, onUseFrame, onUseClip }: {
   job: Job; runtime: Runtime; generation: Generation; fileUrl: GenerateHandlers['fileUrl']; inputUrl: GenerateHandlers['inputUrl']
   onReuse: (job: Job) => void | Promise<void>; onDelete: (job: Job) => Promise<string>; onCancel: (job: Job) => Promise<string>
   /** Save corrections to a transcript; returns an error message or ''. Only meeting results offer it. */
@@ -625,6 +625,9 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
   onSaveVoice?: (job: Job, url: string, name: string, text: string) => Promise<string>
   /** Put a finished song on the form as the song to start from; returns an error message or ''. Only the Music page offers it. */
   onUseSong?: (job: Job, url: string) => Promise<string>
+  /** Put a finished clip's last frame on the form as the first picture of the next clip, or the clip itself as the clip to continue; return an error message or ''. Only the Video page offers them. */
+  onUseFrame?: (job: Job, url: string) => Promise<string>
+  onUseClip?: (job: Job, url: string) => Promise<string>
 }) {
   const [savingVoice, setSavingVoice] = useState(false)
   const [urls, setUrls] = useState<Record<string, string>>({})
@@ -732,6 +735,12 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
       {job.status === 'done' && onUseSong && media.filter((output) => output.mime.startsWith('audio/')).slice(0, 1).map((output) =>
         <button key={`use-${output.name}`} type="button" className="button button-secondary" disabled={!urls[output.name]}
           title="Start a new version of this song, or redo a part of it" onClick={async () => { setError(await onUseSong(job, urls[output.name])) }}><Music size={16} />Use as source song</button>)}
+      {job.status === 'done' && onUseFrame && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).map((output) =>
+        <button key={`frame-${output.name}`} type="button" className="button button-secondary" disabled={!urls[output.name]}
+          title="Start the next clip from the last frame of this one" onClick={async () => { setError(await onUseFrame(job, urls[output.name])) }}><ImageIcon size={16} />Use last frame as first picture</button>)}
+      {job.status === 'done' && onUseClip && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).map((output) =>
+        <button key={`clip-${output.name}`} type="button" className="button button-secondary" disabled={!urls[output.name]}
+          title="Continue this clip" onClick={async () => { setError(await onUseClip(job, urls[output.name])) }}><Film size={16} />Use as source clip</button>)}
       {groups.map((group) => <DownloadMenu key={group.label} label={group.label} items={group.items} />)}
       {[...media, ...others].filter((output) => !grouped.has(output.name)).map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={16} />{output.name}</a>)}
       {active(job) && <button type="button" className="button button-secondary job-delete" disabled={deleting || job.progress === 'Cancelling'}

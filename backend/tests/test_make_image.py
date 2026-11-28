@@ -67,7 +67,7 @@ def test_the_chat_offers_one_image_tool_and_keeps_the_video_tabs_of_h3(tmp_path)
     names = [tool["function"]["name"] for tool in tools]
     assert "make_image" in names and not any(name.startswith("make_qwen_image") for name in names)
     assert not any(name in names for name in ("make_minimax_h3__picture", "make_minimax_h3__edit"))
-    assert "make_minimax_h3__text" in names
+    assert "make_video" in names and not any(name.startswith("make_minimax_h3") for name in names)  # its clip tabs go through make_video
     result = chat._call({"name": "make_image", "arguments": json.dumps({"prompt": "A fox", "shape": "wide"})}, handlers)
     assert result["text"].startswith("Started job") and result["job"]["model_id"] == "qwen_image"
     assert "Picture tabs are used from the **Images** page" in chat._model_guide()

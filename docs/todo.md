@@ -4,7 +4,7 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## In progress
 
-- **LongCat-Video: plugin, driver, worker, docs written; text-to-video tested through the app (66 s for 0.6 s). Image-to-video produced garbage for a mismatched first picture; the worker now crops it to 832x480 and a re-test is queued (the direct driver run with an exact-size picture was fine). Commit after that passes.**
+- **LongCat-Video** has three tabs through the app (2026-11-27): a description, a first picture (1.1 s clip in 79 s, clean on seeds 3 and 7 with the cropped picture) and continuing a clip (25 frames, 156 s, followed the prompt). Earlier "garbles half" notes came before the driver fixes and are not reproduced; continuations on some seeds still show artifacts at the join.
 - **Wan 2.2 A14B: measured, recommend not adding.** 19 minutes for a 17-frame clip, 33 GiB resident floor, and image-to-video is broken in mlx-video at this commit. Converted weights (80 GB) are kept on disk; delete them if you agree.
 - **LLM benchmarks and Claude reference bars: committed** (GPQA Diamond, Terminal-Bench 4.0 and 2.1, plus the earlier rankings; Claude Haiku, Sonnet and Opus 5.5 as references). Fable 5.2 as a fourth reference: decided against (2026-11-27, no open model is near the three already shown); Terminal-Bench 4.0 has no independent score for Qwen3.8 27B and Flash-Next; AIME 2025 is not published for any of the models.
 
@@ -23,8 +23,9 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 - Picture models stay loaded (2026-11-27), with the text encoder given back after each description and tiled decoding: Z-Image 28 to 14 s, Qwen Turbo 35 to 17 s, peaks 7 to 35 GiB (estimates 9, 14, 18, 38 GiB; nothing held before, now 1.5 to 22 GiB idle). The Windows picture worker is unchanged.
 
-- **Images page** done on the Mac (2026-11-27): checked by eye on Z-Image Turbo and Qwen Image 2.1 Turbo; not looked at by eye: Qwen Image 2.1 full and Qwen-Image 2512. The H3 picture tabs on the Windows desktop are untested. Instruction editing (Qwen Image 2.1 edit mode on the installed weights, personal use only; Qwen-Image-Edit-2511, Apache-2.0, about 34 GB) skipped for now. Video consolidation follows the same pattern.
-- **Music page** built and tested with fixtures and the real models (2026-11-27; plan in `docs/music-consolidation.md`): one entry, three models, ACE-Step tempo, cover and repaint, MiniMax steps, one `make_song` chat tool. Left: a listening check per model on the Mac and YuE2's page on the Windows desktop; Video consolidation follows the same pattern.
+- **Images page** done on the Mac (2026-11-27): checked by eye on Z-Image Turbo and Qwen Image 2.1 Turbo; not looked at by eye: Qwen Image 2.1 full and Qwen-Image 2512. The H3 picture tabs on the Windows desktop are untested. Instruction editing (Qwen Image 2.1 edit mode on the installed weights, personal use only; Qwen-Image-Edit-2511, Apache-2.0, about 34 GB) skipped for now. 
+- **Video page** built (2026-11-27; plan and results in `docs/video-consolidation.md`): one entry over Wan, FastMetal, LongCat, LTX-2.5 and H3, LTX last frame, LongCat picture and continue tabs, "Use last frame as first picture" and "Use as source clip", one `make_video` chat tool. Not done: LTX extend and retake (they need the dev transformer, see the plan), H3 on the Windows desktop (the page, its tabs and the picture tabs on Images are untested there), a look by eye at each model's clips through the page.
+- **Music page** built and tested with fixtures and the real models (2026-11-27; plan in `docs/music-consolidation.md`): one entry, three models, ACE-Step tempo, cover and repaint, MiniMax steps, one `make_song` chat tool. Left: a listening check per model on the Mac and YuE2's page on the Windows desktop; 
 
 - Run our own VBench subset on the video models (about 100 prompts, 1 to 3 hours each, own numbers not comparable to published ones): after the Decide work, needs an idle machine. VBench-2.0 LongCat and the Wan 2.2 and LTX-2 VBench estimates are in the catalog.
 

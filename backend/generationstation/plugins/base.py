@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .images import ImageInfo
 from .music import MusicInfo
 from .speech import SpeechInfo
+from .video import VideoInfo
 
 GIB = 1024**3
 
@@ -222,6 +223,7 @@ class RuntimePlugin:
     modes: ClassVar[dict[str, ModeSpec]] = {}
     image: ClassVar[ImageInfo | None] = None  # a picture model's capabilities (plugins/images.py), for the shared Images page
     music: ClassVar[MusicInfo | None] = None  # a song model's capabilities (plugins/music.py), for the shared Music page
+    video: ClassVar[VideoInfo | None] = None  # a video model's capabilities (plugins/video.py), for the shared Video page
     speech: ClassVar[SpeechInfo | None] = None  # a speech model's capabilities (plugins/speech.py), for the shared Speech page
     output_kind: ClassVar[str | None] = None  # "audio", "image", "video" or "document" (text files)
     text_model_jobs: ClassVar[bool] = False  # its jobs may ask the host for a running text model (text_models.py)

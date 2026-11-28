@@ -1,4 +1,4 @@
-# One Video page (plan, proposed 2026-11-27; nothing built yet)
+# One Video page (built 2026-11-27)
 
 The video models get one shared page, as Chat, Decide, Speech, Images and Music have: one sidebar entry named **Video** (the Video section goes away, and with it the last section in the sidebar), a dropdown over the running video models with the licence, capability declarations per model, what was typed carried across when you switch, and one `make_video` chat tool instead of one tool per model and way.
 
@@ -41,9 +41,20 @@ Read from each tool's own command line, not from memory (the Images and Music wo
 12. **Sidebar**: Video becomes an entry between Speech and the rest, alphabetical with the others; no section is left.
 13. **No redirects**: `modelRoute` sends video models to the Video page.
 
+## Built and measured (2026-11-27, Apple M5 Max 64 GB)
+
+Decisions taken: LTX extend and retake in this pass if the checks allow; LongCat picture and continuation in this pass; "Use last frame as first picture".
+
+- **LTX first and last picture: built.** One more optional field on the picture tab (the last picture goes in at the final frame with strength 1). 704x448, 97 frames, seed 5, a fox first and a lighthouse last: both pictures show, the change happens late in the clip. Through the app (fox, then another picture, quick, 4 s, seed 5): 41 s.
+- **LTX extend and retake: not built.** Both commands load the dev transformer and run 30 steps with guidance, and the pack we use (`ltx25-q4-mrbizarro`) holds only the distilled one. The 4-bit dev pack (`dgrauet/ltx-2.5-mlx-q4`, 11.3 GB) is gated on Hugging Face and needs an approval from the account owner; the ungated bf16 dev pack is 38 GB and does not fit the memory budget next to anything else. Revisit if the 4-bit pack is approved.
+- **LongCat picture tab: built.** 17 frames: 79 s through the app, 26 GiB peak, clean on seeds 3 and 7 (an earlier guess that half garble was from before the driver's conditioning fix; it is not reproduced). 16 steps instead of 8 took 3.3 to 3.5 times as long and looked the same, so the 8-step path stays.
+- **LongCat continue tab: built.** The last 5 frames of the earlier clip are the prior (5 joined more cleanly than 9), and the result is those 5 frames plus the new part: a 17-frame request returned 25 frames (1.7 s) in 156 s with a 30 GiB peak, and the fox did what the prompt said. Some seeds (5 with a 9-frame prior) showed artifacts at the join; the tab says to try another seed.
+- **Last frame hand-off: built.** The browser draws the last frame of the clip and uploads it as the first picture of any model with a picture tab; "Use as source clip" does the same with the clip for LongCat's continue tab.
+- **Chat:** one `make_video` tool replaces the per-model video tools (description, shape, length in seconds, quality, things to avoid, sounds, music, seed, `first_picture`, `last_picture`, `source_clip`, model).
+
 ## Not in this pass
 
-- LTX `a2v`, `lipdub`, IC-LoRA and the training commands.
+- LTX extend and retake (see above), `a2v`, `lipdub`, IC-LoRA and the training commands.
 - LoRAs and the solver choice on Wan.
 - FastMetal picture input, Wan 2.2 A14B, H3's reference checkpoint on the Mac.
 - A timeline or editing view: clips are made and joined one at a time through the result actions.

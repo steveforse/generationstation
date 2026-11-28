@@ -17,6 +17,9 @@ export type Kit = {
   droppable: Record<string, string>
   /** A tab that takes no carried files (speech scenes have several voices of their own). */
   withoutFiles?: string | null
+  /** A value as the draft keeps it (a length in seconds, a shape by its first word), and back as a tab's own field wants it. */
+  encode?: (role: string, value: string) => string
+  decode?: (role: string, value: string, mode: string) => string
 }
 
 /** The draft after this tab's values: the roles the tab has take its values, the others keep what they were. */
@@ -25,7 +28,7 @@ export function absorb(draft: Draft, kit: Kit, mode: string, values: Record<stri
   const kept = { ...draft.files }
   for (const [role, field] of Object.entries(kit.roles[mode] ?? {})) {
     if (kit.fileRoles.includes(role)) kept[role] = (files[field] ?? []).filter((item) => item.status === 'ready')
-    else if (field in values) next[role] = values[field]
+    else if (field in values) next[role] = kit.encode ? kit.encode(role, values[field]) : values[field]
   }
   return { values: next, files: kept }
 }
@@ -37,7 +40,7 @@ export function startFor(draft: Draft, kit: Kit, mode: string): FormStart {
   for (const [role, field] of Object.entries(kit.roles[mode] ?? {})) {
     if (kit.fileRoles.includes(role)) { if (mode !== kit.withoutFiles && draft.files[role]?.length) files[field] = draft.files[role] }
     else if (role === 'sample_text' && mode === kit.withoutFiles) continue
-    else if (draft.values[role]) inputs[field] = draft.values[role]
+    else if (draft.values[role]) inputs[field] = kit.decode ? kit.decode(role, draft.values[role], mode) : draft.values[role]
   }
   return { mode: mode || undefined, inputs, files }
 }

@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, TimingSpec
+from .video import VideoInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -57,9 +58,20 @@ class LtxVideoPlugin(WorkerPlugin):
         "text": ModeSpec(label="From a description", help="LTX imagines the clip and its sound from your words.",
                          inputs={"prompt": PROMPT, "shape": SHAPE, "quality": QUALITY, "length": LENGTH, "seed": SEED}),
         "image": ModeSpec(
-            label="From a picture", help="The picture becomes the first frame; the description says what moves.",
+            label="From pictures", help="The picture becomes the first frame, and a last picture can end the clip; the description says what moves.",
             inputs={"image": InputSpec(label="First frame", kind="files", accept=("image",), required=True,
                                        max_count=1, help="The clip starts from this picture. Use one with the "
                                                          "shape you chose below."),
+                    "last": InputSpec(label="Last frame", kind="files", accept=("image",), max_count=1,
+                                      help="Optional: the clip ends on this picture, and LTX makes the motion between the two."),
                     "prompt": PROMPT, "shape": SHAPE, "quality": QUALITY, "length": LENGTH, "seed": SEED}),
     }
+
+    video: ClassVar[VideoInfo] = VideoInfo(
+        guidance=("Describe the subject, the motion, the setting, the light, the camera and what it sounds like: the clip comes with "
+                  "sound. A first picture sets the opening frame, and a last picture ends the clip on it."),
+        sound="automatic", create="text", picture="image",
+        seconds={"2 seconds": 2, "4 seconds": 4, "5 seconds": 5},
+        roles={"text": {"prompt": "prompt", "shape": "shape", "quality": "quality", "length": "length", "seed": "seed"},
+               "image": {"prompt": "prompt", "shape": "shape", "quality": "quality", "length": "length", "seed": "seed",
+                         "first": "image", "last": "last"}})

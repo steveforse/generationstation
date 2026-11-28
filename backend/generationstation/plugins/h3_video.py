@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, TimingSpec
+from .video import VideoInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -70,3 +71,12 @@ class H3VideoPlugin(WorkerPlugin):
         if mode == "frames" and not (files.get("first") or files.get("last")):
             return ["Add a first frame, a last frame, or both."]
         return []
+
+    video: ClassVar[VideoInfo] = VideoInfo(
+        guidance=("Describe what is seen and what happens, in order, and how the camera moves. For speech, write who speaks and put "
+                  "the words in quotes. The clip comes with matching sound. It can start from a first picture, end on a last "
+                  "one, or both."),
+        sound="automatic", create="text", picture="frames", seconds={"3": 3, "5": 5, "10": 10},
+        roles={"text": {"prompt": "prompt", "shape": "shape", "resolution": "resolution", "length": "length", "quality": "quality", "seed": "seed"},
+               "frames": {"prompt": "prompt", "shape": "shape", "resolution": "resolution", "length": "length", "quality": "quality", "seed": "seed",
+                          "first": "first", "last": "last"}})

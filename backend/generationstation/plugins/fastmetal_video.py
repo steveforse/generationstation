@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, TimingSpec
+from .video import VideoInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -58,3 +59,9 @@ class FastMetalVideoPlugin(WorkerPlugin):
     timings: ClassVar[tuple[TimingSpec, ...]] = tuple(
         TimingSpec(preset=preset, gpu=0, when={"speed": speed, "length": length}, seconds=seconds)
         for preset, speeds in _SECONDS.items() for speed, lengths in speeds.items() for length, seconds in lengths.items())
+
+    video: ClassVar[VideoInfo] = VideoInfo(
+        guidance=("Describe the subject, the motion, the setting, the light and the camera. Clips of about 2 to 5 seconds, without "
+                  "sound, from a description only."),
+        sound="none", create="", seconds={"short": 2, "medium": 3, "long": 5},
+        roles={"": {"prompt": "prompt", "shape": "shape", "length": "length", "speed": "speed", "seed": "seed"}})

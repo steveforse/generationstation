@@ -8,7 +8,7 @@ Config options (from runtimes.json, per preset):
     model_dir          The LTX-2.5 distilled pack folder (the transformer, VAEs, vocoder and upscalers).
     gemma_dir          The Gemma-4 text encoder folder the pack needs.
     memory_limit_gib   MLX memory limit for the process (default 26; a soft limit).
-Inputs: prompt, image ([{"path"}], optional: the first frame), shape ("landscape" | "portrait" | "square"),
+Inputs: prompt, image ([{"path"}], optional: the first frame), last ([{"path"}], optional: the last frame, with the first), shape ("landscape" | "portrait" | "square"),
     quality ("quick" | "sharp"), length ("2 seconds" | "4 seconds" | "5 seconds"), seed.
 """
 import os
@@ -64,6 +64,9 @@ def generate(model, inputs, job):
     image = (inputs.get("image") or [None])[0]
     if image:
         command += ["--image", image["path"], "0", "1.0"]
+    last = (inputs.get("last") or [None])[0]
+    if last:  # the clip ends on this picture: the last frame is anchored the same way as the first
+        command += ["--image", last["path"], str(frames - 1), "1.0"]
     job.report("Starting")
     started = time.perf_counter()
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -100,7 +103,7 @@ def generate(model, inputs, job):
         job.thumbnail(Image.open(thumb), size=1024)
         thumb.unlink()
     job.detail(seed=seed, width=width, height=height, frames=frames, seconds_of_video=round(frames / FPS, 1),
-               quality=inputs.get("quality") or "quick", mode="image" if image else "text")
+               quality=inputs.get("quality") or "quick", mode="image" if image else "text", **({"last_frame": True} if last else {}))
     job.report(f"Done in {time.perf_counter() - started:.0f} s, seed {seed}")
 
 

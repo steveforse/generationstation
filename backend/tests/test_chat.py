@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from generationstation.chat import ChatManager, tool_name
+from generationstation.chat import ChatManager
 from generationstation.chat_tools import JobTools
 from generationstation.lifecycle import LifecycleError
 from generationstation.plugins import get_plugin
@@ -171,8 +171,9 @@ def test_tools_offer_each_way_of_making_on_running_models(setup):
     assert song["required"] == ["style"] and song["properties"]["lyrics"]["type"] == "string"
     store.states["h3"] = {"state": "ready"}
     tools, _ = ChatManager(store, cat, generation, uploads)._tools()
-    pictures = next(t for t in tools if t["function"]["name"] == tool_name("h3", "frames"))["function"]["parameters"]
-    assert pictures["properties"]["first"]["type"] == "array"
+    assert [tool["function"]["name"] for tool in tools] == ["make_image", "make_video", "make_song"]  # every clip model is reached through the one tool
+    clip = next(t for t in tools if t["function"]["name"] == "make_video")["function"]["parameters"]
+    assert clip["required"] == ["prompt"] and {"first_picture", "last_picture"} <= set(clip["properties"])
 
 
 def test_a_tool_call_starts_a_job_and_the_model_then_replies(setup):
@@ -236,8 +237,8 @@ def test_attached_pictures_reach_the_model_and_feed_tools_by_reference(setup, tm
     store.jobs[picture["id"]] = picture
     (tmp_path / "jobs" / picture["id"]).mkdir(parents=True)
     (tmp_path / "jobs" / picture["id"] / "picture.png").write_bytes(PNG)
-    call = {"index": 0, "id": "c", "function": {"name": tool_name("h3", "frames"),
-                                                "arguments": json.dumps({"prompt": "waves", "first": ["1a2b3c4d"]})}}
+    call = {"index": 0, "id": "c", "function": {"name": "make_video",
+                                                "arguments": json.dumps({"prompt": "waves", "first_picture": "1a2b3c4d"})}}
     server = Server([({"tool_calls": [call]}, "tool_calls")], [({"content": "Animating it."}, "stop")])
     chat = ChatManager(store, cat, generation, uploads, opener=server)
     conversation = chat.create()

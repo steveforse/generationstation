@@ -10,7 +10,8 @@ Config options (from runtimes.json, per preset):
     variant        "q8" (default) or "q4".
     repo_dir       The checkout of xocialize/longcat-video-mlx.
     memory_limit_gib   MLX memory limit for the process (default 40; a soft limit).
-Inputs: prompt, length ("very short" | "short" | "medium" | "long"), seed.
+Tabs (the mode input): text (prompt, length, seed), image (a first picture, cropped to 832x480) and continue (an earlier clip: the
+last 5 frames are the prior, and the result is that end plus the new frames; 5 prior frames joined more cleanly than 9).
 """
 import os
 import random
@@ -25,6 +26,7 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 from gs_worker import serve
 
 HEIGHT, WIDTH, FPS = 480, 832, 15
+PRIOR_FRAMES = 5
 FRAMES = {"very short": 9, "short": 17, "medium": 33, "long": 61}  # 4n+1
 ANSI = re.compile(rb"\x1b\[[0-9;]*m")
 STEP = re.compile(rb"step (\d+)/(\d+)")
@@ -52,9 +54,18 @@ def generate(model, inputs, job):
     seed = inputs.get("seed")
     seed = seed if isinstance(seed, int) else random.randrange(1, 2**31)
     out = job.output(f"video-{seed}.mp4", "video/mp4")
-    command = [sys.executable, "-u", "-I", model["driver"], "t2v", "--weights", model["weights"], "--variant", model["variant"],
-               "--prompt", inputs["prompt"], "--frames", str(frames), "--height", str(HEIGHT), "--width", str(WIDTH), "--seed", str(seed),
-               "--limit-gib", str(model["limit"]), "--out", str(out)]
+    mode = inputs.get("mode") or "text"
+    picture = (inputs.get("image") or [None])[0] if mode == "image" else None
+    prior = (inputs.get("source") or [None])[0] if mode == "continue" else None
+    if mode == "image" and not picture or mode == "continue" and not prior:
+        raise ValueError("Add the " + ("picture" if mode == "image" else "clip to continue") + " first.")
+    command = [sys.executable, "-u", "-I", model["driver"], {"text": "t2v", "image": "i2v", "continue": "cont"}[mode], "--weights", model["weights"],
+               "--variant", model["variant"], "--prompt", inputs["prompt"], "--frames", str(frames), "--height", str(HEIGHT), "--width", str(WIDTH),
+               "--seed", str(seed), "--limit-gib", str(model["limit"]), "--out", str(out)]
+    if picture:
+        command += ["--image", picture["path"]]
+    if prior:
+        command += ["--prior", prior["path"], "--prior-frames", str(PRIOR_FRAMES)]
     env = dict(os.environ, LONGCAT_REPO=model["repo"], HF_HUB_OFFLINE="1", PYTHONUNBUFFERED="1")
     job.report("Starting")
     started = time.perf_counter()
@@ -98,7 +109,7 @@ def generate(model, inputs, job):
         job.thumbnail(Image.open(thumb), size=1024)
         thumb.unlink()
     job.detail(seed=seed, width=WIDTH, height=HEIGHT, frames=frames_out or frames, seconds_of_video=round((frames_out or frames) / FPS, 1),
-               mode="text", model=model["variant"])
+               mode=mode, model=model["variant"])
     job.report(f"Done in {time.perf_counter() - started:.0f} s, seed {seed}")
 
 

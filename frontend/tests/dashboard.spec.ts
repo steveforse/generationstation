@@ -56,6 +56,7 @@ function videoRuntimeFixture() {
   const common = [field('quality', 'Quality', 'choice', { options: ['quick', 'best'], default: 'quick' }), field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })]
   return {
     id: 'minimax_h3', kind: 'minimax_h3', plugin: 'MiniMax H3', name: 'MiniMax H3 videos', description: 'Makes short video clips.', workload: 'video', port: 8190, default_preset: 'uncensored', last_launch: { preset: 'uncensored', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use: 'personal', weights: 'MiniMax licence' },
     presets: { uncensored: { name: 'MiniMax H3 Uncensored', gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 60, gpu_min_free_gib: { 0: 28 } }, settings: [] } },
     generation: { output_kind: 'video', inputs: [], timings: [{ seconds: 39, first_seconds: 92, when: { mode: 'text', quality: 'quick' }, preset: null, gpu: 0, note: null }], modes: [
       { key: 'text', label: 'From a description', help: 'Write what happens.', inputs: [field('prompt', 'Description', 'textarea', { required: true, max_length: 3000 }),
@@ -70,7 +71,29 @@ function videoRuntimeFixture() {
         field('first_crop', 'First frame framing', 'crop', { target: 'first', shape_field: 'shape' }), ...common] },
       { key: 'picture', label: 'A picture', help: 'H3 paints one still picture.', output_kind: 'image', inputs: [field('prompt', 'Description', 'textarea', { required: true, max_length: 3000 }),
         field('size', 'Size', 'choice', { options: ['2 MP', '4 MP', '8 MP'], default: '4 MP' })] },
-    ] },
+    ], video: { guidance: 'H3: describe the clip and what it sounds like.', sound: 'automatic', create: 'text', picture: 'frames', references: null, extend: null, seconds: {},
+      roles: { text: { prompt: 'prompt', shape: 'shape', quality: 'quality', resolution: 'resolution', seed: 'seed' }, frames: { prompt: 'prompt', shape: 'shape', quality: 'quality', seed: 'seed', first: 'first', last: 'last' } } } },
+  }
+}
+
+/** A second video model: LongCat, with a length in seconds, a picture tab and a tab that continues a clip. */
+function longcatFixture() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const length = field('length', 'Length', 'choice', { options: ['very short', 'short', 'medium', 'long'], default: 'short' })
+  const prompt = field('prompt', 'Description', 'textarea', { required: true, max_length: 2000 })
+  const seed = field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })
+  return {
+    id: 'longcat_video', kind: 'longcat_video', plugin: 'LongCat video', name: 'LongCat video', description: 'Makes short silent clips.', workload: 'video', port: 8191, default_preset: 'q8', last_launch: { preset: 'q8', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use: 'work', weights: 'MIT' },
+    presets: { q8: { name: 'LongCat 8-bit', gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 30, gpu_min_free_gib: { 0: 0 } }, settings: [] } },
+    generation: { output_kind: 'video', inputs: [], timings: [], make_label: 'Make a clip', result_noun: 'clip', modes: [
+      { key: 'text', label: 'From a description', help: 'LongCat imagines the clip.', inputs: [prompt, length, seed] },
+      { key: 'image', label: 'From a picture', help: 'The picture is the first frame.', inputs: [field('image', 'First frame', 'files', { required: true, accept: ['image'], max_count: 1 }), prompt, length, seed] },
+      { key: 'continue', label: 'Continue a clip', help: 'Carries on from the clip.', inputs: [field('source', 'Clip to continue', 'files', { required: true, accept: ['video'], max_count: 1 }), prompt, length, seed] },
+    ], video: { guidance: 'LongCat: silent clips; continuations may show artifacts.', sound: 'none', create: 'text', picture: 'image', references: null, extend: 'continue', seconds: { 'very short': 0.6, short: 1.1, medium: 2.2, long: 4.1 },
+      roles: { text: { prompt: 'prompt', length: 'length', seed: 'seed' }, image: { prompt: 'prompt', length: 'length', seed: 'seed', first: 'image' }, continue: { prompt: 'prompt', length: 'length', seed: 'seed', source: 'source' } } } },
   }
 }
 
@@ -262,7 +285,7 @@ function decideRuntimeFixture(pictures = true) {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; music?: boolean; songState?: string; videos?: boolean; speech?: boolean; speech2?: boolean; images?: boolean; h3images?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; music?: boolean; songState?: string; videos?: boolean; clips?: boolean; speech?: boolean; speech2?: boolean; images?: boolean; h3images?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -272,7 +295,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.music ? musicRuntimeFixtures() : []), ...(options.videos ? [options.h3images ? videoWithPicturesFixture() : videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.images ? imageRuntimeFixtures() : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.music ? musicRuntimeFixtures() : []), ...(options.videos ? [options.h3images ? videoWithPicturesFixture() : videoRuntimeFixture()] : []), ...(options.clips ? [longcatFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.images ? imageRuntimeFixtures() : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/connection', (route) => route.fulfill({ json: { bind: '127.0.0.1', port: 8000, model: route.request().url().includes('/inkling2/') ? 'inkling-2-mini' : null } }))
@@ -290,6 +313,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
       ram_headroom_bytes: 4 * 1024 ** 3, gpu_headroom_bytes: 2 * 1024 ** 3, reserved_ram_bytes: 0, reserved_gpu_vram_bytes_by_id: {},
     } })
   })
+  if (options.clips) models.push({ id: 'longcat_video', name: 'LongCat video', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.videos) models.push({ id: 'minimax_h3', name: 'MiniMax H3 videos', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.music) for (const [id, name] of [['yue2', 'YuE2 songs'], ['ace_step', 'ACE-Step'], ['minimax_music', 'MiniMax Music 3']]) models.push({ id, name, workload: 'music', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.images) for (const [id, name] of [['qwen_img', 'Qwen Image'], ['z_img', 'Z-Image Turbo']]) models.push({ id, name, workload: 'image', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
@@ -536,7 +560,7 @@ async function signIn(page: Page, value = token, address?: string) {
   await page.getByRole('button', { name: 'Save and connect' }).click()
 }
 
-async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean } = {}) {
+async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; clips?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean } = {}) {
   await installSseMock(page)
   const api = await installM2Api(page, options)
   const host = fixtureHost(label, stale)
@@ -1094,8 +1118,8 @@ test('groups the sidebar by what each model makes, with running shown in words',
   await go(page, '#/hosts/local/speech')
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
   const groups = nav.getByRole('group')
-  await expect(groups).toHaveCount(1)  // Music and Speech are tools in the sidebar itself, not sections
-  expect(await groups.evaluateAll((items) => items.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')!)?.textContent))).toEqual(['Video'])
+  await expect(groups).toHaveCount(0)  // Music, Speech and Video are tools in the sidebar itself, not sections
+  await expect(nav.getByRole('link', { name: /^Video/ })).toContainText('On')
   await expect(nav.getByRole('link', { name: /^Music/ })).toContainText('On')
   await expect(nav.getByRole('link', { name: /^Speech/ })).toHaveAttribute('aria-current', 'page')
   await expect(nav.getByRole('link', { name: /^Speech/ })).toContainText('On')
@@ -2076,9 +2100,53 @@ test('a video model with a picture tab shows it on Images and keeps its clip tab
   await expect(page.getByRole('tab', { name: 'A picture' })).toHaveCount(0)  // one tab: no tab bar
   await expect(page.getByLabel(/^size/i)).toBeVisible()
   await expect(page.getByRole('tab', { name: 'From pictures' })).toHaveCount(0)
-  await go(page, '#/hosts/local/services/minimax_h3')
+  await go(page, '#/hosts/local/video')
   await expect(page.getByRole('tab', { name: 'From a description' })).toBeVisible()
   await expect(page.getByRole('tab', { name: 'A picture' })).toHaveCount(0)
+})
+
+test('Video is one entry in the sidebar and one page over the running clip models; the description and length carry over', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { videos: true, clips: true })
+  await go(page, '#/hosts/local/video')
+  const picker = page.getByLabel('Model filming')
+  await expect(picker.locator('option')).toHaveText(['MiniMax H3 videos (Personal use only)', 'LongCat video (Work use)'])
+  await expect(page.getByText('The clip comes with sound the model makes itself')).toBeVisible()
+  await page.getByRole('textbox', { name: /^description/i }).fill('A fox in the snow')
+  await picker.selectOption('longcat_video')
+  await expect(page.getByText('This model makes silent clips.')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /^description/i })).toHaveValue('A fox in the snow')
+  await expect(page.getByRole('tab', { name: 'From a picture' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Continue a clip' })).toBeVisible()
+  await page.getByRole('combobox', { name: /^length/i }).selectOption('long')
+  await page.getByRole('button', { name: 'Make a clip' }).click()
+  await expect.poll(() => api.jobBody).not.toBeNull()
+  expect(api.jobBody).toMatchObject({ inputs: { mode: 'text', prompt: 'A fox in the snow', length: 'long' } })
+  await page.screenshot({ path: 'test-results/screenshots/video.png', fullPage: true })
+})
+
+test('a finished clip becomes the next one: its last frame as a first picture, or the clip itself to continue', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { videos: true, clips: true })
+  api.jobs.unshift({ id: 'job-00000051', model_id: 'longcat_video', inputs: { mode: 'text', prompt: 'A fox walks', length: 'short' }, status: 'done', progress: 'Done', outputs: [{ name: 'clip.webm', mime: 'video/webm', bytes: 100 }],
+    error_message: null, created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:01:00Z', details: { seed: 7, seconds: 60 }, launch: { preset: 'q8', settings: {}, gpus: [0] }, ticks: 9 })
+  await page.route('**/api/jobs/job-00000051/files/clip.webm', (route) => route.fulfill({ status: 200, contentType: 'video/webm', body: readFileSync(new URL('./fixtures/black-start.webm', import.meta.url)) }))
+  await page.reload()
+  await go(page, '#/hosts/local/video')
+  await expect.poll(() => pushFrame(page, fixtureHost())).toBe(true)
+  await page.getByLabel('Model filming').selectOption('longcat_video')
+  await page.getByRole('complementary').getByRole('button', { name: /^A fox walks/ }).click()
+  const detail = page.getByRole('dialog').getByRole('article')
+  await detail.getByRole('button', { name: 'Use as source clip' }).click()
+  await expect(page.getByRole('tab', { name: 'Continue a clip' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText(/-clip\.mp4$|-clip\.webm$/).first()).toBeVisible()
+  await page.getByRole('complementary').getByRole('button', { name: /^A fox walks/ }).click()
+  await page.getByRole('dialog').getByRole('article').getByRole('button', { name: 'Use last frame as first picture' }).click()
+  await expect(page.getByRole('tab', { name: 'From a picture' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('job-0000-last-frame.png')).toBeVisible()
+  expect(api.uploads.map(({ type }) => type)).toContain('image/png')
+  // A model that has no tab to continue a clip keeps its picture ways only.
+  await page.getByLabel('Model filming').selectOption('minimax_h3')
+  await expect(page.getByRole('tab', { name: 'From pictures' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('job-0000-last-frame.png')).toBeVisible()
 })
 
 test('Images: a custom size shows its width and height, and a starting picture is added, carried across models and noted when a model cannot take it', async ({ page }) => {

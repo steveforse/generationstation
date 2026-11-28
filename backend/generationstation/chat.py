@@ -19,6 +19,7 @@ from .chatfiles import MAX_DOC_CHARS, ChatFileError, ChatFiles
 from .lifecycle import LifecycleError
 from .make_image import ImageTool
 from .make_song import SongTool
+from .make_video import VideoTool
 from .speak import SpeakTool
 from .uploads import UploadError, kind_of
 from .voices import VoiceNotFound
@@ -125,6 +126,7 @@ class ChatManager:
         self.speak_tool = SpeakTool(voices)
         self.image_tool = ImageTool()
         self.song_tool = SongTool()
+        self.video_tool = VideoTool()
         self.host_tools = host_tools
         self.job_tools = job_tools
         self.web_tools = web_tools
@@ -514,7 +516,7 @@ class ChatManager:
     def _context(self, conversation, handlers, where=None):
         rows = self.store.list_messages(conversation["id"])
         vision = self._vision(conversation)
-        shared = [item for h in handlers.values() for key in ("image", "speak", "song") for item in h.get(key, [])]  # models behind one shared tool
+        shared = [item for h in handlers.values() for key in ("image", "speak", "song", "video") for item in h.get(key, [])]  # models behind one shared tool
         running = sorted({h["runtime"].name for h in handlers.values() if "runtime" in h} | {runtime.name for _, runtime, _ in shared})
         stopped = sorted(r.name for m, r in self.catalog.runtimes.items()
                          if self.catalog.plugin(m).generates and r.name not in running)
@@ -646,6 +648,10 @@ class ChatManager:
             if plugin.music:
                 lines.append("  - Used from the **Music** page, shared by every song model. " + plugin.music.guidance)
                 continue
+            if plugin.video:
+                lines.append("  - Used from the **Video** page, shared by every video model. " + plugin.video.guidance)
+                video_tabs = set(plugin.video.roles)
+                modes = [item for item in modes if (item[0] or "") not in video_tabs]
             if plugin.image:
                 info = plugin.image
                 lines.append("  - Picture tabs are used from the **Images** page, shared by every picture model. " + info.guidance)
@@ -678,7 +684,7 @@ class ChatManager:
         """One tool per way of making something on each running generator."""
         states = self.store.runtime_states()
         tools, handlers = [], {}
-        speaking, picturing, composing = [], [], []
+        speaking, picturing, composing, filming = [], [], [], []
         for model_id, runtime in self.catalog.runtimes.items():
             plugin = self.catalog.plugin(model_id)
             if not plugin.generates or states.get(model_id, {}).get("state") != "ready":
@@ -691,6 +697,9 @@ class ChatManager:
                 continue
             modes = [(key, mode.label, mode.help, mode.inputs) for key, mode in plugin.modes.items()] or \
                 [(None, None, None, plugin.inputs)]
+            if plugin.video:  # every clip tab is reached through the one make_video tool
+                filming.append((model_id, runtime, plugin))
+                modes = [item for item in modes if (item[0] or "") not in plugin.video.roles]
             if plugin.image:  # its picture tabs are reached through the one make_image tool; any other tab keeps its own tool
                 picturing.append((model_id, runtime, plugin))
                 modes = [item for item in modes if (item[0] or "") not in plugin.image.roles]
@@ -715,6 +724,10 @@ class ChatManager:
         if make_image:
             tools.append(make_image)
             handlers["make_image"] = {"image": picturing}
+        make_video = self.video_tool.schema(filming)
+        if make_video:
+            tools.append(make_video)
+            handlers["make_video"] = {"video": filming}
         make_song = self.song_tool.schema(composing)
         if make_song:
             tools.append(make_song)
@@ -782,6 +795,17 @@ class ChatManager:
                 model_id, runtime, plugin, mode, inputs, references, notes = self.image_tool.plan(arguments, handler["image"])
                 for field, refs in references.items():
                     spec = self.image_tool.fields_of(plugin, runtime, mode)[field]
+                    inputs[field] = [self._upload_result(ref, spec) for ref in refs]
+                job = self.generation.create(model_id, inputs)
+            except (LifecycleError, UploadError, ValueError) as exc:
+                return {"text": f"Not started: {getattr(exc, 'message', None) or exc}"}
+            left = f" Left out: {'; '.join(notes)}." if notes else ""
+            return {"text": f"Started job {job['id'][:8]} on {runtime.name}. It will appear in the chat when it is done.{left}", "job_id": job["id"], "job": job}
+        if handler.get("video"):
+            try:
+                model_id, runtime, plugin, mode, inputs, references, notes = self.video_tool.plan(arguments, handler["video"])
+                for field, refs in references.items():
+                    spec = self.video_tool.fields_of(plugin, runtime, mode)[field]
                     inputs[field] = [self._upload_result(ref, spec) for ref in refs]
                 job = self.generation.create(model_id, inputs)
             except (LifecycleError, UploadError, ValueError) as exc:

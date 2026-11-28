@@ -1,9 +1,10 @@
-"""LongCat-Video: short video clips from a description, 8-bit with the 8-step fast path."""
+"""LongCat-Video: short video clips from a description, a first picture or an earlier clip, 8-bit with the 8-step fast path."""
 from typing import ClassVar, Literal
 
 from pydantic import Field
 
-from .base import InputSpec, TimingSpec
+from .base import InputSpec, ModeSpec, TimingSpec
+from .video import VideoInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -32,7 +33,7 @@ PROMPT = InputSpec(
 class LongCatVideoPlugin(WorkerPlugin):
     kind = "longcat_video"
     title = "LongCat video"
-    description = ("Short video clips from a description, 832x480 without sound. LongCat-Video "
+    description = ("Short video clips from a description, a first picture or an earlier clip, 832x480 without sound. LongCat-Video "
                    "(MIT, 13.6B) in 8 bits through MLX with its 8-step fast path. Slow: under a minute for the "
                    "shortest clip and about six for four seconds.")
     runtime_model = LongCatVideoRuntime
@@ -50,6 +51,25 @@ class LongCatVideoPlugin(WorkerPlugin):
         TimingSpec(preset="q8", gpu=0, when={"length": "medium"}, seconds=170),
         TimingSpec(preset="q8", gpu=0, when={"length": "long"}, seconds=380),
     )
-    # Image-to-video exists in the driver but is not offered: with the 8-step fast path it garbles about half the
-    # clips (seeds 3, 7 and 8 of six tried; 1, 2 and 42 were clean), whatever the picture.
-    inputs: ClassVar[dict[str, InputSpec]] = {"prompt": PROMPT, "length": LENGTH, "seed": SEED}
+    modes: ClassVar[dict[str, ModeSpec]] = {
+        "text": ModeSpec(label="From a description", help="LongCat imagines the clip from your words.",
+                         inputs={"prompt": PROMPT, "length": LENGTH, "seed": SEED}),
+        "image": ModeSpec(
+            label="From a picture", help="The picture becomes the first frame; the description says what moves. The clip is cropped to 832x480.",
+            inputs={"image": InputSpec(label="First frame", kind="files", accept=("image",), required=True, max_count=1,
+                                       help="The clip starts from this picture."),
+                    "prompt": PROMPT, "length": LENGTH, "seed": SEED}),
+        "continue": ModeSpec(
+            label="Continue a clip", help="LongCat carries on from the last frames of a clip, and the result is the end of that clip plus the new part. "
+                                          "Some continuations show artifacts at the join: try another seed.",
+            inputs={"source": InputSpec(label="Clip to continue", kind="files", accept=("video",), required=True, max_count=1,
+                                        help="The new part continues from the last half second of this clip."),
+                    "prompt": PROMPT, "length": LENGTH, "seed": SEED}),
+    }
+    video: ClassVar[VideoInfo] = VideoInfo(
+        guidance=("Describe the subject, the motion, the setting, the light and the camera. Clips are silent, 832x480, and slow to make. "
+                  "A first picture or an earlier clip can start the next one; continuations sometimes show artifacts at the join, so try another seed."),
+        sound="none", create="text", picture="image", extend="continue",
+        seconds={"very short": 0.6, "short": 1.1, "medium": 2.2, "long": 4.1},
+        roles={mode: {"prompt": "prompt", "length": "length", "seed": "seed", **extra} for mode, extra in
+               (("text", {}), ("image", {"first": "image"}), ("continue", {"source": "source"}))})

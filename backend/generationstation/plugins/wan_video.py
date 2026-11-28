@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, TimingSpec
+from .video import VideoInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -58,3 +59,10 @@ class WanVideoPlugin(WorkerPlugin):
                                                          "by the Shape choice below, so use a matching picture."),
                     "prompt": PROMPT, "shape": SHAPE, "length": LENGTH, "negative_prompt": NEGATIVE, "seed": SEED}),
     }
+
+    video: ClassVar[VideoInfo] = VideoInfo(
+        guidance=("Describe the subject, the motion, the setting, the light and the camera. Clips are short (up to 1.4 seconds) and "
+                  "have no sound. A first picture sets the opening frame."),
+        sound="none", create="text", picture="image", seconds={"short": 1.4, "very short": 0.7},
+        roles={"text": {"prompt": "prompt", "shape": "shape", "length": "length", "negative": "negative_prompt", "seed": "seed"},
+               "image": {"prompt": "prompt", "shape": "shape", "length": "length", "negative": "negative_prompt", "seed": "seed", "first": "image"}})

@@ -9,6 +9,7 @@ import { estimateFit, GpuCard, isUnified, modelColor, modelUsage, type Preview, 
 import { fieldsFor, type FormHooks, type FormStart, GenerateForm, JobDetail, JobModal, jobTitle, ResultsRail, RuntimeCard } from '../components/Runtime'
 import type { FileItem } from '../components/FilePicker'
 import type { SavedHost } from '../hosts'
+import { lastFrame } from '../videoFrame'
 import { soundtrackToWav, takeHandOff } from '../voiceSample'
 import { href, modelRoute } from '../routes'
 import { type HostStore, useHostView, useSession } from '../store'
@@ -163,6 +164,9 @@ export type Group = {
   onVoiceSaved?: () => void
   /** A finished song was chosen as the song to start from (set only while the chosen model can). */
   useSong?: (file: FileItem) => void
+  /** The last frame of a finished clip was chosen as the first picture, and a clip as the clip to continue (set only while the chosen model can). */
+  useFrame?: (file: FileItem) => void
+  useClip?: (file: FileItem) => void
 }
 
 /** Generation: the plugin's form and the results. Starting and stopping happen on the Models page. */
@@ -230,6 +234,26 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
         onCancel={(job) => session.cancelJob(job)}
         onEditTranscript={(job, edit) => session.editTranscript(job, edit)}
         onEditNotes={(job, edit) => session.editNotes(job, edit)}
+        onUseFrame={group?.useFrame ? async (job, url) => {
+          try {
+            const frame = await lastFrame(await (await fetch(url)).blob())
+            const name = `${job.id.slice(0, 8)}-last-frame.png`
+            const record = await session.uploadFile(new File([frame], name, { type: 'image/png' }))
+            group.useFrame?.({ key: `frame-${job.id}-${record.id}`, name, kind: 'image', url: URL.createObjectURL(frame), status: 'ready', id: record.id })
+            setSelectedId(null); window.scrollTo({ top: 0, behavior: 'smooth' })
+            return ''
+          } catch (reason) { return reason instanceof Error ? reason.message : 'The last frame could not be used.' }
+        } : undefined}
+        onUseClip={group?.useClip ? async (job, url) => {
+          try {
+            const blob = await (await fetch(url)).blob()
+            const name = `${job.id.slice(0, 8)}-clip.mp4`
+            const record = await session.uploadFile(new File([blob], name, { type: blob.type || 'video/mp4' }))
+            group.useClip?.({ key: `clip-${job.id}-${record.id}`, name, kind: 'video', url: URL.createObjectURL(blob), status: 'ready', id: record.id })
+            setSelectedId(null); window.scrollTo({ top: 0, behavior: 'smooth' })
+            return ''
+          } catch (reason) { return reason instanceof Error ? reason.message : 'The clip could not be used.' }
+        } : undefined}
         onUseSong={group?.useSong ? async (job, url) => {
           try {
             const blob = await (await fetch(url)).blob()
