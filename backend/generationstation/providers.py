@@ -1,7 +1,7 @@
 """Hosted chat models: an OpenAI-compatible gateway (LiteLLM in front of Bedrock, for one) that the chat can use next to the local models.
 
 A provider is set up in the runtimes file under "providers" and is optional. Its models are not started or stopped and use no memory
-on this computer; they are listed from the gateway's `/v1/models` (or from OpenCode's own config) and the person chooses which of them
+on this computer; they are listed from the gateway's `/v1/models` and the person chooses which of them
 the chat offers. The token is never kept here: `api_key_env` names the environment variable that holds it, read when a request is made,
 so it must be set where the backend is started.
 
@@ -16,7 +16,6 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Literal
 
 from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -35,68 +34,14 @@ class ProviderConfig(BaseModel):
     # The gateway's address (its OpenAI-style API is at <base_url>/v1) and the environment variable that holds its token.
     base_url: str | None = None
     api_key_env: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
-    # "gateway": list the models the gateway reports. "opencode": read the provider named `opencode_provider` from OpenCode's config
-    # (`opencode_config`, default ~/.config/opencode/opencode.json) for the address, the token's variable and the model list;
-    # anything given here wins over it.
-    source: Literal["gateway", "opencode"] = "gateway"
-    opencode_provider: str | None = None
-    opencode_config: str | None = None
     # Glob patterns of model ids that are on until the person chooses otherwise (for example "claude-*-5-5").
     include: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def complete(self):
-        if self.source == "gateway" and not (self.base_url and self.api_key_env):
-            raise ValueError("a gateway provider needs base_url and api_key_env")
-        if self.source == "opencode" and not self.opencode_provider:
-            raise ValueError("an opencode provider needs opencode_provider")
+        if not (self.base_url and self.api_key_env):
+            raise ValueError("a provider needs base_url and api_key_env")
         return self
-
-
-def _strip_jsonc(text):
-    """OpenCode's config may be JSONC: comments and trailing commas out, string contents left alone."""
-    out, i, in_string = [], 0, False
-    while i < len(text):
-        char = text[i]
-        if in_string:
-            out.append(char)
-            if char == "\\":
-                out.append(text[i + 1:i + 2])
-                i += 1
-            elif char == '"':
-                in_string = False
-        elif char == '"':
-            in_string = True
-            out.append(char)
-        elif text.startswith("//", i):
-            while i < len(text) and text[i] != "\n":
-                i += 1
-            continue
-        elif text.startswith("/*", i):
-            end = text.find("*/", i + 2)
-            i = len(text) if end < 0 else end + 1
-        else:
-            out.append(char)
-        i += 1
-    return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
-
-
-def read_opencode(path, provider):
-    """(base_url, api_key_env, models) of a provider in OpenCode's config; models is a {id: name} dict or None. Raises ValueError."""
-    config = Path(path or "~/.config/opencode/opencode.json").expanduser()
-    try:
-        data = json.loads(_strip_jsonc(config.read_text(encoding="utf-8")))
-    except (OSError, ValueError) as exc:
-        raise ValueError(f"OpenCode's config {config} could not be read ({exc.__class__.__name__}).") from exc
-    entry = (data.get("provider") or {}).get(provider)
-    if not isinstance(entry, dict):
-        raise ValueError(f"OpenCode's config has no provider named {provider}.")  # noqa: TRY004
-    options = entry.get("options") or {}
-    key = options.get("apiKey") or ""
-    found = re.fullmatch(r"\{env:([A-Za-z_][A-Za-z0-9_]*)\}", key) if isinstance(key, str) else None
-    models = entry.get("models")
-    names = {mid: (spec.get("name") if isinstance(spec, dict) and spec.get("name") else mid) for mid, spec in models.items()} if isinstance(models, dict) and models else None
-    return options.get("baseURL"), (found.group(1) if found else None), names
 
 
 class EnvFileEnviron:
@@ -155,7 +100,7 @@ class ProviderRegistry:
         out = dict(self.file_configs)
         for key, fields in (self._saved() or {}).items():
             try:
-                out[key] = ProviderConfig(**fields)
+                out[key] = ProviderConfig(**{name: value for name, value in fields.items() if name in ProviderConfig.model_fields})
             except (ValueError, TypeError):
                 continue
         return out
@@ -210,14 +155,8 @@ class ProviderRegistry:
         return self._resolve_config(self.configs[provider_id])
 
     def _resolve_config(self, config):
-        """(base_url, key_env, {id: name} or None) for a provider, from its config and OpenCode's."""
-        base, key_env, names = config.base_url, config.api_key_env, None
-        if config.source == "opencode":
-            found_base, found_key, names = read_opencode(config.opencode_config, config.opencode_provider)
-            base, key_env = base or found_base, key_env or found_key
-        if not base:
-            raise ValueError(f"{config.name} has no address (base_url).")
-        return base.rstrip("/"), key_env, names
+        """(base_url, key_env) of a provider."""
+        return config.base_url.rstrip("/"), config.api_key_env
 
     @staticmethod
     def _api(base):
@@ -246,18 +185,15 @@ class ProviderRegistry:
         return models, error
 
     def _list(self, config):
-        """([{id, name}], error) straight from the gateway or OpenCode's config."""
+        """([{id, name}], error) straight from the gateway."""
         models, error = [], None
         try:
-            base, key_env, names = self._resolve_config(config)
-            if names:
-                models = [{"id": mid, "name": name} for mid, name in names.items()]
-            else:
-                request = urllib.request.Request(self._api(base) + "/models", headers=self._auth(key_env))
-                with self.opener(request, timeout=15) as response:
-                    payload = json.loads(response.read().decode("utf-8", errors="replace"))
-                models = sorted(({"id": item["id"], "name": item["id"]} for item in payload.get("data") or []
-                                 if isinstance(item, dict) and isinstance(item.get("id"), str) and item.get("mode") in (None, "chat")), key=lambda item: item["id"])
+            base, key_env = self._resolve_config(config)
+            request = urllib.request.Request(self._api(base) + "/models", headers=self._auth(key_env))
+            with self.opener(request, timeout=15) as response:
+                payload = json.loads(response.read().decode("utf-8", errors="replace"))
+            models = sorted(({"id": item["id"], "name": item["id"]} for item in payload.get("data") or []
+                             if isinstance(item, dict) and isinstance(item.get("id"), str) and item.get("mode") in (None, "chat")), key=lambda item: item["id"])
         except ValueError as exc:
             error = str(exc)
         except urllib.error.HTTPError as exc:
@@ -309,10 +245,7 @@ class ProviderRegistry:
         for provider_id, config in self.configs.items():
             models, error = self.models(provider_id, refresh)
             on = set(self.enabled(provider_id, fetch=True))
-            try:
-                base, key_env, _ = self._resolve(provider_id)
-            except ValueError:
-                base, key_env = config.base_url, config.api_key_env
+            base, key_env = self._resolve(provider_id)
             out.append({"id": provider_id, "name": config.name, "address": base, "token_variable": key_env,
                         "token_set": bool(self.environ.get(key_env or "")), "error": error,
                         "models": [{"id": item["id"], "name": item["name"], "enabled": item["id"] in on} for item in models]
@@ -329,7 +262,7 @@ class ProviderRegistry:
         if provider_id not in self.configs or model not in self.enabled(provider_id, fetch=True):
             return None
         try:
-            base, key_env, _ = self._resolve(provider_id)
+            base, key_env = self._resolve(provider_id)
         except ValueError:
             return None
         return HostedTarget(provider_id, self.configs[provider_id].name, model, self._api(base) + "/chat/completions", key_env, self.environ)

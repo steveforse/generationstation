@@ -102,4 +102,4 @@ export type Voice = { id: string; name: string; sample_text: string; mime: strin
 export type HostedModel = { id: string; name: string; enabled: boolean }
 export type HostedProvider = { id: string; name: string; address: string | null; token_variable: string | null; token_set: boolean; error: string | null; models: HostedModel[] }
 /** How a hosted provider is set up. `origin` says where: the Host settings page (editable) or the runtimes file. The token is only named. */
-export type ProviderSetup = { id?: string; name: string; source: 'gateway' | 'opencode'; base_url?: string; api_key_env?: string; opencode_provider?: string; opencode_config?: string; origin?: 'settings' | 'file' }
+export type ProviderSetup = { id?: string; name: string; base_url?: string; api_key_env?: string; origin?: 'settings' | 'file' }

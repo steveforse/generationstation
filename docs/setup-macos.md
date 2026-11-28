@@ -445,8 +445,7 @@ Set it up on the **Host settings** page, under Hosted chat models: a name, the g
 
 - **The token is never entered or stored in the app.** The provider names a variable, such as `LITELLM_API_KEY`. The backend looks for it in its environment, then in the `.env` file at the repo root (read for each request, so a change to `.env` needs no restart). Both stay out of git.
 - The models come from the gateway's `/v1/models` (chat models only). Open the **Hosted** tab on the Models page and tick the ones the Chat should offer; the choice is kept in `providers.json` in the runtime folder. Nothing is offered until you tick it.
-- **OpenCode:** choose "OpenCode's config" as the source and give its provider id (and the config file's path if it is not `~/.config/opencode/opencode.json`). The address, the token's variable (an `{env:NAME}` value) and the model list are read from that file on the host. This follows OpenCode's documented format and has not been tried against a real desktop file yet.
-- **Without the page:** a `providers` section in `runtimes.json` (same fields, plus `include` globs such as `"claude-*-5-5"` for models that are on until you choose) still works, and a provider saved on the page takes the place of a file one with the same id.
+- **Without the page:** a `providers` section in `runtimes.json` (`name`, `base_url`, `api_key_env`, plus `include` globs such as `"claude-*-5-5"` for models that are on until you choose) still works, and a provider saved on the page takes the place of a file one with the same id.
 - Hosted models are always on. Thinking is sent as a reasoning effort (low, medium, high) or left out when off. Images are assumed to be accepted. Meeting notes and the help assistant still use local models.
 
 ## Files in the chat

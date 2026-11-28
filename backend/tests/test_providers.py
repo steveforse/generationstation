@@ -7,7 +7,7 @@ import urllib.error
 import pytest
 
 from generationstation.chat import ChatManager
-from generationstation.providers import ProviderConfig, ProviderRegistry, read_opencode
+from generationstation.providers import ProviderConfig, ProviderRegistry
 from generationstation.runtimes import CatalogError, parse_catalog
 from generationstation.uploads import UploadStore
 from tests.test_chat import Generation, Store, catalog, follow
@@ -37,12 +37,9 @@ def registry(tmp_path, gateway=None, environ=None, **config):
     return ProviderRegistry(configs, tmp_path / "providers.json", opener=gateway or Gateway(), environ={"GATEWAY_TOKEN": "secret"} if environ is None else environ)
 
 
-def test_a_provider_needs_an_address_and_a_token_variable_unless_opencode_gives_them():
+def test_a_provider_needs_an_address_and_a_token_variable():
     with pytest.raises(ValueError, match="base_url and api_key_env"):
         ProviderConfig(name="X", base_url="https://x")
-    with pytest.raises(ValueError, match="opencode_provider"):
-        ProviderConfig(name="X", source="opencode")
-    assert ProviderConfig(name="X", source="opencode", opencode_provider="litellm").source == "opencode"
     with pytest.raises(CatalogError, match="Invalid provider id"):
         parse_catalog({"runtimes": {}, "providers": {"Bad Id": {"name": "X", "base_url": "https://x", "api_key_env": "T"}}})
     assert set(parse_catalog({"runtimes": {}, "providers": {"litellm": {"name": "X", "base_url": "https://x", "api_key_env": "T"}}}).providers) == {"litellm"}
@@ -82,27 +79,6 @@ def test_the_description_says_what_is_listed_what_is_on_and_why_a_lookup_failed(
     assert down["models"] == [] and "401" in down["error"] and "token" in down["error"]
     (unset,) = registry(tmp_path, environ={}).describe()
     assert not unset["token_set"] and "GATEWAY_TOKEN" in unset["error"]
-
-
-def test_opencodes_config_gives_the_address_the_token_variable_and_the_models(tmp_path):
-    config = tmp_path / "opencode.json"
-    config.write_text("""{
-      // OpenCode accepts comments and trailing commas
-      "provider": {"litellm": {"name": "LiteLLM", "options": {"baseURL": "https://gw.example/v1", "apiKey": "{env:WORK_TOKEN}"},
-        "models": {"claude-sonnet-5-5": {"name": "Claude Sonnet 5.5"}, "claude-opus-5-5": {}},},},
-    }""")
-    assert read_opencode(config, "litellm") == ("https://gw.example/v1", "WORK_TOKEN", {"claude-sonnet-5-5": "Claude Sonnet 5.5", "claude-opus-5-5": "claude-opus-5-5"})
-    with pytest.raises(ValueError, match="no provider named"):
-        read_opencode(config, "other")
-    with pytest.raises(ValueError, match="could not be read"):
-        read_opencode(tmp_path / "missing.json", "litellm")
-    reg = ProviderRegistry({"oc": ProviderConfig(name="Work", source="opencode", opencode_provider="litellm", opencode_config=str(config))},
-                           tmp_path / "state.json", opener=Gateway(), environ={"WORK_TOKEN": "t"})
-    (provider,) = reg.describe()
-    assert [m["name"] for m in provider["models"]] == ["Claude Sonnet 5.5", "claude-opus-5-5"] and provider["token_variable"] == "WORK_TOKEN"  # no request to the gateway
-    reg.set_enabled("oc", ["claude-sonnet-5-5"])
-    target = reg.target("oc:claude-sonnet-5-5")
-    assert target.url == "https://gw.example/v1/chat/completions" and target.headers() == {"Authorization": "Bearer t"}
 
 
 def test_a_hosted_target_names_where_to_send_and_refuses_without_the_token(tmp_path):
@@ -167,22 +143,14 @@ def test_the_endpoints_list_choose_and_refresh_without_the_token_in_view(tmp_pat
     from generationstation.app import create_app
     from tests.test_app import TOKEN, FakeMonitor, FakeStore, settings
 
-    opencode = tmp_path / "opencode.json"
-    opencode.write_text(json.dumps({"provider": {"gw": {"options": {"baseURL": "https://gw.example/v1", "apiKey": "{env:WORK_TOKEN}"},
-                                                        "models": {"claude-sonnet-5-5": {"name": "Sonnet 5.5"}, "claude-opus-4-5": {}}}}}))
     runtimes = tmp_path / "runtimes.json"
-    runtimes.write_text(json.dumps({"runtimes": {}, "providers": {"work": {"name": "Work", "source": "opencode", "opencode_provider": "gw", "opencode_config": str(opencode)}}}))
+    runtimes.write_text(json.dumps({"runtimes": {}, "providers": {"work": {"name": "Work", "base_url": "https://gw.example", "api_key_env": "WORK_TOKEN"}}}))
     app = create_app(settings=settings(runtime_dir=tmp_path / "runtime", runtimes_file=runtimes), store=FakeStore(), monitor=FakeMonitor())
     headers = {"Authorization": f"Bearer {TOKEN}"}
     with TestClient(app) as client:
-        (provider,) = client.get("/api/providers", headers=headers).json()["providers"]
-        assert provider["name"] == "Work" and [m["enabled"] for m in provider["models"]] == [False, False]
-        done = client.put("/api/providers/work/models", json={"enabled": ["claude-sonnet-5-5"]}, headers=headers)
-        assert done.status_code == 200 and [m["id"] for m in done.json()["providers"][0]["models"] if m["enabled"]] == ["claude-sonnet-5-5"]
-        assert client.put("/api/providers/work/models", json={"enabled": ["nope"]}, headers=headers).status_code == 422
+        assert client.get("/api/providers", headers=headers).json()["providers"][0]["name"] == "Work"
         assert client.put("/api/providers/other/models", json={"enabled": []}, headers=headers).status_code == 404
         assert client.post("/api/providers/other/refresh", headers=headers).status_code == 404
-        assert client.post("/api/providers/work/refresh", headers=headers).status_code == 200
         assert client.get("/api/providers").status_code == 401
 
 
@@ -208,7 +176,7 @@ def test_providers_set_up_in_the_settings_replace_the_files_and_are_checked_and_
     assert sorted((p["id"], p["origin"]) for p in done) == [("litellm", "settings"), ("work-gateway", "settings")]
     assert reg.configs["litellm"].name == "LiteLLM"  # the setting takes the file's place
     assert "secret" not in json.dumps(kept)  # only the variable's name is kept
-    for bad, text in (([{"name": "X", "base_url": "https://x"}], "api_key_env"), ([{"name": "X", "source": "opencode"}], "opencode_provider"),
+    for bad, text in (([{"name": "X", "base_url": "https://x"}], "api_key_env"), 
                       ([{"name": "A", "base_url": "https://x", "api_key_env": "T"}, {"name": "A", "base_url": "https://y", "api_key_env": "T"}], "Two providers"),
                       ("nope", "list")):
         with pytest.raises(ValueError, match=text):
@@ -250,5 +218,5 @@ def test_the_settings_endpoints_save_test_and_list_providers(tmp_path):
         assert client.get("/api/providers", headers=headers).json()["providers"][0]["name"] == "Work gateway"
         assert client.put("/api/providers/config", json={"providers": [{"name": "X"}]}, headers=headers).status_code == 422
         assert client.put("/api/providers/config", json={"providers": [{"name": "X", "token": "no"}]}, headers=headers).status_code == 422
-        lost = client.post("/api/providers/test", json={"name": "T", "source": "opencode", "opencode_provider": "x", "opencode_config": str(tmp_path / "none.json")}, headers=headers)
-        assert lost.status_code == 200 and lost.json()["ok"] is False and "could not be read" in lost.json()["message"]
+        unset = client.post("/api/providers/test", json={"name": "T", "base_url": "https://gateway.example", "api_key_env": "SURELY_UNSET_VARIABLE"}, headers=headers)
+        assert unset.status_code == 200 and unset.json()["ok"] is False and "SURELY_UNSET_VARIABLE" in unset.json()["message"]

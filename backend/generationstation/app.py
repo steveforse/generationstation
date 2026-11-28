@@ -459,11 +459,8 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         model_config = ConfigDict(extra="forbid")
         id: StrictStr | None = Field(default=None, max_length=32)
         name: StrictStr = Field(max_length=60)
-        source: Literal["gateway", "opencode"] = "gateway"
         base_url: StrictStr | None = Field(default=None, max_length=300)
         api_key_env: StrictStr | None = Field(default=None, max_length=80)
-        opencode_provider: StrictStr | None = Field(default=None, max_length=80)
-        opencode_config: StrictStr | None = Field(default=None, max_length=300)
 
     class ProviderConfigs(BaseModel):
         providers: list[ProviderFields] = Field(max_length=10)

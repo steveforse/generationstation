@@ -3,10 +3,10 @@ import { AlertCircle, CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react'
 import type { HostSession } from '../session'
 import type { ProviderSetup, SearchTestResult } from '../types'
 
-const blank = (): ProviderSetup => ({ name: '', source: 'gateway', base_url: '', api_key_env: '' })
+const blank = (): ProviderSetup => ({ name: '', base_url: '', api_key_env: '' })
 const same = (a: ProviderSetup[], b: ProviderSetup[]) => JSON.stringify(a) === JSON.stringify(b)
 
-/** Host settings: the hosted chat providers (an OpenAI-compatible gateway such as LiteLLM, or one read from OpenCode's config).
+/** Host settings: the hosted chat providers (an OpenAI-compatible gateway such as LiteLLM).
  * The token is never entered here: a provider names the environment variable (in the host's environment or its .env file) that holds it. */
 export function HostedSetup({ session, connected }: { session: HostSession; connected: boolean }) {
   const [saved, setSaved] = useState<ProviderSetup[] | null>(null)
@@ -48,22 +48,11 @@ export function HostedSetup({ session, connected }: { session: HostSession; conn
       <legend>{item.name || 'New provider'}</legend>
       <div className="field"><label htmlFor={`hp-name-${index}`}>Name</label>
         <input id={`hp-name-${index}`} className="text-input" value={item.name} placeholder="LiteLLM" onChange={(event) => change(index, { name: event.target.value })} /></div>
-      <div className="field"><label htmlFor={`hp-source-${index}`}>Models come from</label>
-        <select id={`hp-source-${index}`} className="text-input" value={item.source} onChange={(event) => change(index, { source: event.target.value as ProviderSetup['source'] })}>
-          <option value="gateway">The gateway's own list</option><option value="opencode">OpenCode's config</option></select></div>
-      {item.source === 'gateway' ? <>
-        <div className="field"><label htmlFor={`hp-url-${index}`}>Gateway address</label>
-          <input id={`hp-url-${index}`} className="text-input" type="url" inputMode="url" value={item.base_url ?? ''} placeholder="https://litellm.example.com" onChange={(event) => change(index, { base_url: event.target.value })} /></div>
-        <div className="field"><label htmlFor={`hp-key-${index}`}>Token variable</label>
-          <input id={`hp-key-${index}`} className="text-input" value={item.api_key_env ?? ''} placeholder="LITELLM_API_KEY" onChange={(event) => change(index, { api_key_env: event.target.value })} />
-          <small>The name of the variable, not the token.</small></div>
-      </> : <>
-        <div className="field"><label htmlFor={`hp-oc-${index}`}>OpenCode provider</label>
-          <input id={`hp-oc-${index}`} className="text-input" value={item.opencode_provider ?? ''} placeholder="litellm" onChange={(event) => change(index, { opencode_provider: event.target.value })} /></div>
-        <div className="field"><label htmlFor={`hp-occ-${index}`}>OpenCode config file</label>
-          <input id={`hp-occ-${index}`} className="text-input" value={item.opencode_config ?? ''} placeholder="~/.config/opencode/opencode.json" onChange={(event) => change(index, { opencode_config: event.target.value })} />
-          <small>On this host. The address, token variable and models are read from it.</small></div>
-      </>}
+      <div className="field"><label htmlFor={`hp-url-${index}`}>Gateway address</label>
+        <input id={`hp-url-${index}`} className="text-input" type="url" inputMode="url" value={item.base_url ?? ''} placeholder="https://litellm.example.com" onChange={(event) => change(index, { base_url: event.target.value })} /></div>
+      <div className="field"><label htmlFor={`hp-key-${index}`}>Token variable</label>
+        <input id={`hp-key-${index}`} className="text-input" value={item.api_key_env ?? ''} placeholder="LITELLM_API_KEY" onChange={(event) => change(index, { api_key_env: event.target.value })} />
+        <small>The name of the variable, not the token.</small></div>
       <div className="settings-actions">
         <button type="button" className="button button-secondary" onClick={() => void test(index)}>{busy === index && <Loader2 size={16} className="spin" aria-hidden="true" />}Test</button>
         <button type="button" className="button button-secondary" onClick={() => { setItems((list) => list.filter((_, at) => at !== index)); setResults({}) }}><Trash2 size={16} aria-hidden="true" />Remove</button>
