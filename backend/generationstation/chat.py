@@ -172,12 +172,14 @@ class ChatManager:
 
     def assistant_model(self):
         """The model the help assistant runs on: a running chat model (the one marked `assistant` in the runtimes file if it is
-        running), else the marked one, else the first. None when the host has no chat model."""
+        running), else a hosted model the chat offers (always ready), else the marked one, else the first. None when there is none."""
         models = self.chat_models()
         marked = [m for m in models if getattr(self.catalog.runtimes[m], "assistant", False)]
         states = self.store.runtime_states()
         running = [m for m in models if states.get(m, {}).get("state") == "ready"]
-        return next((m for m in marked if m in running), None) or (running[0] if running else None) or (marked[0] if marked else None) or (models[0] if models else None)
+        hosted = self.hosted_models()
+        return (next((m for m in marked if m in running), None) or (running[0] if running else None) or (hosted[0] if hosted else None)
+                or (marked[0] if marked else None) or (models[0] if models else None))
 
     def create(self, model_id=None, kind="chat"):
         models = self.chat_models()

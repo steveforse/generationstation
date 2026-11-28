@@ -220,3 +220,15 @@ def test_the_settings_endpoints_save_test_and_list_providers(tmp_path):
         assert client.put("/api/providers/config", json={"providers": [{"name": "X", "token": "no"}]}, headers=headers).status_code == 422
         unset = client.post("/api/providers/test", json={"name": "T", "base_url": "https://gateway.example", "api_key_env": "SURELY_UNSET_VARIABLE"}, headers=headers)
         assert unset.status_code == 200 and unset.json()["ok"] is False and "SURELY_UNSET_VARIABLE" in unset.json()["message"]
+
+
+def test_the_assistant_uses_a_running_local_model_first_then_a_hosted_one(tmp_path):
+    store = Store()
+    gateway = Gateway()
+    reg = registry(tmp_path, gateway, include=["claude-haiku-5-5"])
+    manager = ChatManager(store, catalog(tmp_path), Generation(store, tmp_path / "jobs"), UploadStore(tmp_path / "runtime"), opener=gateway, providers=reg)
+    store.states = {}
+    assert manager.assistant_model() == "litellm:claude-haiku-5-5"  # nothing local runs
+    assert manager.assistant(fresh=True)["conversation"]["model_id"] == "litellm:claude-haiku-5-5"
+    store.states = {"basalt": {"state": "ready"}}
+    assert manager.assistant_model() == "basalt"

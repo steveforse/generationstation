@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowUp, ArrowUpRight, Bot, ChevronDown, Loader2, MessageCircleQuestion, RotateCcw, Square } from 'lucide-react'
 import { DraftView, MessageView, useChatTurn, usePinnedScroll } from './ChatParts'
 import type { SavedHost } from '../hosts'
+import { hostedRuntimes } from '../hosted'
 import { href, modelRoute } from '../routes'
 import { type HostStore, useSession } from '../store'
 import type { ChatMessage, Conversation } from '../types'
@@ -38,7 +39,8 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
   // Models page to start one.
   const chats = state.runtimes?.filter((item) => item.chat) ?? []
   const isReady = (id: string) => state.models?.find((model) => model.id === id)?.state === 'ready'
-  const running = chats.filter((item) => isReady(item.id))
+  // Hosted models are always ready; they come after the local ones that are running.
+  const running = [...chats.filter((item) => isReady(item.id)), ...hostedRuntimes(state.providers)]
   const runtime = running.find((item) => item.id === loaded?.conversation.model_id) ?? running.find((item) => item.assistant) ?? running[0]
   const ready = !!runtime
   const starting = chats.some((item) => state.pendingModelId === item.id || state.models?.find((model) => model.id === item.id)?.state === 'loading')
