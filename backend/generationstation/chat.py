@@ -18,6 +18,7 @@ from pathlib import Path
 from .chatfiles import MAX_DOC_CHARS, ChatFileError, ChatFiles
 from .lifecycle import LifecycleError
 from .make_image import ImageTool
+from .make_song import SongTool
 from .speak import SpeakTool
 from .uploads import UploadError, kind_of
 from .voices import VoiceNotFound
@@ -123,6 +124,7 @@ class ChatManager:
                  job_tools=None, voices=None):
         self.speak_tool = SpeakTool(voices)
         self.image_tool = ImageTool()
+        self.song_tool = SongTool()
         self.host_tools = host_tools
         self.job_tools = job_tools
         self.web_tools = web_tools
@@ -512,7 +514,8 @@ class ChatManager:
     def _context(self, conversation, handlers, where=None):
         rows = self.store.list_messages(conversation["id"])
         vision = self._vision(conversation)
-        running = sorted({h["runtime"].name for h in handlers.values() if "runtime" in h})
+        shared = [item for h in handlers.values() for key in ("image", "speak", "song") for item in h.get(key, [])]  # models behind one shared tool
+        running = sorted({h["runtime"].name for h in handlers.values() if "runtime" in h} | {runtime.name for _, runtime, _ in shared})
         stopped = sorted(r.name for m, r in self.catalog.runtimes.items()
                          if self.catalog.plugin(m).generates and r.name not in running)
         assistant = conversation.get("kind") == "assistant"
@@ -640,6 +643,9 @@ class ChatManager:
                     lines.append(f"  - Cues in the text: {info.direction.cues.text} {', '.join(info.direction.cues.examples)}")
                 continue
             modes = list(plugin.modes.items()) or ([(None, None)] if plugin.generates else [])
+            if plugin.music:
+                lines.append("  - Used from the **Music** page, shared by every song model. " + plugin.music.guidance)
+                continue
             if plugin.image:
                 info = plugin.image
                 lines.append("  - Picture tabs are used from the **Images** page, shared by every picture model. " + info.guidance)
@@ -672,13 +678,16 @@ class ChatManager:
         """One tool per way of making something on each running generator."""
         states = self.store.runtime_states()
         tools, handlers = [], {}
-        speaking, picturing = [], []
+        speaking, picturing, composing = [], [], []
         for model_id, runtime in self.catalog.runtimes.items():
             plugin = self.catalog.plugin(model_id)
             if not plugin.generates or states.get(model_id, {}).get("state") != "ready":
                 continue
             if plugin.speech:  # every speech model is reached through the one speak tool
                 speaking.append((model_id, runtime, plugin))
+                continue
+            if plugin.music:  # every song model is reached through the one make_song tool
+                composing.append((model_id, runtime, plugin))
                 continue
             modes = [(key, mode.label, mode.help, mode.inputs) for key, mode in plugin.modes.items()] or \
                 [(None, None, None, plugin.inputs)]
@@ -706,6 +715,10 @@ class ChatManager:
         if make_image:
             tools.append(make_image)
             handlers["make_image"] = {"image": picturing}
+        make_song = self.song_tool.schema(composing)
+        if make_song:
+            tools.append(make_song)
+            handlers["make_song"] = {"song": composing}
         speak = self.speak_tool.schema(speaking)
         if speak:
             tools.append(speak)
@@ -769,6 +782,17 @@ class ChatManager:
                 model_id, runtime, plugin, mode, inputs, references, notes = self.image_tool.plan(arguments, handler["image"])
                 for field, refs in references.items():
                     spec = self.image_tool.fields_of(plugin, runtime, mode)[field]
+                    inputs[field] = [self._upload_result(ref, spec) for ref in refs]
+                job = self.generation.create(model_id, inputs)
+            except (LifecycleError, UploadError, ValueError) as exc:
+                return {"text": f"Not started: {getattr(exc, 'message', None) or exc}"}
+            left = f" Left out: {'; '.join(notes)}." if notes else ""
+            return {"text": f"Started job {job['id'][:8]} on {runtime.name}. It will appear in the chat when it is done.{left}", "job_id": job["id"], "job": job}
+        if handler.get("song"):
+            try:
+                model_id, runtime, plugin, mode, inputs, references, notes = self.song_tool.plan(arguments, handler["song"])
+                for field, refs in references.items():
+                    spec = self.song_tool.fields_of(plugin, runtime, mode)[field]
                     inputs[field] = [self._upload_result(ref, spec) for ref in refs]
                 job = self.generation.create(model_id, inputs)
             except (LifecycleError, UploadError, ValueError) as exc:

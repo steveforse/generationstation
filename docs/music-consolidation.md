@@ -1,4 +1,4 @@
-# One Music page (plan, proposed 2026-11-27; nothing built yet)
+# One Music page (plan agreed and built 2026-11-27; chat tool and sidebar tested; a listening check per model left)
 
 The three song models get one shared page, as Chat, Decide, Speech and Images have: one sidebar entry named **Music** (the Music group goes away), a dropdown over the running song models with the licence, capability declarations per model, what was typed carried across when you switch, and one `make_song` chat tool instead of one tool per model.
 
@@ -28,7 +28,7 @@ Checked in each model's own code, not from memory (the Images work showed that a
 
 1. **Capabilities per model** (`music` on the plugin, like `speech` and `image`): whether lyrics are required, whether an instrumental is possible, the length control (a fixed list, a range, or none), whether it takes a language, tempo, key, time signature, and which song-editing tabs it has. The form shows only what the model has.
 2. **Roles** carry what was typed from one model to another: style, lyrics, instrumental, length, language, tempo, key, time signature, seed, source song, strength, section start and end. What the new model has no place for is named on the page and kept for the way back.
-3. **One Instrumental switch** instead of "leave the lyrics empty". YuE2 takes blank lyrics (whitespace) and simply sings nothing, so the switch works on all three (reported 2026-11-27 from use; confirmed on the real model while building, and the YuE2 form stops requiring lyrics).
+3. **Empty lyrics mean an instrumental** on all three models (no separate switch). Checked on the real YuE2: blank lyrics did not stay silent (the model invented words and sang them), so for YuE2 the worker sends instrumental sections instead (`[Intro: Instrumental]`, `[Instrumental Break]`, `[Outro: Instrumental]`), which gave a mostly instrumental piece with an occasional vocal moment. The YuE2 form no longer requires lyrics.
 4. **Lyrics help for all three**: chips that insert the structure tags ([Verse], [Chorus], [Bridge], [Intro], [Outro]) at the cursor, a running count of characters and an estimate of the length the lyrics will make. A "write lyrics for me" button is a possible later addition (it would ask a running chat model).
 5. **Length keeps today's choices**: ACE-Step 30, 60 or 120 s; MiniMax 30, 60, 120 or 180 s (a maximum); YuE2 set by the lyrics. Those are what has been measured. Longer lengths are added only if a measurement shows they fit the memory estimate, and not otherwise (the models accept 600 s and 360 s, but nobody has run them here).
 6. **ACE-Step tabs** (only when it runs): **Song** (the default), **New version of a song** (cover: pick or upload a song, style and optional new lyrics, strength) and **Redo a section** (repaint: pick or upload a song, start and end seconds, what to put there). The source song can be an earlier result ("Use as source" on a song in the results list) or an uploaded file; the Speech page's audio picker and playback already exist.
@@ -58,3 +58,11 @@ Checked in each model's own code, not from memory (the Images work showed that a
 - Cover and repaint are in this pass, behind the real-model checks above.
 - MiniMax's step count goes under More options.
 - Lengths stay as they are today; no new ceilings until measured.
+
+## Built and measured (2026-11-27)
+
+- ACE-Step tempo, cover and repaint were tried on the real model first. Tempo 140 measured 140.6 BPM. Cover at strength 30 and 80 changed the sound (spectral centroid 4291 Hz to 2789 and 2316 Hz) and 80 kept more of the harmony (chroma correlation 0.83, against 0.45 at 30). Repaint of 10 to 20 s left the rest identical to the original (correlation 1.00) and changed the section; an end past the end of the song extended it (30 s to 45 s). Key was not verified by ear.
+- MiniMax steps work (8 steps 38 s, 30 steps 69 s for 30 s of music, both with clear words).
+- Lengths were left as they were.
+- The page's carry-over exposed a bug that also applied to the other consolidated pages: when the chosen model changed, the form first opened on the old model's tab name, mounted blank and reported its blank fields over the draft; it now opens on the new model's first tab.
+- Not done: a listening check per model, YuE2 on the Windows desktop.

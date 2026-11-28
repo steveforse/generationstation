@@ -216,6 +216,18 @@ uv pip install --python ~/ai/envs/mflux/bin/python mflux pillow
 
 The weights are Qwen's research licence, which is not a general commercial licence; read it before using pictures for anything but your own work. The template's `qwen_image` entry points at these folders and sets `worker_script` to `qwen_image_mflux_worker.py`.
 
+### The Music page
+
+All song models share one **Music** page (in the sidebar, with Chat, Decide, Images, Meeting notes and Speech). A dropdown lists the running song models with their licence; the style, lyrics, language, tempo, seed and a song to start from carry over when you switch, and anything the new model has no place for is named on the page and kept for the way back. Chips above the lyrics insert the part tags ([Verse], [Chorus], ...) where the cursor is. Leaving the lyrics empty asks for an instrumental on all three models, but they differ: ACE-Step and MiniMax make one reliably, while YuE2 is a singing model and is given instrumental sections instead (`[Intro: Instrumental]`, `[Instrumental Break]`, `[Outro: Instrumental]`), which gave a mostly instrumental piece with an occasional vocal moment. Blank lyrics alone made YuE2 invent words and sing them (checked by transcribing the result).
+
+What each model has:
+
+- **YuE2**: style, lyrics, melody planning and seed. The song is as long as its lyrics, so there is no length.
+- **ACE-Step**: three tabs. *New song* has a length (30, 60 or 120 s), a tempo in BPM (the planning model picks one if it is left empty) and, under More options, the key, time signature and language. *New version of a song* (cover) takes a song, a style, optional new lyrics and how closely it follows the original (percent; 20 to 30 changes the sound a lot, 80 keeps the harmony). *Redo a section* takes a song, a start and an end in seconds and what to put there; the rest of the song comes back unchanged (checked: the parts outside the section were identical to the original), and an end past the end of the song extends it (a 30 s song with the section 20 to 45 s became 45 s). The song to start from is an earlier result (its **Use as source song** button) or a file from your computer. Cover and repaint skip the planning model, so they finish in a few seconds. Measured: tempo followed (a requested 140 BPM measured 140.6; 90 and 170 measured at double and two thirds of that, the usual ambiguity of the estimate); the key is passed to the model but not verified by ear.
+- **MiniMax Music 3**: a length (a maximum, 30 to 180 s), and under More options a step count (1 to 30, 30 if empty): 8 steps took 38 s for a 30 s song against 69 s for 30 steps, with the sung words equally clear.
+
+In the chat, every running song model is reached through one `make_song` tool (style, lyrics, length, language, tempo, key, time signature, steps, seed, an earlier song to start from, which model).
+
 ### YuE2 songs (mlx-Yue)
 
 [mlx-Yue](https://github.com/vanch007/mlx-Yue) is an MLX port of YuE2-3B. The worker keeps the 8-bit language model loaded, so a song starts at once, and runs one song at a time. A verse and a chorus (about 55 s of music) took about 30 s; a three-minute song took about as long as the song. The weights are CC BY-NC 4.0 (**non-commercial**).

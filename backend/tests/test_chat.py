@@ -99,8 +99,6 @@ class Generation:
         self.store, self.root, self.created = store, root, []
 
     def create(self, model_id, inputs):
-        if model_id == "yue2" and not inputs.get("lyrics"):
-            raise LifecycleError("INPUTS_INVALID", "Lyrics is required.", 422)
         job = {"id": str(uuid.uuid4()), "model_id": model_id, "inputs": inputs, "status": "queued", "outputs": []}
         self.created.append(job)
         self.store.jobs[job["id"]] = job
@@ -168,9 +166,9 @@ def test_tools_offer_each_way_of_making_on_running_models(setup):
     store.states["h3"] = {"state": "unloaded"}
     tools, _ = ChatManager(store, cat, generation, uploads)._tools()
     names = [tool["function"]["name"] for tool in tools]
-    assert names == [tool_name("yue2", mode) for mode in get_plugin("yue2").modes] or names == [tool_name("yue2")]
+    assert names == ["make_song"]  # every song model is reached through the one tool
     song = tools[0]["function"]["parameters"]
-    assert {"style", "lyrics"} <= set(song["required"]) and song["properties"]["lyrics"]["type"] == "string"
+    assert song["required"] == ["style"] and song["properties"]["lyrics"]["type"] == "string"
     store.states["h3"] = {"state": "ready"}
     tools, _ = ChatManager(store, cat, generation, uploads)._tools()
     pictures = next(t for t in tools if t["function"]["name"] == tool_name("h3", "frames"))["function"]["parameters"]
@@ -179,7 +177,7 @@ def test_tools_offer_each_way_of_making_on_running_models(setup):
 
 def test_a_tool_call_starts_a_job_and_the_model_then_replies(setup):
     store, cat, generation, uploads = setup
-    name = tool_name("yue2", next(iter(get_plugin("yue2").modes), None))
+    name = "make_song"
     call = {"index": 0, "id": "call_1", "function": {"name": name, "arguments": ""}}
     args = {"index": 0, "function": {"arguments": json.dumps({"style": "dream pop", "lyrics": "[Verse]\nla"})}}
     server = Server([({"tool_calls": [call]}, None), ({"tool_calls": [args]}, "tool_calls")],
@@ -221,14 +219,13 @@ def test_a_turn_that_spends_every_round_on_tools_still_ends_with_an_answer(setup
 
 def test_a_refused_tool_call_is_reported_to_the_model(setup):
     store, cat, generation, uploads = setup
-    name = tool_name("yue2", next(iter(get_plugin("yue2").modes), None))
-    call = {"index": 0, "id": "c", "function": {"name": name, "arguments": json.dumps({"style": "pop"})}}
+    call = {"index": 0, "id": "c", "function": {"name": "make_song", "arguments": json.dumps({"style": "pop", "source_song": "1a2b3c4d"})}}
     server = Server([({"tool_calls": [call]}, "tool_calls")], [({"content": "Sorry."}, "stop")])
     chat = ChatManager(store, cat, generation, uploads, opener=server)
     conversation = chat.create()
     follow(chat.start(conversation["id"], "song", []))
     tool = next(m for m in store.messages if m["role"] == "tool")
-    assert tool["status"] == "error" and tool["content"] == "Not started: Lyrics is required."
+    assert tool["status"] == "error" and tool["content"] == "Not started: No running model can start from a song."
     assert not generation.created
 
 

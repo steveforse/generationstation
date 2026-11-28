@@ -23,7 +23,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 - Picture models stay loaded (2026-11-27), with the text encoder given back after each description and tiled decoding: Z-Image 28 to 14 s, Qwen Turbo 35 to 17 s, peaks 7 to 35 GiB (estimates 9, 14, 18, 38 GiB; nothing held before, now 1.5 to 22 GiB idle). The Windows picture worker is unchanged.
 
-- **Images page** done on the Mac (2026-11-27): checked by eye on Z-Image Turbo and Qwen Image 2.1 Turbo; not looked at by eye: Qwen Image 2.1 full and Qwen-Image 2512. The H3 picture tabs on the Windows desktop are untested. Instruction editing (Qwen Image 2.1 edit mode on the installed weights, personal use only; Qwen-Image-Edit-2511, Apache-2.0, about 34 GB) skipped for now. Video and Music consolidations follow the same pattern.
+- **Images page** done on the Mac (2026-11-27): checked by eye on Z-Image Turbo and Qwen Image 2.1 Turbo; not looked at by eye: Qwen Image 2.1 full and Qwen-Image 2512. The H3 picture tabs on the Windows desktop are untested. Instruction editing (Qwen Image 2.1 edit mode on the installed weights, personal use only; Qwen-Image-Edit-2511, Apache-2.0, about 34 GB) skipped for now. Video consolidation follows the same pattern.
+- **Music page** built and tested with fixtures and the real models (2026-11-27; plan in `docs/music-consolidation.md`): one entry, three models, ACE-Step tempo, cover and repaint, MiniMax steps, one `make_song` chat tool. Left: a listening check per model on the Mac and YuE2's page on the Windows desktop; Video consolidation follows the same pattern.
 
 - Run our own VBench subset on the video models (about 100 prompts, 1 to 3 hours each, own numbers not comparable to published ones): after the Decide work, needs an idle machine. VBench-2.0 LongCat and the Wan 2.2 and LTX-2 VBench estimates are in the catalog.
 

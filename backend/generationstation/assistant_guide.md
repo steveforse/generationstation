@@ -16,8 +16,8 @@ model's **Your results**. The desktop has two graphics cards: an RTX 5090 (32 GB
 # Finding your way
 
 - The menu on the left has one entry for each tool that serves several models: **Chat**, **Decide**, **Images**,
-  **Meeting notes** and **Speech**. Each picks among the models of its kind that are running. **Video** and **Music**
-  list their models one by one. A green **On** next to an entry means a model is running and ready.
+  **Meeting notes**, **Music** and **Speech**. Each picks among the models of its kind that are running. **Video**
+  lists its models one by one. A green **On** next to an entry means a model is running and ready.
 - **Overview** shows the desktop's cards and memory, what is running, and recent results.
 - **Models** lists every model as a card. Each card shows which graphics card it uses (the small chips: click
   one to choose), a word on whether it fits right now, and **Start** or **Stop**. **Show details** opens the

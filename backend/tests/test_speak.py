@@ -100,7 +100,7 @@ def test_the_chat_offers_one_speak_tool_and_not_a_tool_per_speech_model(tmp_path
     tools, handlers = chat._tools()
     names = [tool["function"]["name"] for tool in tools]
     assert "speak" in names and not any(name.startswith(("make_qwen3_tts", "make_omnivoice")) for name in names)
-    assert any(name.startswith("make_yue2") for name in names)
+    assert "make_song" in names
     result = chat._call({"name": "speak", "arguments": json.dumps({"text": "Hello.", "voice": "Anna"})}, handlers)
     assert result["text"].startswith("Started job") and result["job"]["model_id"] == "qwen3_tts"
     assert chat._call({"name": "speak", "arguments": json.dumps({"text": "Hello.", "voice": "Zed"})}, handlers)["text"].startswith("Not started: There is no saved voice")
