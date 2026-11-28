@@ -79,7 +79,7 @@ class QwenImagePlugin(WorkerPlugin):
         "strength": InputSpec(
             label="How closely it follows the picture", kind="int", minimum=5, maximum=95, placeholder="20",
             help="Percent (20 if empty). 10 to 20 keeps the layout and colours but lets the style change (an ink drawing, a painting). 40 and up stays close to the picture, with its look. "
-                 "Used only with a starting picture. Z-Image Turbo changes style well at 10 to 20; the Qwen models mostly keep a photo's look and do better at small changes."),
+                 "Used only with a starting picture."),
         "quality": InputSpec(
             label="Quality", kind="choice", options=("quick", "best"), default="quick",
             help="'quick' takes a few seconds. 'best' takes 15-45 s and draws finer detail and small lettering. "
@@ -119,6 +119,11 @@ class QwenImagePlugin(WorkerPlugin):
             drop.add("quality")
             if not any(preset.options.get("negative") for preset in runtime.presets.values()):
                 drop.add("negative_prompt")
+            if not any(preset.options.get("start_picture") for preset in runtime.presets.values()):
+                # Only Z-Image Turbo restyles a starting picture; the Qwen models paint the picture and ignore the prompt.
+                drop |= {"picture", "strength"}
+                inputs = {key: (spec.model_copy(update={"options": tuple(o for o in spec.options if o != "match picture")}) if key == "size" else spec)
+                          for key, spec in inputs.items()}
             return {key: spec for key, spec in inputs.items() if key not in drop}
         drop |= {"width", "height", "picture", "strength", "steps"}
         shapes = inputs["size"].model_copy(update={"options": tuple(o for o in inputs["size"].options if o not in {"custom", "match picture"}),

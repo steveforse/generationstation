@@ -1029,7 +1029,8 @@
           "options": {
             "model_dir": "/Users/YOU/ai/models/qwen-image-mac/z-image-turbo-mflux-q8",
             "command": "mflux-generate-z-image-turbo",
-            "steps": 9
+            "steps": 9,
+            "start_picture": true
           },
           "settings": {},
           "estimate": {

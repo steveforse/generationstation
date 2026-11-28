@@ -32,6 +32,10 @@ def test_the_form_and_roles_narrow_to_what_each_model_takes():
     plugin = get_plugin("qwen_image")
     keys = lambda model_id: set(plugin.mode_inputs(None, MAC.runtimes[model_id]))
     assert keys("z_image") == {"prompt", "size", "width", "height", "picture", "strength", "steps", "seed"} and "quality" not in keys("qwen_image")
+    # Only Z-Image Turbo restyles a starting picture; the Qwen models ignore the prompt when given one, so they have no such field.
+    assert not {"picture", "strength"} & keys("qwen_image") and not {"picture", "strength"} & keys("qwen_image_2512")
+    assert "match picture" not in plugin.mode_inputs(None, MAC.runtimes["qwen_image"])["size"].options
+    assert "match picture" in plugin.mode_inputs(None, MAC.runtimes["z_image"])["size"].options
     # The Windows model keeps its Quality field.
     windows = plugin.mode_inputs(None, WINDOWS.runtimes["qwen_image"])
     assert "quality" in windows and not {"width", "height", "picture", "strength", "steps"} & set(windows)
