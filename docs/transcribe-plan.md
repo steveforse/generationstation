@@ -1,0 +1,59 @@
+# Speech to text as its own tool (plan, proposed 2026-11-27; nothing built yet)
+
+A Transcribe page that turns a recording into a transcript, without the meeting pipeline (no speaker turns, correction or notes unless asked for). Same shape as Speech, Images, Music and Video: one sidebar entry, a dropdown over the running transcription models with the licence word, capability declarations per model, carry-over by role, and one `transcribe` chat tool.
+
+## Candidates
+
+All load through mlx-audio 0.6.8 (`mlx_audio.stt.load`) in `~/ai/envs/mlx-tts`, which already has the code for each. Sizes are the weights on Hugging Face; licences, languages and accuracy are from the Nemotron and Cohere cards (read 2026-11-27) and the mlx-audio READMEs; cells marked "not looked up" are filled in during the checks.
+
+| | Qwen3-ASR 1.7B (8-bit) | Whisper large-v3-turbo | Parakeet TDT v3 | Nemotron 3.5 Transcribe (4-bit export) | Cohere Transcribe |
+| --- | --- | --- | --- | --- | --- |
+| Installed | yes (`~/ai/models/asr`, used by Meeting notes) | no, 1.6 GB | no, 2.5 GB | no, 19.3 GB | no, 4.1 GB, repo is gated |
+| Licence | Apache-2.0 (work) | MIT (work) | CC-BY-4.0 (work, needs credit to NVIDIA) | OpenMDW-1.1, "ready for commercial or non-commercial use" (work; read the terms before marking) | Apache-2.0 (work) |
+| Languages | not looked up yet | 99 | 25 European, detected | 40 | 14 |
+| Timestamps | segment (via the forced aligner, separate model) | segment and word | segment and word | none in the early-access export (the NVIDIA checkpoints have word times, 67 GB bf16) | none |
+| Extras | context text for names and terms | translate to English | fast (a 0.6B model) | context terms, speaker tags (`<spk:N>`), translation, rich transcription | punctuation on or off |
+| English accuracy (Open ASR average word error, from the cards and the earlier meeting research) | about 5.3 % | not looked up | not looked up | 4.7 % | 5.4 % |
+
+Not proposed: Whisper large-v3 (turbo is the same family and faster), Canary, SenseVoice, Moonshine, Voxtral and the rest of the mlx-audio list (no reason to add them before these are measured).
+
+## What the page offers
+
+- **Recording**: an audio or video file (the browser uploads it; the worker reads the audio track with ffmpeg and resamples to 16 kHz mono). The same file kinds Meeting notes accepts, up to an hour.
+- **Language**: automatic, or one the model lists (each model's own list; a language one model lacks is left out when you switch, as on Speech).
+- **Words to expect**: names and terms, for the models that take context (Qwen3-ASR, Nemotron). Not shown for the others.
+- **Timestamps**: line by line (the models that give them), shown in the result and written to the subtitle files.
+- **Who spoke**: speaker labels. Nemotron makes them itself; for the other models the speaker turns the meeting pipeline already finds (sherpa-onnx, CPU, about 1 s per 10 s of audio on this Mac) are laid over the transcript. Optional; off by default.
+- **Result**: the transcript as text with times and speakers when asked for, a copy button, and downloads `transcript.txt`, `.srt`, `.vtt` and `.json` (the model, language, durations and the word list used). A result is a "document" like Meeting notes.
+- **Result actions**: "Use as notes source" is not built (Meeting notes keeps its own form); "Use these settings" works as on the other pages.
+
+Capabilities per model (`transcription` on the plugin, as `speech` and `music` are): which of language, terms, timestamps and who-spoke the model takes, its language list, whether it translates, and a long-form note. Roles carry from one model to the next: recording, language, terms, timestamps, speakers.
+
+## Chat
+
+One `transcribe` tool over the running models: a reference to a recording or a result (a clip's soundtrack, a song, an uploaded file) and optionally the language and terms. The job is made as for the other tools; when it finishes, the transcript text goes back to the chat model (cut at a length the model can read, with the file named) so it can answer questions about the recording. The assistant guide gets one line.
+
+## Not in this pass
+
+- Windows: the desktop would run Whisper and Qwen3-ASR through transformers and qwen-asr (the meeting pipeline already does); the plugin keeps an engine field so that can follow.
+- Live or streaming transcription from the microphone (the voice sample recorder stays on Speech).
+- Translation (Whisper and Nemotron can; a "translate to English" choice can be added when the first pass is checked).
+- Replacing the engine Meeting notes uses.
+- Nemotron's NVIDIA checkpoints (67 GB bf16, 24 to 27 GB FP8 or NVFP4 with word times); the early-access export is what fits and works first.
+- Cohere Transcribe until the gated repository is approved on your Hugging Face account, and then only if it adds something (no timestamps, no speakers, 14 languages).
+
+## Checks (before a feature goes in the form)
+
+1. One test set: the 57-second synthetic meeting (known text), a 10-minute stretch of the real Zoom recording (speaker changes, jargon) and a 3-minute clip in another language. For each model: time (the first run and a warm one), peak memory, and the errors against the known text, written down per model.
+2. Long recordings: a 60-minute file through each model (chunking, memory growth, a repeated-text failure). Models that cannot do an hour get a note on the page and a length warning, not a silent cut.
+3. Words to expect: a recording with five invented product names, with and without the list, on Qwen3-ASR and Nemotron.
+4. Timestamps: segment times within a second of the audio on Whisper, Parakeet and Qwen3-ASR (the last needs the forced aligner; if it is too slow or large, Qwen3-ASR has no timestamps here and says so).
+5. Who spoke: Nemotron's tags against the sherpa turns on the same two-speaker recording.
+6. The chat tool: attach a clip, ask what is said, and a long recording to see the cut.
+7. Fixture tests for the page and backend tests for the declarations and the `transcribe` tool, as for the other pages.
+
+## Decisions needed
+
+1. Which models in the first pass. Recommended: Qwen3-ASR (installed), Whisper large-v3-turbo, Parakeet TDT v3 and Nemotron 3.5 Transcribe 4-bit (20 GB of downloads in all). Cohere waits for the gated approval.
+2. Whether "Who spoke" is in this pass for the models that do not make it themselves (the sherpa turns laid over the text). Recommended: yes, if check 5 looks reasonable; it is the feature people ask for after the words.
+3. The sidebar name: **Transcribe** (recommended) or **Speech to text**. The Models page group would be "Speech to text".
