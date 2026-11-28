@@ -20,17 +20,17 @@ The three song models get one shared page, as Chat, Decide, Speech and Images ha
 
 Checked in each model's own code, not from memory (the Images work showed that a form that only mirrors the old one hides real capabilities, and also that a capability must be tried before it goes in the form).
 
-- **ACE-Step 1.5 turbo** takes, in the same call we already make: a tempo (30 to 300 BPM), a key (such as "C Major" or "Am"), a time signature (2/4, 3/4, 4/4, 6/8), any length from 10 to 600 s, and three more tasks that work on a song you give it: **cover** (a new version of a song in another style or with new lyrics, strength 0 to 1), **repaint** (redo a section by start and end seconds, which also extends a song) and a reference audio for style. Extract, lego and complete need the base model, which is not installed.
-- **MiniMax Music 3** takes a step count (1 to 30, default 30) and lengths up to 360 s. It has no reference audio, cover or repaint.
+- **ACE-Step 1.5 turbo** takes, in the same call we already make: a **tempo** (30 to 300 BPM), a key (such as "C Major" or "Am"), a time signature (2/4, 3/4, 4/4, 6/8), any length from 10 to 600 s, and three more tasks that work on a song you give it: **cover** (a new version of a song in another style or with new lyrics, strength 0 to 1), **repaint** (redo a section by start and end seconds, which also extends a song) and a reference audio for style. Extract, lego and complete need the base model, which is not installed.
+- **MiniMax Music 3** takes a step count (1 to 30, default 30; it goes under More options) and lengths up to 360 s. It has no reference audio, cover or repaint.
 - **YuE2** has the melody planning option and a sampling step count; no reference audio in this port.
 
 ## Design
 
 1. **Capabilities per model** (`music` on the plugin, like `speech` and `image`): whether lyrics are required, whether an instrumental is possible, the length control (a fixed list, a range, or none), whether it takes a language, tempo, key, time signature, and which song-editing tabs it has. The form shows only what the model has.
 2. **Roles** carry what was typed from one model to another: style, lyrics, instrumental, length, language, tempo, key, time signature, seed, source song, strength, section start and end. What the new model has no place for is named on the page and kept for the way back.
-3. **One Instrumental switch** instead of "leave the lyrics empty" (which the YuE2 form cannot do). On a model without instrumentals (YuE2) the switch is disabled and says why.
+3. **One Instrumental switch** instead of "leave the lyrics empty". YuE2 takes blank lyrics (whitespace) and simply sings nothing, so the switch works on all three (reported 2026-11-27 from use; confirmed on the real model while building, and the YuE2 form stops requiring lyrics).
 4. **Lyrics help for all three**: chips that insert the structure tags ([Verse], [Chorus], [Bridge], [Intro], [Outro]) at the cursor, a running count of characters and an estimate of the length the lyrics will make. A "write lyrics for me" button is a possible later addition (it would ask a running chat model).
-5. **Length as seconds**, with each model's own limits shown (YuE2 shows "set by the lyrics"). The ceilings for ACE-Step and MiniMax come from measurements (see Checks), not from what the model accepts.
+5. **Length keeps today's choices**: ACE-Step 30, 60 or 120 s; MiniMax 30, 60, 120 or 180 s (a maximum); YuE2 set by the lyrics. Those are what has been measured. Longer lengths are added only if a measurement shows they fit the memory estimate, and not otherwise (the models accept 600 s and 360 s, but nobody has run them here).
 6. **ACE-Step tabs** (only when it runs): **Song** (the default), **New version of a song** (cover: pick or upload a song, style and optional new lyrics, strength) and **Redo a section** (repaint: pick or upload a song, start and end seconds, what to put there). The source song can be an earlier result ("Use as source" on a song in the results list) or an uploaded file; the Speech page's audio picker and playback already exist.
 7. **Dropdown** of running song models with the licence word; time and memory stay on the Models page and the model's details.
 8. **Quality ranking** (SongBench) and licence stay on the Models page; only the group's name and the sidebar change.
@@ -52,7 +52,9 @@ Checked in each model's own code, not from memory (the Images work showed that a
 2. **Before a feature goes in the form, try it on the real model**: ACE-Step tempo, key and time signature (does the result follow them, measured by listening and by an automatic tempo estimate), cover at several strengths (does a different style come through, as the fox test showed for pictures), repaint (a section replaced, the rest unchanged, and extending past the end), and a long song on ACE-Step and MiniMax to find the memory peak and the longest length that fits in the estimate.
 3. One song per model through the app on the Mac; YuE2 on the Windows desktop (the page's form for it must still work without the Mac-only fields).
 
-## Decisions needed
+## Decided (2026-11-27)
 
-- Whether the cover and repaint tabs go in this pass (recommended: yes, behind the checks above, and dropped if turbo does not do them well) or the pass is only the consolidation plus tempo, key, time signature and length.
-- The length ceilings (proposed: ACE-Step up to 300 s, MiniMax up to 240 s, subject to the memory measurements).
+- Tempo, key and time signature go in the ACE-Step form (tempo in the main form, key and time signature under More options).
+- Cover and repaint are in this pass, behind the real-model checks above.
+- MiniMax's step count goes under More options.
+- Lengths stay as they are today; no new ceilings until measured.
