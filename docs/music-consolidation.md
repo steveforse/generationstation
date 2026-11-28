@@ -22,7 +22,7 @@ Checked in each model's own code, not from memory (the Images work showed that a
 
 - **ACE-Step 1.5 turbo** takes, in the same call we already make: a **tempo** (30 to 300 BPM), a key (such as "C Major" or "Am"), a time signature (2/4, 3/4, 4/4, 6/8), any length from 10 to 600 s, and three more tasks that work on a song you give it: **cover** (a new version of a song in another style or with new lyrics, strength 0 to 1), **repaint** (redo a section by start and end seconds, which also extends a song) and a reference audio for style. Extract, lego and complete need the base model, which is not installed.
 - **MiniMax Music 3** takes a step count (1 to 30, default 30; it goes under More options) and lengths up to 360 s. It has no reference audio, cover or repaint.
-- **YuE2** has the melody planning option and a sampling step count; no reference audio in this port.
+- **YuE2** has the melody planning option and a sampling step count. Corrected 2026-11-27: it also makes a **new version of a song** (mlx-Yue's `cover`): SheetSage2 and MERT2 read the melody and structure of a recording into a score, and the song model sings it again with a new style and lyrics. It does not keep the sound of the original. (An earlier version of this plan said the port had no reference audio; that came from reading only the request fields.)
 
 ## Design
 
@@ -66,3 +66,11 @@ Checked in each model's own code, not from memory (the Images work showed that a
 - Lengths were left as they were.
 - The page's carry-over exposed a bug that also applied to the other consolidated pages: when the chosen model changed, the form first opened on the old model's tab name, mounted blank and reported its blank fields over the draft; it now opens on the new model's first tab.
 - Not done: a listening check per model, YuE2 on the Windows desktop.
+
+## YuE2 new version of a song (added 2026-11-27)
+
+- Needs `mido`, `mir-eval`, `pretty-midi` and `scipy` in the mlx-Yue environment (`uv pip install --python ~/ai/tools/mlx-Yue/.venv/bin/python mido==1.3.3 mir-eval==0.8.2 pretty-midi==0.2.11.post0 "scipy>=1.13,<2"`) and two downloads into the Hugging Face cache, both CC BY-NC 4.0 like YuE2 itself: `m-a-p/SheetSage2` (0.23 GB, revision eab522a8) and `m-a-p/MERT-v2-FullSong` (2.5 GB, revision d8ba1c74). The worker runs offline, so a missing download is reported as missing.
+- On the real model through the app: a 30 s MiniMax song became a 95 s new version in 53 s (the length follows the lyrics and the score, not the source). The sung words came out as written, the key (F minor) and tempo (75 BPM) of the source were kept, and the sound differed (the spectral centroid fell from 4367 to 2637 Hz). From the command line, the melody-only task made a 55 s version of the same source in 34 s.
+- It is a field of YuE2's single form ("Start from a song"), not a tab: YuE2's own planning field is called `mode`, which would collide with a tab key and with the stored inputs of earlier songs. The Music page treats it as the cover way of starting. It needs lyrics (the model's own instrumental option, `cover --instrumental`, calls a module this checkout lacks) and a melody planning other than "off".
+- The Windows worker has no melody reader, so the field is dropped there.
+- Plain instrumental YuE2 songs stay unreliable: in four tests, with blank lyrics, with instrumental-section placeholders and with "no vocals, no singing" in the style, the transcription still heard sung words in the first minute. The page says so.

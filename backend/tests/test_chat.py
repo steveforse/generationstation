@@ -219,13 +219,13 @@ def test_a_turn_that_spends_every_round_on_tools_still_ends_with_an_answer(setup
 
 def test_a_refused_tool_call_is_reported_to_the_model(setup):
     store, cat, generation, uploads = setup
-    call = {"index": 0, "id": "c", "function": {"name": "make_song", "arguments": json.dumps({"style": "pop", "source_song": "1a2b3c4d"})}}
+    call = {"index": 0, "id": "c", "function": {"name": "make_song", "arguments": json.dumps({"style": "pop", "source_song": "1a2b3c4d", "start": 5})}}
     server = Server([({"tool_calls": [call]}, "tool_calls")], [({"content": "Sorry."}, "stop")])
     chat = ChatManager(store, cat, generation, uploads, opener=server)
     conversation = chat.create()
     follow(chat.start(conversation["id"], "song", []))
     tool = next(m for m in store.messages if m["role"] == "tool")
-    assert tool["status"] == "error" and tool["content"] == "Not started: No running model can start from a song."
+    assert tool["status"] == "error" and tool["content"] == "Not started: No running model can redo a section of a song."
     assert not generation.created
 
 

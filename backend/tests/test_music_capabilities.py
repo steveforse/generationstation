@@ -24,7 +24,7 @@ def roles_of(catalog, model_id):
 
 
 def test_the_roles_say_what_each_model_takes():
-    assert set(roles_of(MAC, "yue2")[""]) == {"style", "lyrics", "seed"}  # the song is as long as the lyrics: no length
+    assert set(roles_of(MAC, "yue2")[""]) == {"style", "lyrics", "seed", "source"}  # the song is as long as the lyrics: no length; it can start from a song
     assert set(roles_of(MAC, "minimax_music")[""]) == {"style", "lyrics", "length", "steps", "seed"}
     ace = roles_of(MAC, "ace_step")
     assert set(ace) == {"song", "cover", "repaint"} and {"tempo", "key", "time_signature", "length"} <= set(ace["song"])

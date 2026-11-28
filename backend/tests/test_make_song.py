@@ -22,7 +22,8 @@ def test_the_description_lists_each_running_model_and_what_it_takes():
     properties = schema["function"]["parameters"]["properties"]
     assert schema["function"]["parameters"]["required"] == ["style"] and "source_song" in properties
     assert properties["model"]["enum"] == ["yue2", "ace_step", "minimax_music"]
-    assert "source_song" not in SongTool().schema(running("yue2", "minimax_music"))["function"]["parameters"]["properties"]
+    assert "source_song" in SongTool().schema(running("yue2"))["function"]["parameters"]["properties"]  # YuE2 makes a new version too
+    assert "source_song" not in SongTool().schema(running("minimax_music"))["function"]["parameters"]["properties"]
     assert SongTool().schema([]) is None
 
 
@@ -42,16 +43,20 @@ def test_a_style_fills_the_models_own_fields_and_says_what_it_left_out():
 
 def test_a_song_to_start_from_goes_to_a_model_that_can_and_the_tab_follows_the_arguments():
     tool = SongTool()
-    pool = running("yue2", "ace_step")
-    model_id, _, _, mode, inputs, refs, _ = tool.plan({"style": "jazz", "source_song": "1a2b3c4d", "strength": 30}, pool)
+    pool = running("minimax_music", "yue2", "ace_step")
+    model_id, _, _, mode, inputs, refs, _ = tool.plan({"style": "jazz", "lyrics": "[Verse]\nla", "source_song": "1a2b3c4d"}, pool)
+    assert (model_id, mode, refs) == ("yue2", "", {"source": ["1a2b3c4d"]}) and "mode" not in inputs  # the first running model that can
+    model_id, _, _, mode, inputs, refs, _ = tool.plan({"style": "jazz", "source_song": "1a2b3c4d", "strength": 30, "model": "ace_step"}, pool)
     assert (model_id, mode, inputs["strength"], refs) == ("ace_step", "cover", 30, {"source": ["1a2b3c4d"]})
+    _, _, _, _, inputs, _, notes = tool.plan({"style": "jazz", "source_song": "1a2b3c4d", "strength": 30, "model": "yue2"}, pool)
+    assert "strength" not in inputs and any("how closely" in note for note in notes)  # YuE2 has no strength
     _, _, _, mode, inputs, _, notes = tool.plan({"style": "piano", "source_song": "1a2b3c4d", "start": 10, "end": 20, "strength": 30}, pool)
-    assert mode == "repaint" and (inputs["start"], inputs["end"]) == (10, 20) and "strength" not in inputs and notes == []
+    assert mode == "repaint" and (inputs["start"], inputs["end"]) == (10, 20) and "strength" not in inputs and notes == []  # only ACE redoes a section
     with pytest.raises(ValueError, match="cannot start from a song"):
-        tool.plan({"style": "x", "source_song": "1a2b3c4d", "model": "yue2"}, pool)
+        tool.plan({"style": "x", "source_song": "1a2b3c4d", "model": "minimax_music"}, pool)
     with pytest.raises(ValueError, match="No running model can start from a song"):
-        tool.plan({"style": "x", "source_song": "1a2b3c4d"}, running("yue2"))
+        tool.plan({"style": "x", "source_song": "1a2b3c4d"}, running("minimax_music"))
     with pytest.raises(ValueError, match="in `style`"):
         tool.plan({"style": " "}, pool)
     with pytest.raises(ValueError, match="is not running"):
-        tool.plan({"style": "x", "model": "minimax_music"}, pool)
+        tool.plan({"style": "x", "model": "minimax_music"}, running("yue2", "ace_step"))

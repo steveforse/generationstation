@@ -226,11 +226,12 @@ function songRuntimeFixture() {
     generation: { output_kind: 'audio', inputs: [
       field('style', 'Style', 'text', { required: true, max_length: 400, placeholder: 'Upbeat indie pop' }),
       field('lyrics', 'Lyrics', 'textarea', { max_length: 8000 }),
+      field('source', 'Start from a song', 'files', { accept: ['audio'], max_count: 1 }),
       field('mode', 'Melody planning', 'choice', { options: ['full', 'melody', 'off'], default: 'full', advanced: true }),
       field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true }),
     ], timings: [{ seconds: 41, first_seconds: null, when: {}, preset: null, gpu: null, note: 'for a verse and chorus' }],
-    music: { guidance: 'Describe the genre, mood, instruments and voice, and write the lyrics under tags. The song is as long as the lyrics.', create: '', cover: null, repaint: null,
-      roles: { '': { style: 'style', lyrics: 'lyrics', seed: 'seed' } } } },
+    music: { guidance: 'Describe the genre, mood, instruments and voice, and write the lyrics under tags. The song is as long as the lyrics.', create: '', cover: '', repaint: null,
+      roles: { '': { style: 'style', lyrics: 'lyrics', seed: 'seed', source: 'source' } } } },
   }
 }
 
@@ -2059,6 +2060,10 @@ test('ACE-Step makes a new version of a song or redoes a section of it, starting
   await page.getByRole('tab', { name: 'Redo a section' }).click()
   await expect(page.locator('[role=tabpanel]:not([hidden])').getByText(/-song\.wav$/).first()).toBeVisible()  // the same song is on the other tab
   await expect(page.getByRole('spinbutton', { name: /^from/i })).toBeVisible()
+  // YuE2 starts from a song too, as a field of its one form: the song comes with the person.
+  await page.getByLabel('Model composing').selectOption('yue2')
+  await expect(page.getByText(/-song\.wav$/).first()).toBeVisible()
+  await expect(page.getByText('has no place for the song to start from')).toHaveCount(0)
   // A model that cannot start from a song says so and keeps it for the way back.
   await page.getByLabel('Model composing').selectOption('minimax_music')
   await expect(page.getByText('has no place for the song to start from')).toBeVisible()
