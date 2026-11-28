@@ -6,7 +6,7 @@ import type { SavedHost } from './hosts'
 import {
   ApiError, type Connection, type Job, type JobOutput, type Launch, type Model,
   type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord, type Voice,
-  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult, type ReferenceModel,
+  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult, type ReferenceModel, type HostedProvider,
 } from './types'
 
 /** How many recent results to keep in view (the results sidebar lists them). */
@@ -22,6 +22,8 @@ export type SessionState = {
   references: ReferenceModel[]
   operations: Operation[]
   jobs: Job[]
+  /** Hosted chat providers the host is set up with (none unless its runtimes file has them). */
+  providers: HostedProvider[]
   catalogError: string
   actionError: string
   pendingModelId: string | null
@@ -36,8 +38,13 @@ const referencesOf = (reply: object): ReferenceModel[] => {
   return Array.isArray(list) ? list.filter((item): item is ReferenceModel => !!item && typeof (item as ReferenceModel).name === 'string' && Array.isArray((item as ReferenceModel).scores)) : []
 }
 
+const providersOf = (reply: unknown): HostedProvider[] | null => {
+  const list = (reply as { providers?: unknown } | null)?.providers
+  return Array.isArray(list) ? list.filter((item): item is HostedProvider => !!item && typeof (item as HostedProvider).id === 'string' && Array.isArray((item as HostedProvider).models)) : null
+}
+
 const initialState = (message = 'Open Connections to connect this host.'): SessionState => ({
-  connection: 'idle', message, snapshot: null, models: null, runtimes: null, references: [], operations: [], jobs: [],
+  connection: 'idle', message, snapshot: null, models: null, runtimes: null, references: [], operations: [], jobs: [], providers: [],
   catalogError: '', actionError: '', pendingModelId: null, refusals: {}, runtimeMessages: {}, jobErrors: {},
 })
 
@@ -221,10 +228,11 @@ export class HostSession {
       if (!this.stillCurrent(generation, signal)) return
       if (!isCatalog(models)) throw new Error('The host returned an invalid model catalog.')
       this.set({ models: models.models, catalogError: '' })
-      const [operations, runtimes, jobs] = await Promise.all([
+      const [operations, runtimes, jobs, providers] = await Promise.all([
         requestApi(base, token, '/api/operations?limit=100', {}, signal).catch(() => null),
         requestApi(base, token, '/api/runtimes', {}, signal).catch(() => null),
         requestApi(base, token, `/api/jobs?limit=${JOB_LIMIT}`, {}, signal).catch(() => null),
+        requestApi(base, token, '/api/providers', {}, signal).catch(() => null),
       ])
       if (!this.stillCurrent(generation, signal)) return
       this.set((state) => ({
@@ -232,6 +240,7 @@ export class HostSession {
         runtimes: isRuntimes(runtimes) ? runtimes.runtimes : (state.runtimes ?? []),
         references: isRuntimes(runtimes) ? referencesOf(runtimes) : state.references,
         jobs: isJobs(jobs) ? jobs.jobs : state.jobs,
+        providers: providersOf(providers) ?? state.providers,
       }))
       this.scheduleBusyPoll()
       this.scheduleJobPoll()
@@ -369,6 +378,14 @@ export class HostSession {
       if (this.handleAuthError(error)) throw new Error('Not connected to the host.')
       throw error
     }
+  }
+
+  /** Choose which of a provider's models the chat offers, or look the provider's models up again. */
+  async hostedModels(providerId: string, enabled: string[] | null) {
+    const path = `/api/providers/${encodeURIComponent(providerId)}/${enabled ? 'models' : 'refresh'}`
+    const reply = await this.call(path, enabled ? { method: 'PUT', body: JSON.stringify({ enabled }) } : { method: 'POST' })
+    const providers = providersOf(reply)
+    if (providers) this.set({ providers })
   }
 
   async settings(): Promise<HostSettings> {

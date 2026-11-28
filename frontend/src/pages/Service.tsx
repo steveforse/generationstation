@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Activity, ArrowDown, ArrowUp, ArrowUpRight, ChevronDown, MemoryStick } from 'lucide-react'
+import { HostedProviderSection } from '../components/HostedProvider'
 import { ConnectLink } from '../components/Connect'
 import { StatePill } from '../components/StatePill'
 import { groupByWorkload, WorkloadIcon } from '../components/WorkloadIcon'
@@ -126,6 +127,7 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
       </section>
       }}
     </ModelGroup>)}
+    {state.providers.map((provider) => <HostedProviderSection key={provider.id} provider={provider} onChoose={(ids) => session.hostedModels(provider.id, ids)} onRefresh={() => session.hostedModels(provider.id, null)} />)}
     </div>
     {!!state.snapshot && state.connection !== 'idle' && <aside className="models-rail"><section className="resource-grid models-resources" aria-label={`${hostName(host, state)} resource usage`}>
       <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent error={view.host?.ram_error ?? undefined} kind="RAM" unified={isUnified(view.host)} stale={view.stale} segments={ramSegments(view.host, state.runtimes)} preview={ramPreview} legend />

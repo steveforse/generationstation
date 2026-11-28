@@ -37,7 +37,7 @@ One `transcribe` tool over the running models: a reference to a recording or a r
 
 ## Built and measured (2026-11-27, Apple M5 Max 64 GB)
 
-Decisions taken: Qwen3-ASR, Whisper large-v3-turbo, Parakeet TDT v3 and Nemotron 3.5 Transcribe (4-bit export; Nemotron was removed afterwards, see the top); "Who spoke" for the models that do not label speakers themselves; the sidebar entry is **Transcribe**; the Models page group is "Speech to text".
+Decisions taken: Qwen3-ASR, Whisper large-v3-turbo, Parakeet TDT v3 and Nemotron 3.5 Transcribe (4-bit export; Nemotron was removed afterwards, see the top); "Who spoke" for the models that do not label speakers themselves; the sidebar entry is **Transcription** (renamed from Transcribe on 2026-11-28, as are the Models and Overview sections; the page action stays "Transcribe").
 
 Test audio: two macOS voices reading 10 lines of a made-up meeting with invented product and people names (so a model cannot know them), 20 and 66 different meetings joined into 17 minutes and 56 minutes (a repeated meeting is not a fair test: models that predict text loop on it). Word error is against the script with numbers left out (models write "42" or "forty two"). A real Zoom recording was not on hand.
 

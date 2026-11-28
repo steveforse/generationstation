@@ -50,7 +50,7 @@ export function useHosts(store: HostStore) {
 
 const emptySubscribe = () => () => undefined
 const idleState = (): SessionState => ({
-  connection: 'idle', message: 'Open Connections to connect this host.', snapshot: null, models: null, runtimes: null, references: [], operations: [], jobs: [],
+  connection: 'idle', message: 'Open Connections to connect this host.', snapshot: null, models: null, runtimes: null, references: [], operations: [], jobs: [], providers: [],
   catalogError: '', actionError: '', pendingModelId: null, refusals: {}, runtimeMessages: {}, jobErrors: {},
 })
 const IDLE = idleState()

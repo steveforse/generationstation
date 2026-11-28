@@ -64,7 +64,7 @@ def test_quality_scores_cite_a_source_and_never_repeat_a_metric_for_one_model():
                 kinds.add(entry.workload)
             # Two scores on one metric would draw two bars for one model in the same ranking.
             assert len({score.metric for score in scores}) == len(scores), entry.name
-    assert kinds == {"text", "decision", "speech", "image", "video", "music"}  # no speech-to-text model has a published score now
+    assert kinds == {"text", "decision", "speech", "transcription", "image", "video", "music"}
 
 
 def test_scores_for_quantised_builds_are_marked_as_estimates():

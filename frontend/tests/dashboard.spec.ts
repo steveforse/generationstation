@@ -2200,7 +2200,7 @@ test('Images: a custom size shows its width and height, and a starting picture i
 test('Transcribe is one entry in the sidebar and one page over the running speech-to-text models; the words to expect carry over', async ({ page }) => {
   const api = await connectFixtures(page, 'Fixture desktop', false, { asr: true })
   await go(page, '#/hosts/local/transcribe')
-  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Transcribe/ })).toContainText('On')
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Transcription/ })).toContainText('On')
   const picker = page.getByLabel('Model transcribing')
   await expect(picker.locator('option')).toHaveText(['Whisper (Work use)', 'Parakeet (Work use)'])
   await expect(page.getByText('Each line has its time, and captions (.srt and .vtt) are written.')).toBeVisible()
@@ -2240,4 +2240,38 @@ test('a transcript is shown open, can be copied, and offers its files', async ({
   await detail.getByRole('button', { name: /^Download transcript/ }).click()
   await expect(page.getByRole('link', { name: /Plain text/ })).toBeVisible()
   await expect(page.getByRole('link', { name: /Captions \(\.srt\)/ })).toBeVisible()
+})
+
+test('a hosted provider lists its models on the Models page; the ones ticked appear in the Chat, which then works without a local model', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true })
+  await keepFresh(page)
+  const models = [{ id: 'claude-haiku-5-5', name: 'claude-haiku-5-5', enabled: false }, { id: 'claude-opus-4-5', name: 'claude-opus-4-5', enabled: false }, { id: 'claude-sonnet-5-5', name: 'claude-sonnet-5-5', enabled: false }]
+  const reply = () => ({ providers: [{ id: 'litellm', name: 'LiteLLM', address: 'https://gateway.example', token_variable: 'GATEWAY_TOKEN', token_set: true, error: null, models }] })
+  let refreshed = 0
+  await page.route('**/api/providers', (route) => route.fulfill({ json: reply() }))
+  await page.route('**/api/providers/litellm/refresh', (route) => { refreshed += 1; return route.fulfill({ json: reply() }) })
+  await page.route('**/api/providers/litellm/models', async (route) => {
+    const { enabled } = route.request().postDataJSON() as { enabled: string[] }
+    models.forEach((model) => { model.enabled = enabled.includes(model.id) })
+    await route.fulfill({ json: reply() })
+  })
+  await page.route('**/api/conversations', (route) => route.fulfill({ json: { conversations: [] } }))
+
+  await go(page, '#/hosts/local/models')
+  await page.reload()
+  const section = page.getByRole('region', { name: 'LiteLLM' })
+  await expect(section).toContainText('0 of 3')
+  await expect(section).toContainText('GATEWAY_TOKEN')
+  await section.getByRole('checkbox', { name: 'claude-sonnet-5-5' }).click()
+  await expect(section.getByRole('checkbox', { name: 'claude-sonnet-5-5' })).toBeChecked()
+  await section.getByRole('checkbox', { name: 'claude-haiku-5-5' }).click()
+  await expect(section.getByRole('checkbox', { name: 'claude-haiku-5-5' })).toBeChecked()
+  await expect(section).toContainText('2 of 3')
+  await section.getByRole('button', { name: 'Refresh' }).click()
+  await expect.poll(() => refreshed).toBe(1)
+
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Chat/ })).toBeVisible()
+  await go(page, '#/hosts/local/chat')
+  const picker = page.getByRole('combobox', { name: /model/i }).first()
+  await expect(picker.locator('option')).toHaveText(['claude-haiku-5-5 (LiteLLM)', 'claude-sonnet-5-5 (LiteLLM)'])
 })

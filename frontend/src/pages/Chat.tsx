@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowUp, ArrowUpRight, Bot, Brain, Check, FileText, Image as ImageIcon, Library, Loader2, Paperclip, Pencil, Plus, Square, Trash2, X } from 'lucide-react'
+import { hostedRuntimes } from '../hosted'
 import { ConnectionBanner, hostName, stateText } from '../components/HostBits'
 import { DraftView, KIND_WORD, mainOutput, MessageView, resultKind, thumbKind, useChatTurn, usePinnedScroll } from '../components/ChatParts'
 import { JobDetail, JobModal, jobTitle, ResultThumb, when } from '../components/Runtime'
@@ -56,7 +57,8 @@ export function ChatPage({ store, host, conversationId }: { store: HostStore; ho
   // else the first running. A conversation whose model has stopped moves to a running one when the next message is sent.
   const [pickedId, setPickedId] = useState<string | null>(null)
   useEffect(() => { setPickedId(null) }, [conversationId])
-  const running = (state.runtimes ?? []).filter((runtime) => runtime.chat && state.models?.find((model) => model.id === runtime.id)?.state === 'ready')
+  // Hosted models (a gateway such as LiteLLM) are always ready; they come after the local ones that are running.
+  const running = [...(state.runtimes ?? []).filter((runtime) => runtime.chat && state.models?.find((model) => model.id === runtime.id)?.state === 'ready'), ...hostedRuntimes(state.providers)]
   const chatRuntime = running.find((runtime) => runtime.id === pickedId)
     ?? running.find((runtime) => runtime.id === loaded?.conversation.model_id)
     ?? running[0]

@@ -32,7 +32,7 @@ export function TranscribePage({ store, host, modelId }: { store: HostStore; hos
   </div> : null
   return <ServicePage store={store} host={host} modelId={chosen?.id ?? ''}
     group={{
-      title: 'Transcribe', noun: 'transcript', description: 'Write down a recording with whichever speech-to-text model is running. What you choose carries over when you change the model.',
+      title: 'Transcription', noun: 'transcript', description: 'Write down a recording with whichever speech-to-text model is running. What you choose carries over when you change the model.',
       ids: runtimes.map((runtime) => runtime.id), picker, above, reuseElsewhere, none: runtimes.length > 0 && running.length === 0,
       form: { key: `${chosenId}:${form.n}`, start, hooks },
     }} />

@@ -37,6 +37,7 @@ from .host_settings import HostSettings, SettingsInvalid
 from .lifecycle import IdempotencyConflict, LifecycleError, LifecycleManager
 from .logs import LogNotFound, LogStore
 from .process_worker import ProcessSupervisor
+from .providers import ProviderRegistry
 from .runtimes import load_catalog
 from .storage import Store
 from .telemetry import Monitor
@@ -323,8 +324,9 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     host_settings.web = web_tools
     logs = LogStore(settings.runtime_dir, store)
     host_tools = HostTools(store, catalog, lifecycle, lambda: snapshot())
+    providers = ProviderRegistry(catalog.providers, settings.runtime_dir / "providers.json")
     chat = ChatManager(store, catalog, generation, uploads, host_tools=host_tools, web_tools=web_tools,
-                       job_tools=JobTools(store, catalog, generation, logs), voices=voices)
+                       job_tools=JobTools(store, catalog, generation, logs), voices=voices, providers=providers)
     # Text models for worker jobs that ask for one (meeting notes); polls only plugins that declare text_model_jobs.
     broker = TextModelBroker(store, catalog, host_tools, chat)
     access_logger = _access_logger()
@@ -432,6 +434,31 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         # to offer; a simulation profile is listed whether or not the catalog names it.
         return {"models": [model for model in store.list_models()
                            if model["id"] in catalog.runtimes or model["profile"]["id"] is not None]}
+
+    class ProviderModels(BaseModel):
+        enabled: list[StrictStr] = Field(max_length=200)
+
+    @api.get("/providers")
+    def providers_list():
+        """Hosted chat providers (optional) with every model they list and which ones the chat offers."""
+        return {"providers": providers.describe()}
+
+    @api.post("/providers/{provider_id}/refresh")
+    def providers_refresh(provider_id: str):
+        if provider_id not in catalog.providers:
+            raise HTTPException(404, "Unknown provider")
+        providers.models(provider_id, refresh=True)
+        return {"providers": providers.describe()}
+
+    @api.put("/providers/{provider_id}/models")
+    def providers_choose(provider_id: str, payload: ProviderModels):
+        if provider_id not in catalog.providers:
+            raise HTTPException(404, "Unknown provider")
+        try:
+            providers.set_enabled(provider_id, payload.enabled)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"providers": providers.describe()}
 
     @api.get("/runtimes")
     def runtimes():

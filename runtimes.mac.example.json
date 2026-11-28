@@ -1641,6 +1641,14 @@
         "code": "Qwen3-ASR and mlx-audio: Apache-2.0 and MIT",
         "note": "Apache-2.0 weights and code.",
         "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B"
+      },
+      "quality": {
+        "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+        "score": 94.24,
+        "estimated": true,
+        "source": "https://speechtotext.dev/leaderboard/",
+        "as_of": "2026-11-28",
+        "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). The leaderboard lists Qwen3-ASR 1.7B and 0.6B together; this is the 1.7B run in 8-bit here, which may score slightly lower. Measured here on a 56 minute test meeting read by two computer voices: 4.4 % error (see docs/transcribe-plan.md); that test flatters every model, so use it to compare them with each other."
       }
     },
     "whisper_asr": {
@@ -1685,6 +1693,14 @@
         "code": "Whisper and mlx-audio: MIT",
         "note": "MIT weights and code.",
         "url": "https://huggingface.co/openai/whisper-large-v3-turbo"
+      },
+      "quality": {
+        "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+        "score": 92.17,
+        "estimated": false,
+        "source": "https://speechtotext.dev/leaderboard/",
+        "as_of": "2026-11-28",
+        "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Whisper large-v3-turbo; run here as an MLX build. Measured here on a 56 minute test meeting read by two computer voices: 4.0 % (see docs/transcribe-plan.md); that test flatters every model, so use it to compare them with each other."
       }
     },
     "parakeet_asr": {
@@ -1729,6 +1745,14 @@
         "code": "mlx-audio: MIT",
         "note": "CC-BY-4.0 allows commercial use if NVIDIA is credited when the weights are shared. This app runs them internally and its transcripts are not covered by the licence, so it is work use here. Add a credit line (NVIDIA Parakeet TDT 0.6B v3, CC-BY-4.0, converted for MLX by mlx-community) if the app is ever shipped to others.",
         "url": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"
+      },
+      "quality": {
+        "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+        "score": 94.34,
+        "estimated": false,
+        "source": "https://speechtotext.dev/leaderboard/",
+        "as_of": "2026-11-28",
+        "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Parakeet TDT 0.6B v3. NVIDIA's own model card lists 6.32 from an earlier run (August 2025); the leaderboard has moved since. Measured here on a 56 minute test meeting read by two computer voices: 5.1 % (see docs/transcribe-plan.md); that test flatters every model, so use it to compare them with each other."
       }
     }
   },
@@ -2094,6 +2118,48 @@
           "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
           "as_of": "2026-11-26",
           "note": "Apache-2.0, text only. Tried here (community 4-bit MLX port, 18.5 GB, 0.25 s) and removed: Torchcast 31B scores higher, and the 4B and pplx-decider cover the lighter and picture cases."
+        }
+      ]
+    },
+    {
+      "name": "Cohere Transcribe (gated download, not run here)",
+      "workload": "transcription",
+      "scores": [
+        {
+          "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+          "score": 94.58,
+          "estimated": false,
+          "source": "https://speechtotext.dev/leaderboard/",
+          "as_of": "2026-11-28",
+          "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Canary-Qwen 2.5B (not run here)",
+      "workload": "transcription",
+      "scores": [
+        {
+          "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+          "score": 94.37,
+          "estimated": false,
+          "source": "https://speechtotext.dev/leaderboard/",
+          "as_of": "2026-11-28",
+          "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Whisper large-v3 (not run here)",
+      "workload": "transcription",
+      "scores": [
+        {
+          "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+          "score": 92.56,
+          "estimated": false,
+          "source": "https://speechtotext.dev/leaderboard/",
+          "as_of": "2026-11-28",
+          "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Not run here."
         }
       ]
     }

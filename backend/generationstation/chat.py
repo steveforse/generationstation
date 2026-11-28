@@ -20,6 +20,7 @@ from .lifecycle import LifecycleError
 from .make_image import ImageTool
 from .make_song import SongTool
 from .make_video import VideoTool
+from .providers import THINKING, HostedTarget
 from .speak import SpeakTool
 from .transcribe_tool import TranscribeTool
 from .uploads import UploadError, kind_of
@@ -43,7 +44,7 @@ WORDS = {"image": "picture", "video": "video clip", "audio": "sound recording"}
 ASSISTANT_TITLE = "Assistant"
 GUIDE = (Path(__file__).with_name("assistant_guide.md")).read_text(encoding="utf-8").strip()
 # Where each kind of model is in the menu on the left: models that serve several of a kind share one entry; a text tool that is not a chat model has its own.
-GROUPS = {"text": "Chat", "decision": "Decision", "transcription": "Transcribe", "workflow": "Workflows", "speech": "Speech", "image": "Images", "video": "Video", "music": "Music"}
+GROUPS = {"text": "Chat", "decision": "Decision", "transcription": "Transcription", "workflow": "Workflows", "speech": "Speech", "image": "Images", "video": "Video", "music": "Music"}
 
 # What every chat is told it can do. Only the help assistant's own conversation is told it is "the assistant" (INTRO_ASSISTANT);
 # the general chat is just a model running on the user's computer and does not call itself the assistant.
@@ -123,7 +124,8 @@ class Turn:
 
 class ChatManager:
     def __init__(self, store, catalog, generation, uploads, opener=None, host_tools=None, web_tools=None,
-                 job_tools=None, voices=None):
+                 job_tools=None, voices=None, providers=None):
+        self.providers = providers
         self.speak_tool = SpeakTool(voices)
         self.image_tool = ImageTool()
         self.song_tool = SongTool()
@@ -146,6 +148,14 @@ class ChatManager:
     def chat_models(self):
         return [model_id for model_id, runtime in self.catalog.runtimes.items()
                 if getattr(self.catalog.plugin(model_id), "chats", False)]
+
+    def hosted_models(self):
+        """The hosted models the chat offers, as "<provider>:<model>" (none without providers)."""
+        return self.providers.hosted_ids() if self.providers else []
+
+    def _hosted(self, model_id):
+        """The HostedTarget for a hosted model id, or None for a local model."""
+        return self.providers.target(model_id) if self.providers and ":" in (model_id or "") else None
 
     def _conversation(self, conversation_id):
         row = self.store.get_conversation(conversation_id)
@@ -171,14 +181,15 @@ class ChatManager:
 
     def create(self, model_id=None, kind="chat"):
         models = self.chat_models()
-        if not models:
+        hosted = self.hosted_models()
+        if not models and not hosted:
             raise LifecycleError("NO_CHAT_MODEL", "This host has no text model to chat with.", 422)
         if model_id is None and kind == "assistant":
             model_id = self.assistant_model()
         if model_id is None:
             states = self.store.runtime_states()
-            model_id = next((m for m in models if states.get(m, {}).get("state") == "ready"), models[0])
-        elif model_id not in models:
+            model_id = next((m for m in models if states.get(m, {}).get("state") == "ready"), None) or (models or hosted)[0]
+        elif model_id not in models and model_id not in hosted:
             raise LifecycleError("NO_CHAT_MODEL", "That model does not chat.", 422)
         row = self.store.create_conversation(conversation_id=str(uuid.uuid4()),
                                              title=ASSISTANT_TITLE if kind == "assistant" else NEW_TITLE,
@@ -236,13 +247,13 @@ class ChatManager:
         if len(attachments) > MAX_ATTACHMENTS:
             raise LifecycleError("TOO_MANY_ATTACHMENTS", f"Attach at most {MAX_ATTACHMENTS} files and results.", 422)
         switch = bool(model_id) and model_id != conversation["model_id"] and conversation.get("kind") != "assistant"
-        if switch and model_id not in self.chat_models():
+        if switch and model_id not in self.chat_models() and model_id not in self.hosted_models():
             raise LifecycleError("MODEL_NOT_FOUND", "That model cannot chat.", 404)
         model_id = model_id if switch else conversation["model_id"]
-        runtime = self.catalog.runtimes.get(model_id)
+        runtime = self._hosted(model_id) or self.catalog.runtimes.get(model_id)
         if runtime is None:
             raise LifecycleError("MODEL_NOT_FOUND", "This conversation's model is no longer configured.", 404)
-        if self.store.runtime_states().get(model_id, {}).get("state") != "ready":
+        if not self._hosted(model_id) and self.store.runtime_states().get(model_id, {}).get("state") != "ready":
             raise LifecycleError("MODEL_NOT_READY", f"Start {runtime.name} on the Models page first.", 409)
         effort = self._effort(model_id, runtime, thinking)
         attached = [self._attachment(item) for item in attachments]
@@ -283,7 +294,7 @@ class ChatManager:
     def _run(self, conversation_id, turn, thinking):
         try:
             conversation = self._conversation(conversation_id)
-            runtime = self.catalog.runtimes[conversation["model_id"]]
+            runtime = self._hosted(conversation["model_id"]) or self.catalog.runtimes[conversation["model_id"]]
             for _ in range(MAX_ROUNDS):
                 tools, handlers = self._tools()
                 messages = self._context(conversation, handlers, getattr(turn, "where", None))
@@ -315,18 +326,28 @@ class ChatManager:
 
     def _answer(self, runtime, conversation_id, messages, tools, thinking, turn):
         """Stream one answer from the model and save it. Returns the saved message."""
-        body = {"model": self._served_model(runtime), "messages": messages, "stream": True, "max_tokens": MAX_TOKENS}
+        hosted = runtime if isinstance(runtime, HostedTarget) else None
+        body = {"model": hosted.model if hosted else self._served_model(runtime), "messages": messages, "stream": True, "max_tokens": MAX_TOKENS}
         body.update(self._sampling(conversation_id))
         if tools:
             body["tools"] = tools
-        if thinking == "off":  # both forms: some models still think briefly at effort "none"
+        if hosted:  # the gateway refuses the local servers' enable_thinking; off is simply no effort
+            if thinking and thinking != "off":
+                body["reasoning_effort"] = thinking
+        elif thinking == "off":  # both forms: some models still think briefly at effort "none"
             body["enable_thinking"] = False
             body["reasoning_effort"] = "none"
         elif thinking:
             body["reasoning_effort"] = thinking
-        request = urllib.request.Request(f"http://127.0.0.1:{runtime.port}/v1/chat/completions",
-                                         data=json.dumps(body).encode(), method="POST",
-                                         headers={"Content-Type": "application/json", "Accept": "text/event-stream"})
+        headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+        try:
+            url = hosted.url if hosted else f"http://127.0.0.1:{runtime.port}/v1/chat/completions"
+            headers.update(hosted.headers() if hosted else {})
+        except RuntimeError as exc:
+            saved = self.store.add_message(conversation_id, role="assistant", content="", reasoning="", tool_calls=[], status="error", error_message=str(exc))
+            turn.emit("message", serialize_message(saved))
+            return serialize_message(saved)
+        request = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers=headers)
         content, reasoning, calls = [], [], {}
         status, error = "done", None
         turn.emit("start", {})
@@ -386,6 +407,8 @@ class ChatManager:
 
     def thinking_for(self, model_id):
         """The running model's thinking levels (see RuntimePlugin.chat_thinking), or None."""
+        if self._hosted(model_id):
+            return THINKING
         runtime = self.catalog.runtimes.get(model_id)
         launch = (self.store.latest_launches().get(model_id) or {}).get("launch") or {}
         preset = runtime.presets.get(launch.get("preset")) if runtime else None
@@ -414,6 +437,8 @@ class ChatManager:
     def _sampling(self, conversation_id):
         """The model's own sampling for chat where its server would otherwise decode greedily."""
         model_id = self._conversation(conversation_id)["model_id"]
+        if self._hosted(model_id):
+            return {}
         runtime = self.catalog.runtimes.get(model_id)
         launch = (self.store.latest_launches().get(model_id) or {}).get("launch") or {}
         preset = runtime.presets.get(launch.get("preset")) if runtime else None
@@ -434,6 +459,8 @@ class ChatManager:
     # ----- what the model sees ------------------------------------------------------------------
 
     def _vision(self, conversation):
+        if self._hosted(conversation["model_id"]):
+            return True  # Claude reads pictures
         launch = (self.store.latest_launches().get(conversation["model_id"]) or {}).get("launch") or {}
         return (launch.get("settings") or {}).get("vision") not in (None, "off")
 

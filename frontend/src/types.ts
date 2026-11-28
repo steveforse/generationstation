@@ -97,3 +97,7 @@ export type SearchTestResult = { ok: boolean; message: string }
 
 /** A voice saved in the host's library: a name, its sample (fetched on use) and the words the sample says. */
 export type Voice = { id: string; name: string; sample_text: string; mime: string; bytes: number }
+
+/** A hosted chat provider (an OpenAI-compatible gateway such as LiteLLM) the host is set up with, and the models it lists. */
+export type HostedModel = { id: string; name: string; enabled: boolean }
+export type HostedProvider = { id: string; name: string; address: string | null; token_variable: string | null; token_set: boolean; error: string | null; models: HostedModel[] }

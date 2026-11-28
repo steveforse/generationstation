@@ -57,7 +57,7 @@ The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B,
 
 ## Models page: sections and quality chart
 
-The Models page and the Overview are grouped and named like the sidebar: Chat (the text models), then alphabetical (Decision, Images, Music, Speech, Transcribe, Video), then Workflows (Meeting notes, which is a workflow, not a model; the sidebar sets it apart below a rule). A catalog entry's `workload` picks its section: `text`, `decision`, `image`, `music`, `speech`, `transcription`, `video` or `workflow`. After a group's cards, a folded card ranks the models that have a published score on the same measure:
+The Models page and the Overview are grouped and named like the sidebar: Chat (the text models), then alphabetical (Decision, Images, Music, Speech, Transcription, Video), then Workflows (Meeting notes, which is a workflow, not a model; the sidebar sets it apart below a rule). A catalog entry's `workload` picks its section: `text`, `decision`, `image`, `music`, `speech`, `transcription`, `video` or `workflow`. After a group's cards, a folded card ranks the models that have a published score on the same measure:
 
 Each section's heading row has a Sort control on its right: default order, name, or quality (using the ranking chosen in the card), with a button to reverse it. Models without a score on that ranking stay last in either direction.
 
@@ -436,6 +436,28 @@ $HF download mlx-community/parakeet-tdt-0.6b-v3 --local-dir $A/parakeet-tdt-0.6b
 | Parakeet TDT v3 | CC-BY-4.0 (work use: credit NVIDIA if the app is ever shipped to others) | 25 European languages, detected; no word list; times on each sentence. 17 minutes in about 4 s. |
 
 Each model works in parts, because whole recordings go wrong: Qwen3-ASR loops on 18 minutes in one piece, Parakeet needs 32 GiB (Nemotron 3.5 Transcribe, tried and removed, repeated and skipped on an hour). Who spoke uses the speaker detection set up for the meeting notes (`diar_python`, `segmentation_model`, `embedding_model` in the preset options); the form's advanced "How many speakers" moves that step's threshold by 0.15 or 0.2. The result is a transcript with `.txt`, `.md`, `.json`, and `.srt` and `.vtt` where the model gives times. In the chat, every running model is reached through one `transcribe` tool.
+
+## 7a. Hosted chat models (optional)
+
+The Chat can also use models hosted behind an OpenAI-compatible gateway, such as LiteLLM in front of Bedrock. They run on the gateway, not here, so anything you send in a chat goes there: use it only where your organisation allows that. The chat, its tools (pictures, songs, search and the rest) and the conversation history stay on the Generation Station backend; the browser never sees the gateway token.
+
+Add a `providers` section to `runtimes.json` (the file is not in git). Without it nothing changes.
+
+```json
+"providers": {
+  "litellm": {
+    "name": "LiteLLM",
+    "base_url": "https://litellm.example.com",
+    "api_key_env": "ANTHROPIC_AUTH_TOKEN",
+    "include": ["claude-*-5-5"]
+  }
+}
+```
+
+- `api_key_env` is the name of an environment variable, never the token. Set it where the backend starts (`ANTHROPIC_AUTH_TOKEN=... uv run ... uvicorn ...`). The token is read for each request and is not stored or logged.
+- The models come from the gateway's `/v1/models` (chat models only) and are listed on the Models page in a section named after the provider. Tick the ones the Chat should offer; the choice is kept in `providers.json` in the runtime folder. `include` is optional: glob patterns for models that are on until you choose otherwise (here the Claude 5.5 family). With neither, nothing is offered.
+- OpenCode: set `"source": "opencode"` and `"opencode_provider": "<its provider id>"` instead of `base_url` and `api_key_env`. The address, the token's variable (an `{env:NAME}` value) and the model list are read from `~/.config/opencode/opencode.json` (or `opencode_config`). Anything you set in the entry wins. This reads the file format from OpenCode's documentation and has not been tried against a real desktop file yet.
+- Hosted models are always on. Thinking is sent as a reasoning effort (low, medium, high) or left out when off. Images are assumed to be accepted. Meeting notes and the help assistant still use local models.
 
 ## Files in the chat
 

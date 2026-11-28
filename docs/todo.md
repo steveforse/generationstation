@@ -21,6 +21,8 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Later / offered
 
+- **Hosted chat models** built (2026-11-28; `docs/setup-macos.md` section 7a): optional `providers` in `runtimes.json`, models listed from a LiteLLM-style gateway or OpenCode's config, ticked on the Models page, offered in the Chat. Left: a live turn through the app (tool call, a picture sent, thinking text), OpenCode's config read from a real desktop file, a hosted section on the Overview, Meeting notes using Claude as its writing model (deferred on request).
+- **Transcription benchmarks** (2026-11-28): the models carry the Open ASR Leaderboard accuracy (100 minus average word error, English short-form, from speechtotext.dev, which syncs it) with Cohere Transcribe, Canary-Qwen and Whisper large-v3 as reference rows. The Parakeet figure differs from NVIDIA's model card (5.66 against 6.32 word error); recheck against the leaderboard itself.
 - Picture models stay loaded (2026-11-27), with the text encoder given back after each description and tiled decoding: Z-Image 28 to 14 s, Qwen Turbo 35 to 17 s, peaks 7 to 35 GiB (estimates 9, 14, 18, 38 GiB; nothing held before, now 1.5 to 22 GiB idle). The Windows picture worker is unchanged.
 
 - **Images page** done on the Mac (2026-11-27): checked by eye on Z-Image Turbo and Qwen Image 2.1 Turbo; not looked at by eye: Qwen Image 2.1 full and Qwen-Image 2512. The H3 picture tabs on the Windows desktop are untested. Instruction editing (Qwen Image 2.1 edit mode on the installed weights, personal use only; Qwen-Image-Edit-2511, Apache-2.0, about 34 GB) skipped for now. 

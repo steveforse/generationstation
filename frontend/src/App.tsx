@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Activity, FileText, Loader2, Menu, MessagesSquare, NotebookPen, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { hostedRuntimes } from './hosted'
 import { AssistantBubble } from './components/Assistant'
 import { hostName, StatusDot, stateText } from './components/HostBits'
 import { groupByWorkload, WorkloadIcon } from './components/WorkloadIcon'
@@ -103,14 +104,14 @@ export default function App() {
 function AssistantSlot({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
   const page = route.page === 'service' ? `the ${state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId} page`
-    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decision page' : route.page === 'speech' ? 'the Speech page' : route.page === 'images' ? 'the Images page' : route.page === 'music' ? 'the Music page' : route.page === 'video' ? 'the Video page' : route.page === 'transcribe' ? 'the Transcribe page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
+    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decision page' : route.page === 'speech' ? 'the Speech page' : route.page === 'images' ? 'the Images page' : route.page === 'music' ? 'the Music page' : route.page === 'video' ? 'the Video page' : route.page === 'transcribe' ? 'the Transcription page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
       : route.page === 'settings' ? 'the Host settings page' : route.page === 'connections' ? 'the Connections page' : 'a page'
   return <AssistantBubble store={store} host={host} where={page} />
 }
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
-  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decision' : route.page === 'speech' ? 'Speech' : route.page === 'images' ? 'Images' : route.page === 'music' ? 'Music' : route.page === 'video' ? 'Video' : route.page === 'transcribe' ? 'Transcribe' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
+  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decision' : route.page === 'speech' ? 'Speech' : route.page === 'images' ? 'Images' : route.page === 'music' ? 'Music' : route.page === 'video' ? 'Video' : route.page === 'transcribe' ? 'Transcription' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
     : state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId
   return <div className="breadcrumb"><span className="crumb-host">{host ? hostName(host, state) : 'Workspace'}</span><span className="crumb-slash" aria-hidden="true">/</span><strong>{title}</strong></div>
 }
@@ -175,9 +176,10 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const transcribeOn = transcribeRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
   const transcribeLoading = transcribeRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
   // Chat sits first under Text: it talks to the text model, which can use every other running model.
+  const hostedChat = hostedRuntimes(state.providers)
   const chatRuntimes = runtimes.filter((runtime) => runtime.chat)
-  const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? chatRuntimes[0]
-  const chatState = state.models?.find((item) => item.id === chatRuntime?.id)?.state
+  const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? hostedChat[0] ?? chatRuntimes[0]
+  const chatState = hostedChat.some((runtime) => runtime.id === chatRuntime?.id) ? 'ready' : state.models?.find((item) => item.id === chatRuntime?.id)?.state
     // The tools that serve several models (or one tool, like meeting notes) sit directly in the sidebar, alphabetical:
   // Chat, Decision, Images, Music, Speech, Transcribe, Video. Workflows (Meeting notes) follow a rule below them. Only generators with their own page are grouped by what they make.
   const toolEntries = [
@@ -197,8 +199,8 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
       title={musicOn ? 'Music: a model is running' : 'Music'} badge={<NavState state={musicOn ? 'ready' : musicLoading ? 'loading' : undefined} />} /> }] : []),
     ...(videoRuntimes.length > 0 ? [{ label: 'Video', node: <NavLink key="video" route={{ page: 'video', hostId: host.id }} current={current} icon={<WorkloadIcon workload="video" />} label="Video"
       title={videoOn ? 'Video: a model is running' : 'Video'} badge={<NavState state={videoOn ? 'ready' : videoLoading ? 'loading' : undefined} />} /> }] : []),
-    ...(transcribeRuntimes.length > 0 ? [{ label: 'Transcribe', node: <NavLink key="transcribe" route={{ page: 'transcribe', hostId: host.id }} current={current} icon={<WorkloadIcon workload="transcription" />} label="Transcribe"
-      title={transcribeOn ? 'Transcribe: a model is running' : 'Transcribe'} badge={<NavState state={transcribeOn ? 'ready' : transcribeLoading ? 'loading' : undefined} />} /> }] : []),
+    ...(transcribeRuntimes.length > 0 ? [{ label: 'Transcription', node: <NavLink key="transcribe" route={{ page: 'transcribe', hostId: host.id }} current={current} icon={<WorkloadIcon workload="transcription" />} label="Transcription"
+      title={transcribeOn ? 'Transcription: a model is running' : 'Transcription'} badge={<NavState state={transcribeOn ? 'ready' : transcribeLoading ? 'loading' : undefined} />} /> }] : []),
     ...(speechRuntimes.length > 0 ? [{ label: 'Speech', node: <NavLink key="speech" route={{ page: 'speech', hostId: host.id }} current={current} icon={<WorkloadIcon workload="speech" />} label="Speech"
       title={speechOn ? 'Speech: a model is running' : 'Speech'} badge={<NavState state={speechOn ? 'ready' : speechLoading ? 'loading' : undefined} />} /> }] : []),
   ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))

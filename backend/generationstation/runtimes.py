@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from .plugins import get_plugin, plugin_kinds
 from .plugins.base import GIB, BasePreset, BaseRuntime, RuntimePlugin, RuntimeQuality
+from .providers import PROVIDER_ID, ProviderConfig
 
 __all__ = [
     "GIB",
@@ -48,6 +49,7 @@ class ReferenceModel(BaseModel):
 class Catalog:
     runtimes: dict[str, BaseRuntime] = field(default_factory=dict)
     references: list[ReferenceModel] = field(default_factory=list)
+    providers: dict[str, ProviderConfig] = field(default_factory=dict)  # hosted chat models, optional (providers.py)
 
     def plugin(self, model_id: str) -> RuntimePlugin:
         return get_plugin(self.runtimes[model_id].kind)
@@ -64,8 +66,8 @@ class SettingsError(ValueError):
 
 
 def parse_catalog(data) -> Catalog:
-    if not isinstance(data, dict) or set(data) - {"runtimes", "references"} or not isinstance(data.get("runtimes", {}), dict):
-        raise CatalogError('The runtime catalog must be {"runtimes": {...}} with an optional "references" list.')
+    if not isinstance(data, dict) or set(data) - {"runtimes", "references", "providers"} or not isinstance(data.get("runtimes", {}), dict):
+        raise CatalogError('The runtime catalog must be {"runtimes": {...}} with optional "references" and "providers".')
     runtimes = {}
     for model_id, raw in data.get("runtimes", {}).items():
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", model_id):
@@ -85,7 +87,15 @@ def parse_catalog(data) -> Catalog:
         references = [ReferenceModel.model_validate(raw) for raw in data.get("references") or []]
     except (ValidationError, TypeError) as exc:
         raise CatalogError(f"References: {exc}") from exc
-    return Catalog(runtimes, references)
+    providers = {}
+    for provider_id, raw in (data.get("providers") or {}).items():
+        if not PROVIDER_ID.fullmatch(provider_id):
+            raise CatalogError(f"Invalid provider id {provider_id!r}: use lower-case letters, digits, - and _.")
+        try:
+            providers[provider_id] = ProviderConfig.model_validate(raw)
+        except ValidationError as exc:
+            raise CatalogError(f"Provider {provider_id!r}: {exc}") from exc
+    return Catalog(runtimes, references, providers)
 
 
 def load_catalog(path: Path | None) -> Catalog:
