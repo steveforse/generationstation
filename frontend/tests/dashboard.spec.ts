@@ -157,6 +157,37 @@ function imageRuntimeFixtures() {
   ]
 }
 
+/** The three song models: YuE2 (no length, no tempo), ACE-Step (three tabs, tempo, a song to start from) and MiniMax Music 3 (a length and steps). */
+function musicRuntimeFixtures() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const style = field('style', 'Style', 'text', { required: true, max_length: 400 })
+  const lyrics = field('lyrics', 'Lyrics', 'textarea', { max_length: 4000 })
+  const seed = field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })
+  const source = field('source', 'Song', 'files', { required: true, accept: ['audio'], max_count: 1 })
+  const base = (id: string, name: string, use: string, port: number) => ({
+    id, kind: id, plugin: name, name, description: 'Makes songs.', workload: 'music', port, default_preset: 'mlx', last_launch: { preset: 'mlx', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use, weights: use === 'work' ? 'MIT' : 'Non-commercial', note: 'Fixture.' },
+    presets: { mlx: { name, gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 14, gpu_min_free_gib: {} }, settings: [] } },
+  })
+  const yue = { ...songRuntimeFixture(), license: { use: 'personal', weights: 'CC BY-NC', note: 'Fixture.' } }
+  const aceModes = [
+    { key: 'song', label: 'New song', help: 'Make a song from a style and lyrics.', inputs: [style, lyrics, field('length', 'Length', 'choice', { options: ['60', '30', '120'], default: '60' }), field('tempo', 'Tempo (BPM)', 'int', { minimum: 30, maximum: 300 }), seed] },
+    { key: 'cover', label: 'New version of a song', help: 'Make a new version of a song.', inputs: [source, style, lyrics, field('strength', 'How closely it follows the song', 'int', { minimum: 5, maximum: 100 }), field('tempo', 'Tempo (BPM)', 'int', { minimum: 30, maximum: 300 }), seed] },
+    { key: 'repaint', label: 'Redo a section', help: 'Replace one part of a song.', inputs: [source, field('start', 'From (seconds)', 'int', { minimum: 0, maximum: 600, default: 0 }), field('end', 'To (seconds)', 'int', { minimum: 1, maximum: 600 }), style, lyrics, seed] },
+  ].map((mode) => ({ ...mode, output_kind: 'audio' }))
+  const ace = { ...base('ace_step', 'ACE-Step', 'work', 8171), generation: { output_kind: 'audio', inputs: [], modes: aceModes, timings: [], make_label: null, result_noun: null,
+    music: { guidance: 'ACE-Step: describe the genre, mood and tempo; it can also redo a section.', create: 'song', cover: 'cover', repaint: 'repaint', roles: {
+      song: { style: 'style', lyrics: 'lyrics', length: 'length', tempo: 'tempo', seed: 'seed' },
+      cover: { style: 'style', lyrics: 'lyrics', tempo: 'tempo', seed: 'seed', source: 'source', strength: 'strength' },
+      repaint: { style: 'style', lyrics: 'lyrics', seed: 'seed', source: 'source', start: 'start', end: 'end' } } } } }
+  const minimax = { ...base('minimax_music', 'MiniMax Music 3', 'work', 8172), generation: { output_kind: 'audio', modes: [], timings: [], make_label: null, result_noun: null,
+    inputs: [style, lyrics, field('length', 'Length', 'choice', { options: ['30', '60', '120', '180'], default: '60' }), field('steps', 'Steps', 'int', { minimum: 1, maximum: 30, advanced: true }), seed],
+    music: { guidance: 'MiniMax: the length is a maximum.', create: '', cover: null, repaint: null, roles: { '': { style: 'style', lyrics: 'lyrics', length: 'length', steps: 'steps', seed: 'seed' } } } } }
+  return [yue, ace, minimax]
+}
+
 /** The H3 video fixture with the capability its picture tab gives it on the Images page. */
 function videoWithPicturesFixture() {
   const base = videoRuntimeFixture()
@@ -194,10 +225,12 @@ function songRuntimeFixture() {
     presets: { songs: { name: 'YuE2 3B', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 24, gpu_min_free_gib: { 0: 14, 1: 14 } }, settings: [] } },
     generation: { output_kind: 'audio', inputs: [
       field('style', 'Style', 'text', { required: true, max_length: 400, placeholder: 'Upbeat indie pop' }),
-      field('lyrics', 'Lyrics', 'textarea', { required: true, max_length: 8000 }),
+      field('lyrics', 'Lyrics', 'textarea', { max_length: 8000 }),
       field('mode', 'Melody planning', 'choice', { options: ['full', 'melody', 'off'], default: 'full', advanced: true }),
       field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true }),
-    ], timings: [{ seconds: 41, first_seconds: null, when: {}, preset: null, gpu: null, note: 'for a verse and chorus' }] },
+    ], timings: [{ seconds: 41, first_seconds: null, when: {}, preset: null, gpu: null, note: 'for a verse and chorus' }],
+    music: { guidance: 'Describe the genre, mood, instruments and voice, and write the lyrics under tags. The song is as long as the lyrics.', create: '', cover: null, repaint: null,
+      roles: { '': { style: 'style', lyrics: 'lyrics', seed: 'seed' } } } },
   }
 }
 
@@ -228,7 +261,7 @@ function decideRuntimeFixture(pictures = true) {
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; speech2?: boolean; images?: boolean; h3images?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; music?: boolean; songState?: string; videos?: boolean; speech?: boolean; speech2?: boolean; images?: boolean; h3images?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -238,7 +271,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [options.h3images ? videoWithPicturesFixture() : videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.images ? imageRuntimeFixtures() : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.music ? musicRuntimeFixtures() : []), ...(options.videos ? [options.h3images ? videoWithPicturesFixture() : videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.images ? imageRuntimeFixtures() : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
   if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
   await page.route('**/api/runtimes/*/connection', (route) => route.fulfill({ json: { bind: '127.0.0.1', port: 8000, model: route.request().url().includes('/inkling2/') ? 'inkling-2-mini' : null } }))
@@ -257,6 +290,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
     } })
   })
   if (options.videos) models.push({ id: 'minimax_h3', name: 'MiniMax H3 videos', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.music) for (const [id, name] of [['yue2', 'YuE2 songs'], ['ace_step', 'ACE-Step'], ['minimax_music', 'MiniMax Music 3']]) models.push({ id, name, workload: 'music', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.images) for (const [id, name] of [['qwen_img', 'Qwen Image'], ['z_img', 'Z-Image Turbo']]) models.push({ id, name, workload: 'image', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.speech2) models.push({ id: 'styled', name: 'Styled speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.speech) models.push({ id: 'omnivoice', name: 'OmniVoice speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
@@ -761,7 +795,7 @@ test('makes a song, keeps it in the sidebar with how it was made, reuses its set
   await openCard(page, 'YuE2 songs')
   await expect(page.getByRole('radio', { name: 'Second GPU' })).toBeChecked()
   await page.getByRole('link', { name: 'Open YuE2 songs' }).click()
-  await expect(page).toHaveURL(/#\/hosts\/local\/services\/yue2$/)
+  await expect(page).toHaveURL(/#\/hosts\/local\/music$/)
   await expect(page.getByText('Running', { exact: true })).toBeVisible()
   await expect(page.getByRole('radio')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0)
@@ -1010,9 +1044,9 @@ test('keeps a stopped song service free of load controls and points to the Model
 test('leaves a model\'s error out of the sidebar', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { songs: true, songState: 'error' })
   await go(page, '#/hosts/local/overview')
-  const link = page.getByRole('navigation').getByRole('link', { name: 'YuE2 songs' })
+  const link = page.getByRole('navigation').getByRole('link', { name: /^Music/ })
   await expect(link).toBeVisible()
-  await expect(link).toHaveAttribute('title', 'YuE2 songs')
+  await expect(link).toHaveAttribute('title', 'Music')
   await expect(link.getByText('Error')).toHaveCount(0)
 })
 
@@ -1059,8 +1093,9 @@ test('groups the sidebar by what each model makes, with running shown in words',
   await go(page, '#/hosts/local/speech')
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
   const groups = nav.getByRole('group')
-  await expect(groups).toHaveCount(2)  // Speech is a tool in the sidebar itself, not a section
-  expect(await groups.evaluateAll((items) => items.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')!)?.textContent))).toEqual(['Video', 'Music'])
+  await expect(groups).toHaveCount(1)  // Music and Speech are tools in the sidebar itself, not sections
+  expect(await groups.evaluateAll((items) => items.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')!)?.textContent))).toEqual(['Video'])
+  await expect(nav.getByRole('link', { name: /^Music/ })).toContainText('On')
   await expect(nav.getByRole('link', { name: /^Speech/ })).toHaveAttribute('aria-current', 'page')
   await expect(nav.getByRole('link', { name: /^Speech/ })).toContainText('On')
   await page.screenshot({ path: 'test-results/screenshots/sidebar-groups.png', fullPage: true })
@@ -1095,7 +1130,7 @@ test.describe('on a phone', () => {
 
     await menu.click()
     await expect(menu).toHaveAttribute('aria-expanded', 'true')
-    await expect(nav.getByRole('link', { name: /YuE2 songs/ })).toBeVisible()
+    await expect(nav.getByRole('link', { name: /^Music/ })).toBeVisible()
     await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('#sidebar'))).toBe(true)
     await expect.poll(() => page.locator('#sidebar').evaluate((element) => element.getBoundingClientRect().left)).toBe(0)  // slid fully in
     await page.screenshot({ path: 'test-results/screenshots/phone-drawer.png' })
@@ -1959,6 +1994,74 @@ test('Images is one entry in the sidebar and one page over the running picture m
   await picker.selectOption('qwen_img')
   await expect(page.getByLabel(/^avoid/i)).toHaveValue('blurry')
   await page.screenshot({ path: 'test-results/screenshots/images.png', fullPage: true })
+})
+
+test('Music is one entry in the sidebar and one page over the running song models; the style and lyrics carry over', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { music: true })
+  await go(page, '#/hosts/local/music')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav.getByRole('link', { name: /^Music/ })).toHaveCount(1)
+  await expect(nav.getByRole('link', { name: /^ACE-Step/ })).toHaveCount(0)  // not a sidebar entry of its own
+  await expect(nav.getByRole('group')).toHaveCount(0)  // no Music section any more
+  await expect(page.getByRole('heading', { name: 'Music', level: 1 })).toBeVisible()
+  const picker = page.getByLabel('Model composing')
+  await expect(picker.locator('option')).toHaveText(['YuE2 songs (Personal use only)', 'ACE-Step (Work use)', 'MiniMax Music 3 (Work use)'])
+  // YuE2: the song is as long as the lyrics, so there is no length, and lyrics are optional.
+  await expect(page.getByLabel(/^length/i)).toHaveCount(0)
+  await expect(page.getByRole('form', { name: 'Make a song' }).getByRole('button', { name: 'Make a song' })).toBeDisabled()
+  await page.getByRole('textbox', { name: /^style/i }).fill('Dream pop')
+  await expect(page.getByRole('form', { name: 'Make a song' }).getByRole('button', { name: 'Make a song' })).toBeEnabled()
+  // The part tags are inserted into the lyrics where the cursor is.
+  await page.getByRole('textbox', { name: /^lyrics/i }).fill('Sunlight on the floor')
+  await page.getByRole('textbox', { name: /^lyrics/i }).evaluate((element: HTMLTextAreaElement) => { element.focus(); element.setSelectionRange(0, 0) })
+  await page.getByRole('button', { name: '[Chorus]' }).click()
+  await expect(page.getByRole('textbox', { name: /^lyrics/i })).toHaveValue('[Chorus]\nSunlight on the floor')
+  await picker.selectOption('ace_step')
+  await expect(page.getByRole('textbox', { name: /^style/i })).toHaveValue('Dream pop')
+  await expect(page.getByRole('textbox', { name: /^lyrics/i })).toHaveValue('[Chorus]\nSunlight on the floor')
+  await expect(page.getByLabel(/^length/i)).toHaveValue('60')
+  await page.getByRole('spinbutton', { name: /^tempo/i }).fill('90')
+  await picker.selectOption('minimax_music')
+  await expect(page.getByRole('textbox', { name: /^style/i })).toHaveValue('Dream pop')
+  await expect(page.getByRole('spinbutton', { name: /^tempo/i })).toHaveCount(0)
+  await expect(page.getByText('has no place for the tempo')).toBeVisible()
+  await picker.selectOption('ace_step')
+  await expect(page.getByRole('spinbutton', { name: /^tempo/i })).toHaveValue('90')
+  await page.screenshot({ path: 'test-results/screenshots/music.png', fullPage: true })
+})
+
+test('ACE-Step makes a new version of a song or redoes a section of it, starting from a song made here', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { music: true })
+  // A song made earlier on this model.
+  api.jobs.unshift({ id: 'job-00000042', model_id: 'ace_step', inputs: { mode: 'song', style: 'Warm folk', length: '60' }, status: 'done', progress: 'Done', outputs: [{ name: 'song.wav', mime: 'audio/wav', bytes: 44 }],
+    error_message: null, created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:01:00Z', details: { seed: 7, audio_seconds: 60, seconds: 20 }, launch: { preset: 'mlx', settings: {}, gpus: [0] }, ticks: 9 })
+  await page.reload()
+  await go(page, '#/hosts/local/music')
+  await expect.poll(() => pushFrame(page, fixtureHost())).toBe(true)  // the page has reloaded: a measurement makes the connection live
+  await page.getByLabel('Model composing').selectOption('ace_step')
+  await expect(page.getByRole('tab', { name: 'New song' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'New version of a song' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Redo a section' })).toBeVisible()
+  const rail = page.getByRole('complementary', { name: 'Your songs' })
+  const item = rail.getByRole('button', { name: /^Warm folk/ })
+  await item.click()
+  const modal = page.getByRole('dialog', { name: 'Warm folk' })
+  await modal.getByRole('button', { name: 'Use as source song' }).click()
+  // The song is now the form's song, on the tab for a new version.
+  await expect(page.getByRole('tab', { name: 'New version of a song' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText(/-song\.wav$/).first()).toBeVisible()
+  await page.getByRole('textbox', { name: /^style/i }).fill('Slow jazz')
+  await page.getByRole('spinbutton', { name: /^how closely/i }).fill('30')
+  await page.getByRole('button', { name: 'Make a song' }).click()
+  await expect.poll(() => (api.jobBody?.inputs as Record<string, unknown>)?.mode).toBe('cover')
+  expect(api.jobBody).toMatchObject({ inputs: { mode: 'cover', style: 'Slow jazz', strength: 30 } })
+  expect(((api.jobBody?.inputs as Record<string, unknown>).source as string[]).length).toBe(1)
+  await page.getByRole('tab', { name: 'Redo a section' }).click()
+  await expect(page.locator('[role=tabpanel]:not([hidden])').getByText(/-song\.wav$/).first()).toBeVisible()  // the same song is on the other tab
+  await expect(page.getByRole('spinbutton', { name: /^from/i })).toBeVisible()
+  // A model that cannot start from a song says so and keeps it for the way back.
+  await page.getByLabel('Model composing').selectOption('minimax_music')
+  await expect(page.getByText('has no place for the song to start from')).toBeVisible()
 })
 
 test('a video model with a picture tab shows it on Images and keeps its clip tabs on its own page', async ({ page }) => {

@@ -96,7 +96,10 @@ export function useConsolidated(store: HostStore, host: SavedHost | undefined, m
   }
 
   // Where the form opens: on the tab in use, with the draft's values (a model with no tabs gets its values here too).
-  const start: FormStart = { ...(starts[form.mode ?? mode] ?? {}), mode: form.mode || undefined }
+  // (A tab the new model does not have is the old model's, left over until the rebuild: open on this model's own first tab, so the form
+  // does not start blank and report its blank fields over the draft.)
+  const openTab = form.mode !== undefined && member?.modes.includes(form.mode) ? form.mode : mode
+  const start: FormStart = { ...(starts[openTab] ?? {}), mode: openTab || undefined }
 
   return { start, state, runtimes, running, chosen, chosenId, member, mode, draft, draftRef, update, form, hooks, setPickedId, rebuild, reuseElsewhere }
 }

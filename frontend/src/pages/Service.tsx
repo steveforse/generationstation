@@ -161,6 +161,8 @@ export type Group = {
   reuseElsewhere?: (job: Job) => void
   /** A voice was added to the library from a result. */
   onVoiceSaved?: () => void
+  /** A finished song was chosen as the song to start from (set only while the chosen model can). */
+  useSong?: (file: FileItem) => void
 }
 
 /** Generation: the plugin's form and the results. Starting and stopping happen on the Models page. */
@@ -228,6 +230,16 @@ export function ServicePage({ store, host, modelId, group }: { store: HostStore;
         onCancel={(job) => session.cancelJob(job)}
         onEditTranscript={(job, edit) => session.editTranscript(job, edit)}
         onEditNotes={(job, edit) => session.editNotes(job, edit)}
+        onUseSong={group?.useSong ? async (job, url) => {
+          try {
+            const blob = await (await fetch(url)).blob()
+            const name = `${job.id.slice(0, 8)}-song${blob.type.includes('flac') ? '.flac' : blob.type.includes('wav') ? '.wav' : '.mp3'}`
+            const record = await session.uploadFile(new File([blob], name, { type: blob.type }))
+            group.useSong?.({ key: `song-${job.id}-${record.id}`, name, kind: 'audio', url: URL.createObjectURL(blob), status: 'ready', id: record.id })
+            setSelectedId(null); window.scrollTo({ top: 0, behavior: 'smooth' })
+            return ''
+          } catch (reason) { return reason instanceof Error ? reason.message : 'The song could not be used.' }
+        } : undefined}
         onSaveVoice={state.runtimes?.some((item) => item.generation?.speech?.voices.clone) ? async (job, url, name, text) => {
           try {
             const wav = await soundtrackToWav(await (await fetch(url)).blob())

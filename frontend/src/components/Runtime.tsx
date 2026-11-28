@@ -614,7 +614,7 @@ function SaveVoiceForm({ initialText, onSave, onCancel }: { initialText: string;
   </form>
 }
 
-export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, onEditNotes, onSaveVoice }: {
+export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, onEditNotes, onSaveVoice, onUseSong }: {
   job: Job; runtime: Runtime; generation: Generation; fileUrl: GenerateHandlers['fileUrl']; inputUrl: GenerateHandlers['inputUrl']
   onReuse: (job: Job) => void | Promise<void>; onDelete: (job: Job) => Promise<string>; onCancel: (job: Job) => Promise<string>
   /** Save corrections to a transcript; returns an error message or ''. Only meeting results offer it. */
@@ -623,6 +623,8 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
   onEditNotes?: (job: Job, edit: NotesEditRequest) => Promise<string>
   /** Keep a finished clip's or recording's sound in the voice library under a name, with the words it says; returns an error message or ''. */
   onSaveVoice?: (job: Job, url: string, name: string, text: string) => Promise<string>
+  /** Put a finished song on the form as the song to start from; returns an error message or ''. Only the Music page offers it. */
+  onUseSong?: (job: Job, url: string) => Promise<string>
 }) {
   const [savingVoice, setSavingVoice] = useState(false)
   const [urls, setUrls] = useState<Record<string, string>>({})
@@ -727,6 +729,9 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
       {job.status === 'done' && onSaveVoice && media.filter((output) => output.mime.startsWith('video/') || output.mime.startsWith('audio/')).slice(0, 1).map((output) =>
         <button key={output.name} type="button" className="button button-secondary" disabled={!urls[output.name]} aria-expanded={savingVoice}
           title="Keep the sound of this result as a voice that speech models can speak in" onClick={() => setSavingVoice((open) => !open)}><MessageCircleMore size={16} />Save as voice</button>)}
+      {job.status === 'done' && onUseSong && media.filter((output) => output.mime.startsWith('audio/')).slice(0, 1).map((output) =>
+        <button key={`use-${output.name}`} type="button" className="button button-secondary" disabled={!urls[output.name]}
+          title="Start a new version of this song, or redo a part of it" onClick={async () => { setError(await onUseSong(job, urls[output.name])) }}><Music size={16} />Use as source song</button>)}
       {groups.map((group) => <DownloadMenu key={group.label} label={group.label} items={group.items} />)}
       {[...media, ...others].filter((output) => !grouped.has(output.name)).map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={16} />{output.name}</a>)}
       {active(job) && <button type="button" className="button button-secondary job-delete" disabled={deleting || job.progress === 'Cancelling'}
