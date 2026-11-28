@@ -1,9 +1,13 @@
 """Picture worker for Apple silicon, through mflux (MLX). Runs in the mflux environment.
 
 The model is loaded once, when the worker starts, and stays in memory: a picture then costs only its painting time (Z-Image
-Turbo at 1344x768: about 12 s, against about 28 s when each picture started its own mflux process). All MLX work runs on one
-thread, because MLX's GPU stream belongs to the thread that made it. The commands' own argument parsers and helpers are used,
-so defaults, validation and each model family's scheduler are mflux's; a cancel stops the picture at the next step.
+Turbo at 1344x768: about 12 s, against about 28 s when each picture started its own mflux process). To keep the memory down,
+the large text encoder is not kept between pictures: once a picture's description has been encoded the encoder is swapped for
+a fresh one whose weights are not read until the next picture needs them (mflux's `--low-ram` frees the same part, but also
+reloads the transformer every time), and the picture is decoded in tiles with a small MLX cache. Qwen Image 2.1 Turbo then
+holds 7.6 GiB and peaks at 12.6 GiB instead of 15.6 and 28.5. All MLX work runs on one thread, because MLX's GPU stream
+belongs to the thread that made it. The commands' own argument parsers and helpers are used, so defaults, validation and each
+model family's scheduler are mflux's; a cancel stops the picture at the next step.
 
 Config options (from runtimes.json, per preset):
     model_dir    An mflux model folder (a community conversion, or one made with `mflux-save`).
@@ -18,6 +22,7 @@ Inputs: prompt, size ("square" | "portrait" | "landscape" | "wide" | "custom" wi
     the preset's), negative_prompt, seed. `quality` is ignored: a preset is one quality.
 """
 import copy
+import gc
 import random
 import sys
 import time
@@ -50,6 +55,21 @@ class _Painting:
             self.job.report(f"Painting, step {t + 1} of {config.num_inference_steps}")
 
 
+class _TextEncoderRelease:
+    """An mflux callback: once the description has been encoded, the text encoder's memory is given back (the encoder is replaced by
+    a fresh one whose weights are read from disk when the next picture's description needs them)."""
+
+    def __init__(self, model, options, fresh):
+        self.model, self.options, self.fresh = model, options, fresh
+
+    def call_before_loop(self, **kwargs):
+        import mlx.core as mx
+        self.model.text_encoder = None
+        gc.collect()
+        mx.clear_cache()
+        self.fresh(self.model, self.options)
+
+
 def _parse(parser, argv):
     """mflux's parser reads sys.argv, so each picture's arguments are put there for the parse (only the MLX thread calls this)."""
     saved = sys.argv
@@ -76,7 +96,8 @@ def _family(options):
 
 
 def _modules(family):
-    """(parser module, how to build the model from parsed args, how to paint one picture from them)."""
+    """(parser module, how to build the model from parsed args, how to paint one picture from them, how to give the model a
+    fresh text encoder whose weights are not read yet)."""
     from mflux.cli.parser.parsers import lora_init_kwargs_from_args
     from mflux.models.common.compute_precision import ComputePrecision
     from mflux.utils.dimension_resolver import DimensionResolver
@@ -85,7 +106,17 @@ def _modules(family):
     if family == "zimage":
         from mflux.models.z_image.cli import z_image_turbo_generate as cli
 
-        return cli, cli.ZImageTurboCommand.load, lambda model, args, seed, prompt: cli.ZImageTurboCommand.generate(model, args, seed, prompt)
+        from mflux.models.common.weights.loading.weight_applier import WeightApplier
+        from mflux.models.z_image.model.z_image_text_encoder.text_encoder import TextEncoder
+        from mflux.models.z_image.weights.z_image_weight_definition import ZImageWeightDefinition
+        from mflux.models.z_image.z_image_initializer import ZImageInitializer
+
+        def fresh(model, options):
+            model.text_encoder = TextEncoder()
+            WeightApplier.apply_and_quantize(weights=ZImageInitializer._load_weights(str(options["model_dir"])), quantize_arg=None,
+                                             weight_definition=ZImageWeightDefinition, models={"text_encoder": model.text_encoder})
+
+        return cli, cli.ZImageTurboCommand.load, lambda model, args, seed, prompt: cli.ZImageTurboCommand.generate(model, args, seed, prompt), fresh
     if family == "qwen":
         from mflux.models.qwen.cli import qwen_image_generate as cli
 
@@ -94,11 +125,35 @@ def _modules(family):
             run.width, run.height = DimensionResolver.resolve(width=args.width, height=args.height, reference_image_path=args.image_path)
             return cli.QwenImageCommand.generate(model, run, seed, prompt)
 
-        return cli, cli.QwenImageCommand.load, paint
+        from mflux.models.common.weights.loading.weight_applier import WeightApplier
+        from mflux.models.qwen.model.qwen_text_encoder.qwen_text_encoder import QwenTextEncoder
+        from mflux.models.qwen.qwen_initializer import QwenImageInitializer
+        from mflux.models.qwen.weights.qwen_weight_definition import QwenWeightDefinition
+
+        def fresh(model, options):
+            model.text_encoder = QwenTextEncoder()
+            WeightApplier.apply_and_quantize(weights=QwenImageInitializer._load_weights(str(options["model_dir"])), quantize_arg=None,
+                                             weight_definition=QwenWeightDefinition, models={"text_encoder": model.text_encoder})
+
+        return cli, cli.QwenImageCommand.load, paint, fresh
 
     from mflux.models.common.resolution.config_resolution import ConfigResolution
-    from mflux.models.qwen21.variants.txt2img.qwen_image_21 import QwenImage21
     from mflux.models.qwen21.cli import qwen21_generate as cli
+    from mflux.models.qwen21.model.qwen21_text_encoder.qwen21_text_encoder import Qwen21TextEncoder
+    from mflux.models.qwen21.qwen21_initializer import Qwen21Initializer
+    from mflux.models.qwen21.variants.txt2img.qwen_image_21 import QwenImage21
+    from mflux.models.qwen21.weights.qwen21_weight_definition import Qwen21WeightDefinition
+
+    class OnlyTextEncoder(Qwen21WeightDefinition):
+        @staticmethod
+        def get_components():
+            return [component for component in Qwen21WeightDefinition.get_components() if component.name == "text_encoder"]
+
+    def fresh(model, options):
+        bits = model.bits
+        model.text_encoder = Qwen21TextEncoder()
+        Qwen21Initializer.load_components(model, Path(options["model_dir"]), OnlyTextEncoder, None)
+        model.bits = bits  # load_components resets it
 
     def load(args):
         config = ConfigResolution.resolve_restricted(args.model, cli.DEFAULT_MODEL, model_path=args.model_path, base_model=args.base_model, extra_keys=cli.FAMILY_MODELS)
@@ -112,7 +167,7 @@ def _modules(family):
                                     guidance=args.guidance if args.guidance is not None else 1.0, scheduler=args.scheduler, image_path=args.image_path,
                                     num_inference_steps=args.steps, image_strength=args.image_strength, step_cache_ratio=args.step_cache_ratio)
 
-    return cli, load, paint
+    return cli, load, paint, fresh
 
 
 def load(config):
@@ -125,11 +180,17 @@ def load(config):
     painting = _Painting()
 
     def build():
-        cli, load_model, paint = _modules(family)
+        cli, load_model, paint, fresh = _modules(family)
         parser = cli.build_parser()
         first = _parse(parser, [*_base_args(options), "--prompt", "warm up", "--seed", "1", "--steps", "2", "--width", "256", "--height", "256", "--output", "/dev/null"])
         model = load_model(first)
         model.callbacks.register(painting)
+        model.callbacks.register(_TextEncoderRelease(model, options, fresh))
+        # Decode pictures in tiles and keep MLX's buffer cache small: the largest part of a picture's peak after the weights.
+        from mflux.models.common.vae.tiling_config import TilingConfig
+        import mlx.core as mx
+        model.tiling_config = model.tiling_config or TilingConfig()
+        mx.set_cache_limit(1000**3)
         # Weights load lazily; one tiny picture now brings them into memory, so "ready" means loaded and the first real picture is not slow.
         try:
             paint(model, first, 1, "warm up")

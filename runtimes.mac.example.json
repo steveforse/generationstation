@@ -546,7 +546,7 @@
       "presets": {
         "mlx": {
           "name": "Qwen Image 2.1 Turbo (MLX, 8-bit)",
-          "description": "8 steps, one 1344x768 picture in about 20 s. The model stays loaded (about 16 GiB), and a picture peaks near 29 GiB.",
+          "description": "8 steps, one 1344x768 picture in about 17 s. The model stays loaded (about 9 GiB held) and a picture peaks near 13 GiB.",
           "gpus": [
             0
           ],
@@ -559,7 +559,7 @@
           },
           "settings": {},
           "estimate": {
-            "ram_gib": 30,
+            "ram_gib": 14,
             "gpu_min_free_gib": {}
           },
           "quality": {
@@ -573,7 +573,7 @@
         },
         "qwen21": {
           "name": "Qwen Image 2.1 (MLX, 8-bit, best quality)",
-          "description": "The full model behind Turbo: 30 guided steps with a negative prompt, about 100 to 140 s per picture. Stays loaded (about 16 GiB) and peaks near 29 GiB.",
+          "description": "The full model behind Turbo: 30 guided steps with a negative prompt, about 130 s per 1344x768 picture. Stays loaded (about 9 GiB held) and peaks near 16 GiB.",
           "gpus": [
             0
           ],
@@ -588,7 +588,7 @@
           },
           "settings": {},
           "estimate": {
-            "ram_gib": 30,
+            "ram_gib": 18,
             "gpu_min_free_gib": {}
           },
           "quality": {
@@ -956,7 +956,7 @@
       "kind": "qwen_image",
       "name": "Qwen-Image 2512",
       "workload": "image",
-      "description": "Qwen's December 2025 base model (Apache-2.0): 20 guided steps with a negative prompt. Heavy: about 34 GiB stay loaded and a picture peaks near 48 GiB.",
+      "description": "Qwen's December 2025 base model (Apache-2.0): 20 guided steps with a negative prompt. Heavy: about 22 GiB held while loaded and a picture peaks near 35 GiB.",
       "python": "/Users/YOU/ai/envs/mflux/bin/python",
       "output_dir": "/Users/YOU/ai/outputs/qwen-image-2512",
       "port": 8181,
@@ -967,7 +967,7 @@
       "presets": {
         "qwen2512": {
           "name": "Qwen-Image 2512 (MLX, 8-bit; heavy)",
-          "description": "Qwen's December 2025 base model, Apache-2.0: 20 steps with a negative prompt, about 8 s per step. Heavy: about 34 GiB stay loaded and a picture peaks near 48 GiB, so only start it with the other models stopped.",
+          "description": "Qwen's December 2025 base model, Apache-2.0: 20 steps with a negative prompt, about 8 s per step. Heavy: about 22 GiB held while loaded and a picture peaks near 35 GiB, so only start it with the other large models stopped.",
           "gpus": [
             0
           ],
@@ -984,7 +984,7 @@
           },
           "settings": {},
           "estimate": {
-            "ram_gib": 50,
+            "ram_gib": 38,
             "gpu_min_free_gib": {}
           }
         }
@@ -1008,7 +1008,7 @@
       "kind": "qwen_image",
       "name": "Z-Image Turbo",
       "workload": "image",
-      "description": "Tongyi-MAI's 6B distilled picture model (Apache-2.0): 9 steps, about 12 s per picture.",
+      "description": "Tongyi-MAI's 6B distilled picture model (Apache-2.0): 9 steps, about 14 s per picture.",
       "python": "/Users/YOU/ai/envs/mflux/bin/python",
       "output_dir": "/Users/YOU/ai/outputs/z-image",
       "port": 8182,
@@ -1019,7 +1019,7 @@
       "presets": {
         "zimage": {
           "name": "Z-Image Turbo (MLX, 8-bit)",
-          "description": "Tongyi-MAI's 6B distilled model, Apache-2.0. 9 steps, one picture in about 12 s; no negative prompt. Stays loaded (about 4.5 GiB) and peaks near 11.5 GiB.",
+          "description": "Tongyi-MAI's 6B distilled model, Apache-2.0. 9 steps, one picture in about 14 s; no negative prompt. Stays loaded and peaks near 7 GiB.",
           "gpus": [
             0
           ],
@@ -1033,7 +1033,7 @@
           },
           "settings": {},
           "estimate": {
-            "ram_gib": 12,
+            "ram_gib": 9,
             "gpu_min_free_gib": {}
           }
         }

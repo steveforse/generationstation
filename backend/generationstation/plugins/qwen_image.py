@@ -32,12 +32,12 @@ class QwenImagePlugin(WorkerPlugin):
     timings: ClassVar[tuple[TimingSpec, ...]] = (
         TimingSpec(preset="turbo", gpu=0, seconds=2),
         TimingSpec(preset="turbo", gpu=1, seconds=5.5),
-        # Apple silicon (mflux, the model stays loaded), 1344x768 on an M5 Max with other models running: Turbo 19 s, Z-Image 12 s,
-        # Qwen-Image 2512 about 8 s per step (63 s for 8 steps); the full 2.1 took 100 to 140 s.
-        TimingSpec(preset="mlx", gpu=0, seconds=19),
-        TimingSpec(preset="qwen21", gpu=0, seconds=100),
-        TimingSpec(preset="zimage", gpu=0, seconds=12),
-        TimingSpec(preset="qwen2512", gpu=0, seconds=160, note="about 8 s per step; peaks near 48 GiB"),
+        # Apple silicon (mflux, the model stays loaded, the text encoder is released after each description), 1344x768 on an M5 Max
+        # with other models running: Turbo 17 s, Z-Image 14 s, the full 2.1 about 4.3 s per step, Qwen-Image 2512 about 8 s per step.
+        TimingSpec(preset="mlx", gpu=0, seconds=17),
+        TimingSpec(preset="qwen21", gpu=0, seconds=130),
+        TimingSpec(preset="zimage", gpu=0, seconds=14),
+        TimingSpec(preset="qwen2512", gpu=0, seconds=160, note="about 8 s per step; peaks near 35 GiB"),
         TimingSpec(when={"quality": "quick"}, gpu=0, seconds=2),
         TimingSpec(when={"quality": "best"}, gpu=0, seconds=15, first_seconds=20),
         TimingSpec(when={"quality": "quick"}, gpu=1, seconds=3.6),

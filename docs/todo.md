@@ -21,7 +21,7 @@ Things asked for or noticed, newest first within each section. Move an item to D
 
 ## Later / offered
 
-- Picture models now stay loaded (2026-11-27): Z-Image 28 to 12 s, Qwen Turbo about 2x faster, at the cost of 4 to 34 GiB held and higher peaks (estimates raised to 12, 30, 30, 50 GiB). Qwen-Image 2512 now needs almost all of a 64 GB Mac. Not tried: mflux's tiled VAE or cache limits to lower the peaks; the Windows picture worker is unchanged.
+- Picture models stay loaded (2026-11-27), with the text encoder given back after each description and tiled decoding: Z-Image 28 to 14 s, Qwen Turbo 35 to 17 s, peaks 7 to 35 GiB (estimates 9, 14, 18, 38 GiB; nothing held before, now 1.5 to 22 GiB idle). The Windows picture worker is unchanged.
 
 - **Images page** built and tested with fixtures (2026-11-27); check one picture per model on the Mac by eye, and the H3 picture tabs on the Windows desktop. Video and Music consolidations follow the same pattern.
 
