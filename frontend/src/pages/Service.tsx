@@ -91,6 +91,10 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
   const [estimates, setEstimates] = useState<Record<string, RuntimeEstimate | null>>({})
   const [focusId, setFocusId] = useState<string | null>(null)
   const [useFilter, setUseFilter] = useState('')
+  // Local models (started and stopped here) or hosted ones (a gateway); the tabs show only when a provider is set up.
+  const [where, setWhere] = useState<'local' | 'hosted'>('local')
+  const hosted = state.providers.length > 0
+  const showing = hosted ? where : 'local'
   if (!host || !session) return <Missing title="Host not found" text="This host is no longer saved on this device." />
   // The sidebar's order: text models first, then speech, pictures, video and music.
   const allRuntimes = groupByWorkload(state.runtimes ?? [], (runtime) => runtime.workload).flatMap((group) => group.items)
@@ -107,6 +111,14 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state)}</div><h1>Models</h1><p>Start and stop the model servers on {hostName(host, state)}. Each one holds RAM and VRAM while it runs.</p></div></section>
     {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={16} /></a></div>}
     <div className="models-layout"><div className="models-main">
+    {hosted && <div className="mode-tabs models-where" role="tablist" aria-label="Where the models run">
+      {([['local', 'Local'], ['hosted', 'Hosted']] as const).map(([key, label]) => <button key={key} type="button" role="tab" id={`models-tab-${key}`} aria-selected={showing === key} aria-controls={`models-panel-${key}`}
+        className={`mode-tab ${showing === key ? 'mode-tab-on' : ''}`} onClick={() => setWhere(key)}>{label}</button>)}
+    </div>}
+    {showing === 'hosted' && <div role="tabpanel" id="models-panel-hosted" aria-labelledby="models-tab-hosted">
+      {state.providers.map((provider) => <HostedProviderSection key={provider.id} provider={provider} onChoose={(ids) => session.hostedModels(provider.id, ids)} onRefresh={() => session.hostedModels(provider.id, null)} />)}
+    </div>}
+    <div role={hosted ? 'tabpanel' : undefined} id={hosted ? 'models-panel-local' : undefined} aria-labelledby={hosted ? 'models-tab-local' : undefined} hidden={showing !== 'local'}>
     {allRuntimes.some((runtime) => runtime.license) && <div className="models-filter" role="group" aria-label="Show models by licence">
       {USE_FILTERS.map(([key, label]) => <button key={key || 'all'} type="button" className={`button button-small ${useFilter === key ? 'button-primary' : 'button-secondary'}`} aria-pressed={useFilter === key} onClick={() => setUseFilter(key)}>{label}</button>)}
       <span className="models-filter-note">Work use includes models with limits to check. A model with several versions shows under each use its versions allow.</span>
@@ -127,7 +139,7 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
       </section>
       }}
     </ModelGroup>)}
-    {state.providers.map((provider) => <HostedProviderSection key={provider.id} provider={provider} onChoose={(ids) => session.hostedModels(provider.id, ids)} onRefresh={() => session.hostedModels(provider.id, null)} />)}
+    </div>
     </div>
     {!!state.snapshot && state.connection !== 'idle' && <aside className="models-rail"><section className="resource-grid models-resources" aria-label={`${hostName(host, state)} resource usage`}>
       <ResourceCard title="System memory" icon={<MemoryStick size={20} />} iconClass="icon-violet" memory={view.host?.ram} age={view.age} isCurrent error={view.host?.ram_error ?? undefined} kind="RAM" unified={isUnified(view.host)} stale={view.stale} segments={ramSegments(view.host, state.runtimes)} preview={ramPreview} legend />

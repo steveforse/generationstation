@@ -1210,3 +1210,4 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .hosted-models label { display: flex; gap: var(--sp-2); align-items: baseline; padding: 3px 0 }
 .hosted-models code { color: var(--text-3); font-size: var(--fs-meta) }
 .hosted-none { color: var(--text-3) }
+.models-where { margin-bottom: var(--sp-3) }

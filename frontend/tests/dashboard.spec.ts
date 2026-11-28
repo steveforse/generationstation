@@ -2259,7 +2259,10 @@ test('a hosted provider lists its models on the Models page; the ones ticked app
 
   await go(page, '#/hosts/local/models')
   await page.reload()
+  await expect(page.getByRole('tab', { name: 'Local' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: 'Hosted' }).click()
   const section = page.getByRole('region', { name: 'LiteLLM' })
+  await expect(page.getByRole('heading', { name: 'Chat' })).toBeHidden()
   await expect(section).toContainText('0 of 3')
   await expect(section).toContainText('GATEWAY_TOKEN')
   await section.getByRole('checkbox', { name: 'claude-sonnet-5-5' }).click()
