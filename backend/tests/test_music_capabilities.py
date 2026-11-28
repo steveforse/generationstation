@@ -56,3 +56,16 @@ def test_new_versions_and_redone_sections_need_a_song_and_the_old_form_still_wor
         validate_inputs(plugin, {"mode": "cover", "style": "jazz"}, uploads.get, runtime)
     with pytest.raises(Exception, match="tempo"):
         validate_inputs(plugin, {"mode": "repaint", "style": "piano", "source": [song["id"]], "tempo": 90}, uploads.get, runtime)
+
+
+def test_yue2_makes_a_new_version_of_a_song_on_the_mac_only(tmp_path):
+    plugin, runtime = get_plugin("yue2"), MAC.runtimes["yue2"]
+    uploads = UploadStore(tmp_path)
+    song = uploads.save("song.flac", [b"fLaC" + b"0" * 20])
+    sung = validate_inputs(plugin, {"style": "jazz", "lyrics": "[Verse]\nla", "source": [song["id"]]}, uploads.get, runtime)
+    assert sung["source"] == [song["id"]]
+    assert validate_inputs(plugin, {"style": "jazz", "source": [song["id"]]}, uploads.get, runtime)["source"] == [song["id"]]  # no lyrics: an instrumental version
+    with pytest.raises(Exception, match="cannot be off"):
+        validate_inputs(plugin, {"style": "jazz", "lyrics": "[Verse]\nla", "mode": "off", "source": [song["id"]]}, uploads.get, runtime)
+    with pytest.raises(Exception, match="source"):  # the Windows worker has no melody reader
+        validate_inputs(plugin, {"style": "jazz", "lyrics": "[Verse]\nla", "source": [song["id"]]}, uploads.get, WINDOWS.runtimes["yue2"])

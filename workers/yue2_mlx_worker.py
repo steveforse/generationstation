@@ -5,7 +5,10 @@ Config options (from runtimes.json, per preset): model_dir (the converted MLX mo
     memory_budget_gib (default 16): the port stops a song that would exceed it.
 Inputs: style, lyrics, mode ("full", "melody", "off"), seed, and optionally source (a song: [{"path"}]). With a source the song is a
 new version of it: the melody and structure are read from the recording by SheetSage2 and MERT2 (about 2.8 GB, the `transcription`
-extras of mlx-Yue) and sung again with the new style and lyrics; "off" has no score to follow, so it is not allowed then.
+extras of mlx-Yue) and sung again with the new style and lyrics; "off" has no score to follow, so it is not allowed then. With a
+source and no lyrics the new version is an instrumental: the sung melody is moved to the instrument voice (the helpers mlx-Yue's
+`cover --instrumental` uses, `lyra.music_tools.instrumentalize` and `instrumental`, which the upstream repository does not ship;
+see docs/setup-macos.md).
 """
 import gc
 import os
@@ -44,6 +47,27 @@ def generate(model, inputs, job):
     model["thread"].call(lambda: sing(model["pipe"], inputs, job))
 
 
+def instrumental_style(style):
+    """The style asking for no singing, in the words mlx-Yue's own `--instrumental` uses."""
+    if "instrumental" not in style.lower():
+        style = "Instrumental, " + style.lstrip("., ")
+    for cue in ("no vocals", "no singing"):
+        if cue not in style.lower():
+            style = style.rstrip("., ") + f", {cue}"
+    return style.rstrip("., ") + "."
+
+
+def instrumentalize(score):
+    """(score, lyric tags) for an instrumental version: the vocal melody moves to the instrument voice."""
+    try:
+        from lyra.music_tools.instrumental import lyric_tags
+        from lyra.music_tools.instrumentalize import convert_score
+    except ImportError as error:
+        raise RuntimeError("An instrumental version needs mlx-Yue's instrumental helpers, which are not installed (see docs/setup-macos.md).") from error
+    converted, _report = convert_score(score, overlap="vocal", keep_chords=True)
+    return converted, lyric_tags(converted)
+
+
 def read_score(source, planning, job, cancelled):
     """The melody and structure of a recording as ABC notation, ready to be sung again (a new version of the song)."""
     import mlx.core as mx
@@ -70,8 +94,16 @@ def sing(pipe, inputs, job):
     cancelled = lambda: job.cancel_requested  # noqa: E731 - the library raises InterruptedError; serve() reports it as a cancel
     planning = inputs.get("mode") or "full"
     source = (inputs.get("source") or [{}])[0].get("path")
-    score = read_score(source, planning, job, cancelled) if source else None
-    request = SongRequest(style=inputs["style"], lyrics=inputs.get("lyrics") or INSTRUMENTAL, cot=planning,
+    lyrics, style = (inputs.get("lyrics") or "").strip(), inputs["style"]
+    score = None
+    if source:
+        instrumental = not lyrics
+        planning = "melody" if instrumental else planning  # the instrumental conversion works on the melody score
+        score = read_score(source, planning, job, cancelled)
+        if instrumental:
+            score, lyrics = instrumentalize(score)
+            style = instrumental_style(style)
+    request = SongRequest(style=style, lyrics=lyrics or INSTRUMENTAL, cot=planning,
                           seed=seed if isinstance(seed, int) else random.randrange(1, 2**31),
                           cfg_scale=inputs.get("cfg_scale"), abc=score, id="song")
     started = time.perf_counter()
@@ -100,7 +132,7 @@ def sing(pipe, inputs, job):
     if plan.abc:
         job.output("melody.abc", "text/plain").write_text(plan.abc, encoding="utf-8")
     seconds = len(audio) / 48000
-    job.detail(seed=request.seed, mode=request.cot, audio_seconds=round(seconds, 1), **({"from_song": True} if source else {}))
+    job.detail(seed=request.seed, mode=request.cot, audio_seconds=round(seconds, 1), **({"from_song": True, "instrumental": not (inputs.get("lyrics") or "").strip()} if source else {}))
     job.report(f"Done: {seconds:.0f} seconds of music in {time.perf_counter() - started:.0f} s, seed {request.seed}")
 
 

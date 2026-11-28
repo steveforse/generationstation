@@ -56,8 +56,9 @@ class YuE2Plugin(WorkerPlugin):
         "source": InputSpec(
             label="Start from a song", kind="files", accept=("audio",), max_count=1,
             help=("A new version of a song: its melody and structure are read from the recording and sung again with your style and "
-                  "lyrics (the sound of the original is not kept). Pick one made here or add a file. Needs the lyrics to sing; "
-                  "the melody planning below must not be off. Reading a 30 second song and making the new one took about 35 s.")),
+                  "lyrics (the sound of the original is not kept). Pick one made here or add a file. Leave the lyrics empty for an "
+                  "instrumental version, where the melody is played and not sung. The melody planning below must not be off. "
+                  "Reading a 30 second song and making the new one took about 35 s.")),
         "mode": InputSpec(
             label="Melody planning", kind="choice", options=("full", "melody", "off"), default="full",
             help="'full' plans melody and chords first (best). 'off' is faster but less structured.",
@@ -72,7 +73,7 @@ class YuE2Plugin(WorkerPlugin):
         guidance=("Describe the genre, mood, instruments and voice in the style box, separated by commas, and write the lyrics under "
                   "[Verse] and [Chorus] tags. The song is as long as the lyrics: more parts, a longer song. Leave the lyrics empty "
                   "for an instrumental (this model sings, so it often still sings something). It can also make a new version of a "
-                  "song: the melody is read from it and sung with your style and lyrics."),
+                  "song: the melody is read from it and sung with your style and lyrics, or played as an instrumental when the lyrics are empty."),
         create="", cover="",
         roles={"": {"style": "style", "lyrics": "lyrics", "seed": "seed", "source": "source"}})
 
@@ -88,9 +89,6 @@ class YuE2Plugin(WorkerPlugin):
         return inputs
 
     def check_inputs(self, mode, values, files):
-        if files.get("source"):
-            if values.get("mode") == "off":
-                return ["A new version of a song follows its melody, so the melody planning cannot be off."]
-            if not values.get("lyrics"):
-                return ["A new version of a song needs lyrics to sing."]
+        if files.get("source") and values.get("mode") == "off":
+            return ["A new version of a song follows its melody, so the melody planning cannot be off."]
         return []
