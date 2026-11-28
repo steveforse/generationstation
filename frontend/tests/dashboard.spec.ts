@@ -56,6 +56,7 @@ function videoRuntimeFixture() {
   const common = [field('quality', 'Quality', 'choice', { options: ['quick', 'best'], default: 'quick' }), field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })]
   return {
     id: 'minimax_h3', kind: 'minimax_h3', plugin: 'MiniMax H3', name: 'MiniMax H3 videos', description: 'Makes short video clips.', workload: 'video', port: 8190, default_preset: 'uncensored', last_launch: { preset: 'uncensored', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use: 'personal', weights: 'MiniMax licence' },
     presets: { uncensored: { name: 'MiniMax H3 Uncensored', gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 60, gpu_min_free_gib: { 0: 28 } }, settings: [] } },
     generation: { output_kind: 'video', inputs: [], timings: [{ seconds: 39, first_seconds: 92, when: { mode: 'text', quality: 'quick' }, preset: null, gpu: 0, note: null }], modes: [
       { key: 'text', label: 'From a description', help: 'Write what happens.', inputs: [field('prompt', 'Description', 'textarea', { required: true, max_length: 3000 }),
@@ -70,7 +71,52 @@ function videoRuntimeFixture() {
         field('first_crop', 'First frame framing', 'crop', { target: 'first', shape_field: 'shape' }), ...common] },
       { key: 'picture', label: 'A picture', help: 'H3 paints one still picture.', output_kind: 'image', inputs: [field('prompt', 'Description', 'textarea', { required: true, max_length: 3000 }),
         field('size', 'Size', 'choice', { options: ['2 MP', '4 MP', '8 MP'], default: '4 MP' })] },
-    ] },
+    ], video: { guidance: 'H3: describe the clip and what it sounds like.', sound: 'automatic', create: 'text', picture: 'frames', references: null, extend: null, seconds: {},
+      roles: { text: { prompt: 'prompt', shape: 'shape', quality: 'quality', resolution: 'resolution', seed: 'seed' }, frames: { prompt: 'prompt', shape: 'shape', quality: 'quality', seed: 'seed', first: 'first', last: 'last' } } } },
+  }
+}
+
+/** Two speech-to-text models: Whisper (language, words to expect, who spoke) and Parakeet (just the recording: no language, no word list, no speaker labels). */
+function transcribeFixtures() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const recording = field('recording', 'Recording', 'files', { required: true, accept: ['audio', 'video'], max_count: 1 })
+  const language = field('language', 'Language', 'choice', { options: ['auto', 'English', 'French'], default: 'auto', option_labels: { auto: 'Detect it' } })
+  const terms = field('terms', 'Words to expect', 'textarea', { max_length: 500 })
+  const speakers = field('speakers', 'Who spoke', 'choice', { options: ['no', 'yes'], default: 'no', option_labels: { no: 'Just the words', yes: 'Label the speakers' } })
+  const base = (id: string, name: string, inputs: unknown[], info: Record<string, unknown>, port: number) => ({
+    id, kind: id, plugin: name, name, description: 'Writes down speech.', workload: 'transcription', port, default_preset: 'mlx', last_launch: { preset: 'mlx', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use: 'work', weights: 'MIT', note: 'Fixture.' },
+    presets: { mlx: { name, gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 6, gpu_min_free_gib: {} }, settings: [] } },
+    generation: { output_kind: 'document', inputs, modes: [], timings: [], make_label: 'Transcribe', result_noun: 'transcript', transcribe: info },
+  })
+  return [
+    base('whisper_asr', 'Whisper', [recording, language, terms, speakers], { guidance: 'Whisper: the widest choice of languages.', times: 'lines', speakers: 'turns', checked_minutes: 56,
+      roles: { '': { recording: 'recording', language: 'language', terms: 'terms', speakers: 'speakers' } } }, 8340),
+    base('parakeet_asr', 'Parakeet', [recording], { guidance: 'Parakeet: the fastest.', times: 'lines', speakers: 'none', checked_minutes: 56,
+      roles: { '': { recording: 'recording' } } }, 8350),
+  ]
+}
+
+/** A second video model: LongCat, with a length in seconds, a picture tab and a tab that continues a clip. */
+function longcatFixture() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const length = field('length', 'Length', 'choice', { options: ['very short', 'short', 'medium', 'long'], default: 'short' })
+  const prompt = field('prompt', 'Description', 'textarea', { required: true, max_length: 2000 })
+  const seed = field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })
+  return {
+    id: 'longcat_video', kind: 'longcat_video', plugin: 'LongCat video', name: 'LongCat video', description: 'Makes short silent clips.', workload: 'video', port: 8191, default_preset: 'q8', last_launch: { preset: 'q8', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use: 'work', weights: 'MIT' },
+    presets: { q8: { name: 'LongCat 8-bit', gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 30, gpu_min_free_gib: { 0: 0 } }, settings: [] } },
+    generation: { output_kind: 'video', inputs: [], timings: [], make_label: 'Make a clip', result_noun: 'clip', modes: [
+      { key: 'text', label: 'From a description', help: 'LongCat imagines the clip.', inputs: [prompt, length, seed] },
+      { key: 'image', label: 'From a picture', help: 'The picture is the first frame.', inputs: [field('image', 'First frame', 'files', { required: true, accept: ['image'], max_count: 1 }), prompt, length, seed] },
+      { key: 'continue', label: 'Continue a clip', help: 'Carries on from the clip.', inputs: [field('source', 'Clip to continue', 'files', { required: true, accept: ['video'], max_count: 1 }), prompt, length, seed] },
+    ], video: { guidance: 'LongCat: silent clips; continuations may show artifacts.', sound: 'none', create: 'text', picture: 'image', references: null, extend: 'continue', seconds: { 'very short': 0.6, short: 1.1, medium: 2.2, long: 4.1 },
+      roles: { text: { prompt: 'prompt', length: 'length', seed: 'seed' }, image: { prompt: 'prompt', length: 'length', seed: 'seed', first: 'image' }, continue: { prompt: 'prompt', length: 'length', seed: 'seed', source: 'source' } } } },
   }
 }
 
@@ -80,6 +126,7 @@ function llmRuntimeFixture() {
     key, label, kind, default: value, minimum: null, maximum: null, unit: null, help: `${label} help`, options: null, advanced: false, ...extra,
   })
   return {
+    license: { use: 'work', weights: 'Apache-2.0', code: 'oMLX: Apache-2.0', note: 'Fine for company use.', url: 'https://example.com/license' },
     assistant: true,
     id: 'inkling2', kind: 'llm', plugin: 'Text model', name: 'Inkling 2 Mini', description: 'A small, fast model that reads pictures.', workload: 'text', port: 8161,
     default_preset: 'main', last_launch: null, chat: true, max_gpus: null,
@@ -103,12 +150,94 @@ function speechRuntimeFixture() {
   return {
     id: 'omnivoice', kind: 'omnivoice', plugin: 'OmniVoice', name: 'OmniVoice speech', description: 'Speaks text.', workload: 'speech', port: 8200, default_preset: 'omnivoice', last_launch: { preset: 'omnivoice', settings: {}, gpus: [1] }, max_gpus: 1,
     presets: { omnivoice: { name: 'OmniVoice', gpus: [1], allowed_gpus: [{ index: 1, name: 'Second GPU' }], estimate: { ram_gib: 6, gpu_min_free_gib: { 1: 5 } }, settings: [] } },
-    generation: { output_kind: 'audio', inputs: [], make_label: 'Make speech', result_noun: 'recording', timings: [], modes: [
+    generation: { output_kind: 'audio', inputs: [], make_label: 'Make speech', result_noun: 'recording', timings: [], speech: {
+      voices: { design: 'design', clone: 'clone' }, scene: null,
+      direction: { text: 'Fixture direction text.', examples: [], style_fields: {}, cues: { open: '[', close: ']', kind: 'sounds', open_vocabulary: false, examples: ['[laughter]', '[sigh]'], text: 'Put a sound in square brackets.' } },
+      roles: { design: { text: 'prompt' }, clone: { text: 'prompt', sample: 'sample', sample_text: 'sample_text' } } }, modes: [
       { key: 'design', label: 'Describe a voice', help: 'Choose traits.', inputs: [field('gender', 'Gender', 'choice', { options: ['any', 'female', 'male'], default: 'any' }), text] },
       { key: 'clone', label: 'From a voice sample', help: 'Give a sample.', inputs: [field('sample', 'Voice sample', 'files', { accept: ['audio'], max_count: 1 }),
         field('sample_text', 'What the sample says', 'text', { max_length: 1000 }), text] },
     ] },
   }
+}
+
+/** A second speech model: no cues in the text, a plain-words style field, work use. */
+function styledSpeechFixture() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const base = speechRuntimeFixture()
+  return {
+    ...base, id: 'styled', name: 'Styled speech', plugin: 'Styled', license: { use: 'work', weights: 'Apache-2.0', note: 'Free for company use.' },
+    generation: { ...base.generation, speech: {
+      voices: { design: 'design' }, scene: null,
+      direction: { text: 'Say how it should be spoken under How to say it.', examples: ['Whisper, slowly'], style_fields: { design: 'style' }, cues: null },
+      roles: { design: { text: 'prompt', direction: 'style', voice_description: 'voice' } } },
+      modes: [{ key: 'design', label: 'Describe a voice', help: 'Describe it.', inputs: [field('voice', 'Voice', 'text', { max_length: 300 }), field('style', 'How to say it', 'text', { max_length: 300 }),
+        field('prompt', 'What to say', 'textarea', { required: true, max_length: 5000 })] }] },
+  }
+}
+
+/** Two picture models with no tabs: one takes a negative prompt and a quality choice, the other neither (as on the Mac). */
+function imageRuntimeFixtures() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const prompt = field('prompt', 'Description', 'textarea', { required: true, max_length: 2000 })
+  const size = field('size', 'Shape', 'choice', { options: ['square', 'portrait', 'landscape', 'wide', 'custom', 'match picture'], default: 'square', option_labels: { custom: 'Custom size', 'match picture': 'Match the starting picture' } })
+  const width = field('width', 'Width', 'int', { minimum: 256, maximum: 2048, default: 1024, show_when: { size: 'custom' } })
+  const height = field('height', 'Height', 'int', { minimum: 256, maximum: 2048, default: 1024, show_when: { size: 'custom' } })
+  const start = field('picture', 'Start from a picture', 'files', { accept: ['image'], max_count: 1 })
+  const seed = field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })
+  const make = (id: string, name: string, use: string, inputs: Record<string, unknown>[], roles: Record<string, string>) => ({
+    id, kind: 'qwen_image', plugin: 'Qwen Image', name, description: 'Makes pictures.', workload: 'image', port: 8300 + (id === 'qwen_img' ? 0 : 1), default_preset: 'main', last_launch: { preset: 'main', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use, weights: use === 'work' ? 'Apache-2.0' : 'Research only', note: 'Fixture.' },
+    presets: { main: { name, gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 10, gpu_min_free_gib: {} }, settings: [] } },
+    generation: { output_kind: 'image', inputs, modes: [], make_label: 'Make a picture', result_noun: 'picture', timings: [],
+      image: { guidance: `${name}: describe the subject and the light.`, create: '', edit: null, roles: { '': roles } } },
+  })
+  return [
+    make('qwen_img', 'Qwen Image', 'personal', [prompt, size, width, height, start, field('quality', 'Quality', 'choice', { options: ['quick', 'best'], default: 'quick' }), field('negative_prompt', 'Avoid', 'text', { max_length: 400 }), seed],
+      { prompt: 'prompt', shape: 'size', width: 'width', height: 'height', start: 'picture', quality: 'quality', negative: 'negative_prompt', seed: 'seed' }),
+    make('z_img', 'Z-Image Turbo', 'work', [prompt, size, width, height, start, seed], { prompt: 'prompt', shape: 'size', width: 'width', height: 'height', start: 'picture', seed: 'seed' }),
+  ]
+}
+
+/** The three song models: YuE2 (no length, no tempo), ACE-Step (three tabs, tempo, a song to start from) and MiniMax Music 3 (a length and steps). */
+function musicRuntimeFixtures() {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const style = field('style', 'Style', 'text', { required: true, max_length: 400 })
+  const lyrics = field('lyrics', 'Lyrics', 'textarea', { max_length: 4000 })
+  const seed = field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true })
+  const source = field('source', 'Song', 'files', { required: true, accept: ['audio'], max_count: 1 })
+  const base = (id: string, name: string, use: string, port: number) => ({
+    id, kind: id, plugin: name, name, description: 'Makes songs.', workload: 'music', port, default_preset: 'mlx', last_launch: { preset: 'mlx', settings: {}, gpus: [0] }, max_gpus: 1,
+    license: { use, weights: use === 'work' ? 'MIT' : 'Non-commercial', note: 'Fixture.' },
+    presets: { mlx: { name, gpus: [0], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }], estimate: { ram_gib: 14, gpu_min_free_gib: {} }, settings: [] } },
+  })
+  const yue = { ...songRuntimeFixture(), license: { use: 'personal', weights: 'CC BY-NC', note: 'Fixture.' } }
+  const aceModes = [
+    { key: 'song', label: 'New song', help: 'Make a song from a style and lyrics.', inputs: [style, lyrics, field('length', 'Length', 'choice', { options: ['60', '30', '120'], default: '60' }), field('tempo', 'Tempo (BPM)', 'int', { minimum: 30, maximum: 300 }), seed] },
+    { key: 'cover', label: 'New version of a song', help: 'Make a new version of a song.', inputs: [source, style, lyrics, field('strength', 'How closely it follows the song', 'int', { minimum: 5, maximum: 100 }), field('tempo', 'Tempo (BPM)', 'int', { minimum: 30, maximum: 300 }), seed] },
+    { key: 'repaint', label: 'Redo a section', help: 'Replace one part of a song.', inputs: [source, field('start', 'From (seconds)', 'int', { minimum: 0, maximum: 600, default: 0 }), field('end', 'To (seconds)', 'int', { minimum: 1, maximum: 600 }), style, lyrics, seed] },
+  ].map((mode) => ({ ...mode, output_kind: 'audio' }))
+  const ace = { ...base('ace_step', 'ACE-Step', 'work', 8171), generation: { output_kind: 'audio', inputs: [], modes: aceModes, timings: [], make_label: null, result_noun: null,
+    music: { guidance: 'ACE-Step: describe the genre, mood and tempo; it can also redo a section.', create: 'song', cover: 'cover', repaint: 'repaint', roles: {
+      song: { style: 'style', lyrics: 'lyrics', length: 'length', tempo: 'tempo', seed: 'seed' },
+      cover: { style: 'style', lyrics: 'lyrics', tempo: 'tempo', seed: 'seed', source: 'source', strength: 'strength' },
+      repaint: { style: 'style', lyrics: 'lyrics', seed: 'seed', source: 'source', start: 'start', end: 'end' } } } } }
+  const minimax = { ...base('minimax_music', 'MiniMax Music 3', 'work', 8172), generation: { output_kind: 'audio', modes: [], timings: [], make_label: null, result_noun: null,
+    inputs: [style, lyrics, field('length', 'Length', 'choice', { options: ['30', '60', '120', '180'], default: '60' }), field('steps', 'Steps', 'int', { minimum: 1, maximum: 30, advanced: true }), seed],
+    music: { guidance: 'MiniMax: the length is a maximum.', create: '', cover: null, repaint: null, roles: { '': { style: 'style', lyrics: 'lyrics', length: 'length', steps: 'steps', seed: 'seed' } } } } }
+  return [yue, ace, minimax]
+}
+
+/** The H3 video fixture with the capability its picture tab gives it on the Images page. */
+function videoWithPicturesFixture() {
+  const base = videoRuntimeFixture()
+  return { ...base, generation: { ...base.generation, image: { guidance: 'H3: describe the picture.', create: 'picture', edit: null, roles: { picture: { prompt: 'prompt', size: 'size' } } } } }
 }
 
 /** Half a second of a 220 Hz tone as a WAV: a stand-in for a clip's soundtrack (the browser decodes by content). */
@@ -122,19 +251,33 @@ function toneWav() {
   return buffer
 }
 
+/** Three speech models: two with an arena score (one an estimate) and one without. */
+function ratedSpeechFixtures() {
+  const quality = (score: number, estimated = false) => ({ metric: 'Speech arena Elo', score, estimated, source: 'https://example.com/arena', as_of: '2026-11-26', note: estimated ? 'Estimated from a sibling.' : 'From votes.' })
+  return [
+    { ...speechRuntimeFixture(), id: 'voice-b', name: 'Voice B', quality: quality(1104, true) },
+    { ...speechRuntimeFixture(), id: 'voice-a', name: 'Voice A', quality: quality(1278), rankings: [{ metric: 'Naturalness MOS', score: 4.4, estimated: false, source: 'https://example.com/mos', as_of: '2026-11-26', note: 'Listener ratings.' }] },
+    { ...speechRuntimeFixture(), id: 'voice-c', name: 'Voice C', rankings: [{ metric: 'Naturalness MOS', score: 4.1, estimated: false, source: 'https://example.com/mos', as_of: '2026-11-26' }] },
+  ]
+}
+
 function songRuntimeFixture() {
   const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
     key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
   })
   return {
+    license: { use: 'personal', weights: 'CC BY-NC 4.0 (non-commercial)', note: 'Non-commercial use only.' },
     id: 'yue2', kind: 'yue2', plugin: 'YuE2', name: 'YuE2 songs', description: 'Makes complete songs from lyrics and a style.', workload: 'music', port: 8170, default_preset: 'songs', last_launch: null, max_gpus: 1,
     presets: { songs: { name: 'YuE2 3B', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 24, gpu_min_free_gib: { 0: 14, 1: 14 } }, settings: [] } },
     generation: { output_kind: 'audio', inputs: [
       field('style', 'Style', 'text', { required: true, max_length: 400, placeholder: 'Upbeat indie pop' }),
-      field('lyrics', 'Lyrics', 'textarea', { required: true, max_length: 8000 }),
+      field('lyrics', 'Lyrics', 'textarea', { max_length: 8000 }),
+      field('source', 'Start from a song', 'files', { accept: ['audio'], max_count: 1 }),
       field('mode', 'Melody planning', 'choice', { options: ['full', 'melody', 'off'], default: 'full', advanced: true }),
       field('seed', 'Seed', 'seed', { minimum: 0, maximum: 2147483647, advanced: true }),
-    ], timings: [{ seconds: 41, first_seconds: null, when: {}, preset: null, gpu: null, note: 'for a verse and chorus' }] },
+    ], timings: [{ seconds: 41, first_seconds: null, when: {}, preset: null, gpu: null, note: 'for a verse and chorus' }],
+    music: { guidance: 'Describe the genre, mood, instruments and voice, and write the lyrics under tags. The song is as long as the lyrics.', create: '', cover: '', repaint: null,
+      roles: { '': { style: 'style', lyrics: 'lyrics', seed: 'seed', source: 'source' } } } },
   }
 }
 
@@ -145,13 +288,27 @@ function meetingRuntimeFixture() {
   const inputs = [field('recording', 'Recording', 'files', { required: true, accept: ['audio', 'video', 'transcript'], max_count: 1 }),
     field('notes', 'Make', 'choice', { options: ['notes', 'transcript'], default: 'notes', option_labels: { notes: 'Transcript and notes', transcript: 'Transcript only' } })]
   return {
-    id: 'meeting_notes', kind: 'meeting_notes', plugin: 'Meeting notes', name: 'Meeting notes', description: 'Turns a meeting recording into notes.', workload: 'text', port: 8230, default_preset: 'qwen', last_launch: null, max_gpus: 1,
+    id: 'meeting_notes', kind: 'meeting_notes', plugin: 'Meeting notes', name: 'Meeting notes', description: 'Turns a meeting recording into notes.', workload: 'workflow', port: 8230, default_preset: 'qwen', last_launch: null, max_gpus: 1,
     presets: { qwen: { name: 'Fast', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 4, gpu_min_free_gib: { 0: 1, 1: 1 } }, settings: [] } },
     generation: { output_kind: 'document', inputs, modes: [{ key: 'notes', label: 'From a recording', help: 'Add a recording.', inputs }], make_label: 'Make notes', result_noun: 'meeting', timings: [] },
   }
 }
 
-async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; meeting?: boolean } = {}) {
+function decideRuntimeFixture(pictures = true) {
+  const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
+  })
+  const inputs = [field('state', 'Situation', 'textarea', { required: true, max_length: 20000 }),
+    ...(pictures ? [field('pictures', 'Pictures', 'files', { accept: ['image'], max_count: 4 })] : []),
+    field('question_type', 'Question', 'choice', { options: ['choose', 'yesno', 'score'], default: 'choose', option_labels: { choose: 'Choose between options', yesno: 'Yes or no', score: 'Place on a scale' } })]
+  return {
+    id: 'decide_karpo', kind: 'decide', plugin: 'Decide', name: 'Karpo 31B', description: 'Answers a question with a probability for each answer.', workload: 'decision', port: 8400, default_preset: 'mxfp4', last_launch: null, max_gpus: 1,
+    presets: { mxfp4: { name: 'Karpo 31B', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 22, gpu_min_free_gib: { 0: 1, 1: 1 } }, settings: [] } },
+    generation: { output_kind: 'document', inputs, modes: [], make_label: 'Decide', result_noun: 'decision', timings: [] },
+  }
+}
+
+async function installM2Api(page: Page, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; music?: boolean; songState?: string; videos?: boolean; clips?: boolean; asr?: boolean; speech?: boolean; speech2?: boolean; images?: boolean; h3images?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean; decide?: boolean } = {}) {
   const profiles = options.initialProfile ? [profileRecord()] : []
   const models: Array<Record<string, unknown>> = options.initialProfile ? [modelRecord(profiles[0], options.initialState ?? 'unloaded')] : []
   if (options.runtime) models.push({ id: 'basalt', name: 'Basalt', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
@@ -161,13 +318,16 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   let postProfileBody: Record<string, unknown> | null = null
   let loadProfileId: unknown = null
   let startBody: Record<string, unknown> | null = null
-  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.videos ? [videoRuntimeFixture()] : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : [])] } }))
-  if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
+  await page.route('**/api/runtimes', (route) => route.fulfill({ json: { runtimes: [...(options.runtime ? [{ ...runtimeFixture(), thinking: options.thinking ?? null }] : []), ...(options.songs ? [songRuntimeFixture()] : []), ...(options.music ? musicRuntimeFixtures() : []), ...(options.videos ? [options.h3images ? videoWithPicturesFixture() : videoRuntimeFixture()] : []), ...(options.clips ? [longcatFixture()] : []), ...(options.asr ? transcribeFixtures() : []), ...(options.speech ? [speechRuntimeFixture()] : []), ...(options.speech2 ? [styledSpeechFixture()] : []), ...(options.images ? imageRuntimeFixtures() : []), ...(options.rated ? ratedSpeechFixtures() : []), ...(options.llm ? [llmRuntimeFixture()] : []), ...(options.meeting ? [meetingRuntimeFixture()] : []), ...(options.decide ? [decideRuntimeFixture(), { ...decideRuntimeFixture(false), id: 'decide_small', name: 'Small decider', port: 8403 }] : [])], references: options.rated ? [{ name: 'Hosted Voice', workload: 'speech', scores: [{ metric: 'Speech arena Elo', score: 1310, estimated: false, source: 'https://example.com/arena', as_of: '2026-11-26', note: 'A hosted model.' }] }] : [] } }))
+  if (options.rated) for (const runtime of ratedSpeechFixtures()) models.push({ id: runtime.id, name: runtime.name, workload: 'speech', state: 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.llm) models.push({ id: 'inkling2', name: 'Inkling 2 Mini', workload: 'text', state: options.chatReady ? 'ready' : 'unloaded', loading_enabled: false, profile: { id: null, revision: null } })
+  await page.route('**/api/runtimes/*/connection', (route) => route.fulfill({ json: { bind: '127.0.0.1', port: 8000, model: route.request().url().includes('/inkling2/') ? 'inkling-2-mini' : null } }))
   await page.route('**/api/runtimes/*/estimate', (route) => {
     const body = route.request().postDataJSON() as { preset: string; settings: Record<string, unknown>; gpus: number[] }
     const url = route.request().url()
     const runtime = url.includes('/runtimes/basalt/') ? runtimeFixture() : url.includes('/runtimes/inkling2/') ? llmRuntimeFixture() : songRuntimeFixture()
-    const preset = (runtime.presets as Record<string, { estimate: { ram_gib: number; gpu_min_free_gib: Record<number, number> } }>)[body.preset]
+    const presets = runtime.presets as Record<string, { estimate: { ram_gib: number; gpu_min_free_gib: Record<number, number> } }>
+    const preset = presets[body.preset] ?? Object.values(presets)[0]  // a fixture model without its own key still gets an estimate
     const budget = typeof body.settings.resident_budget_gib === 'number' ? body.settings.resident_budget_gib : 0
     const ids = [gpuUuid, 'GPU-second']
     return route.fulfill({ json: {
@@ -176,9 +336,33 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
       ram_headroom_bytes: 4 * 1024 ** 3, gpu_headroom_bytes: 2 * 1024 ** 3, reserved_ram_bytes: 0, reserved_gpu_vram_bytes_by_id: {},
     } })
   })
+  if (options.asr) for (const [id, name] of [['whisper_asr', 'Whisper'], ['parakeet_asr', 'Parakeet']]) models.push({ id, name, workload: 'transcription', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.clips) models.push({ id: 'longcat_video', name: 'LongCat video', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.videos) models.push({ id: 'minimax_h3', name: 'MiniMax H3 videos', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.music) for (const [id, name] of [['yue2', 'YuE2 songs'], ['ace_step', 'ACE-Step'], ['minimax_music', 'MiniMax Music 3']]) models.push({ id, name, workload: 'music', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.images) for (const [id, name] of [['qwen_img', 'Qwen Image'], ['z_img', 'Z-Image Turbo']]) models.push({ id, name, workload: 'image', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.speech2) models.push({ id: 'styled', name: 'Styled speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.speech) models.push({ id: 'omnivoice', name: 'OmniVoice speech', workload: 'speech', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   const uploads: Array<{ name: string; type: string; head?: string }> = []
+  // The voice library, kept in memory: list, save, rename, delete and the sample.
+  const voices: Array<{ id: string; name: string; sample_text: string; mime: string; bytes: number }> = []
+  await page.route('**/api/voices**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname.replace(/^.*\/api\/voices/, '').split('/').filter(Boolean)
+    const taken = (name: string, except?: string) => voices.some((voice) => voice.id !== except && voice.name.toLowerCase() === name.trim().toLowerCase())
+    if (!path.length && request.method() === 'GET') { await route.fulfill({ json: { voices } }); return }
+    if (!path.length && request.method() === 'POST') {
+      const body = request.postDataJSON() as { name: string; sample_text: string }
+      if (taken(body.name)) { await route.fulfill({ status: 422, json: { detail: `A voice named '${body.name.trim()}' already exists.` } }); return }
+      const voice = { id: `${voices.length + 1}`.padStart(32, 'b'), name: body.name.trim(), sample_text: body.sample_text, mime: 'audio/wav', bytes: 100 }
+      voices.push(voice); await route.fulfill({ status: 201, json: voice }); return
+    }
+    const voice = voices.find((item) => item.id === path[0])
+    if (path[1] === 'sample') { await route.fulfill({ status: 200, body: toneWav(), contentType: 'audio/wav' }); return }
+    if (!voice) { await route.fulfill({ status: 404, json: { detail: 'That voice is not in the library.' } }); return }
+    if (request.method() === 'PUT') { const body = request.postDataJSON() as { name: string; sample_text: string }; voice.name = body.name.trim(); voice.sample_text = body.sample_text; await route.fulfill({ json: voice }); return }
+    voices.splice(voices.indexOf(voice), 1); await route.fulfill({ json: { deleted: voice.id } })
+  })
   await page.route('**/api/uploads?name=*', async (route) => {
     const name = new URL(route.request().url()).searchParams.get('name') ?? ''
     if (name.endsWith('.gif')) { await route.fulfill({ status: 422, json: { detail: 'That type of file is not accepted.' } }); return }
@@ -187,6 +371,15 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
   })
   if (options.songs) models.push({ id: 'yue2', name: 'YuE2 songs', workload: 'music', state: options.songState ?? 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   const jobs: Array<Record<string, unknown>> = []
+  if (options.decide) {
+    models.push({ id: 'decide_karpo', name: 'Karpo 31B', workload: 'decision', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+    models.push({ id: 'decide_small', name: 'Small decider', workload: 'decision', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+    jobs.push({ id: 'job-00000088', model_id: 'decide_karpo', status: 'done', progress: 'Done', error_message: null,
+      inputs: { state: 'I was charged twice.', question_type: 'choose', instructions: 'Which team should handle this?', options: 'billing\nshipping' },
+      outputs: ['decision.json', 'result.md'].map((name) => ({ name, mime: name.endsWith('.md') ? 'text/markdown' : 'application/json', bytes: 100 })),
+      created_at: '2026-11-27T10:00:00Z', finished_at: '2026-11-27T10:00:01Z', details: { seconds: 0.3, model: 'Karpo 31B' }, launch: { preset: 'mxfp4', settings: {}, gpus: [1] } })
+    await page.route('**/api/jobs/*/files/result.md', (route) => route.fulfill({ status: 200, contentType: 'text/markdown', body: '**Which team should handle this?**\n\nAnswer: **billing**\n\n| Option | Probability | |\n| --- | ---: | --- |\n| billing | 94.1% | `###` |\n| shipping | 5.9% | `#` |\n\nConfidence: **88.2%**\n' }))
+  }
   if (options.meeting) {
     models.push({ id: 'meeting_notes', name: 'Meeting notes', workload: 'text', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
     jobs.push({ id: 'job-00000077', model_id: 'meeting_notes', status: 'done', progress: 'Writing the summary, action items and decisions', error_message: null,
@@ -306,7 +499,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
     if (model && runtime) model.state = 'unloading'
     await route.fulfill({ status: 202, json: operation })
   })
-  return { profiles, models, operations, get postProfileBody() { return postProfileBody }, get loadProfileId() { return loadProfileId }, get startBody() { return startBody }, get jobBody() { return jobBody }, uploads, jobs }
+  return { profiles, models, operations, get postProfileBody() { return postProfileBody }, get loadProfileId() { return loadProfileId }, get startBody() { return startBody }, get jobBody() { return jobBody }, uploads, jobs, voices }
 }
 
 async function installSseMock(page: Page) {
@@ -391,7 +584,7 @@ async function signIn(page: Page, value = token, address?: string) {
   await page.getByRole('button', { name: 'Save and connect' }).click()
 }
 
-async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; meeting?: boolean } = {}) {
+async function connectFixtures(page: Page, label = 'Fixture desktop', stale = false, options: { initialProfile?: boolean; refuseLoad?: boolean; initialState?: string; runtime?: boolean; refuseStart?: boolean; songs?: boolean; songState?: string; videos?: boolean; clips?: boolean; asr?: boolean; speech?: boolean; voiceClip?: boolean; chatReady?: boolean; thinking?: { levels: string[]; default: string | null; off: boolean }; llm?: boolean; rated?: boolean; meeting?: boolean } = {}) {
   await installSseMock(page)
   const api = await installM2Api(page, options)
   const host = fixtureHost(label, stale)
@@ -651,7 +844,7 @@ test('makes a song, keeps it in the sidebar with how it was made, reuses its set
   await openCard(page, 'YuE2 songs')
   await expect(page.getByRole('radio', { name: 'Second GPU' })).toBeChecked()
   await page.getByRole('link', { name: 'Open YuE2 songs' }).click()
-  await expect(page).toHaveURL(/#\/hosts\/local\/services\/yue2$/)
+  await expect(page).toHaveURL(/#\/hosts\/local\/music$/)
   await expect(page.getByText('Running', { exact: true })).toBeVisible()
   await expect(page.getByRole('radio')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0)
@@ -698,8 +891,6 @@ test('makes a song, keeps it in the sidebar with how it was made, reuses its set
   await modal.getByRole('button', { name: 'Close' }).click()
   await expect(modal).toBeHidden()
   await page.screenshot({ path: 'test-results/screenshots/song-rail.png', fullPage: true })
-  await go(page, '#/overview')
-  await expect(page.getByText('Recent results')).toBeVisible()
   await go(page, '#/hosts/local/services/yue2')
   await form.getByLabel(/^style/i).fill('changed')
   await item.click()
@@ -792,19 +983,57 @@ test('makes a video from pictures in its own tab, with one picture per end', asy
   await expect(page.getByRole('tabpanel', { name: 'From a description' }).getByLabel(/^description/i)).toHaveValue('kept while I switch tabs')
 })
 
-test('sends a clip\'s voice to a speech model as its sample, with the spoken line as the transcript', async ({ page }) => {
+test('saves a clip\'s voice in the library with the spoken line, then speaks in it on the Speech page', async ({ page }) => {
   const api = await connectFixtures(page, 'Fixture desktop', false, { videos: true, speech: true, voiceClip: true })
   await go(page, '#/hosts/local/services/minimax_h3')
   await page.getByRole('complementary').getByRole('button', { name: /^A woman with a soft Welsh accent/ }).click()
   const detail = page.getByRole('dialog').getByRole('article')
-  await detail.getByRole('button', { name: 'Use voice in OmniVoice speech' }).click()
-  await expect(page).toHaveURL(/#\/hosts\/local\/services\/omnivoice$/)
-  await expect(page.getByRole('tab', { name: 'From a voice sample' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('button', { name: 'Remove voice-job-0000.wav' })).toBeVisible()
-  await expect(page.getByLabel(/^what the sample says/i)).toHaveValue('Come in and get warm.')
+  await detail.getByRole('button', { name: 'Save as voice' }).click()
+  const form = detail.getByRole('form', { name: 'Save as voice' })
+  await expect(form.getByLabel('What the sample says')).toHaveValue('Come in and get warm.')
+  await form.getByLabel('Name').fill('Welsh woman')
+  await form.getByRole('button', { name: 'Save voice' }).click()
+  await expect(form).toBeHidden()
   expect(api.uploads.at(-1)).toMatchObject({ name: 'voice-job-0000.wav', type: 'audio/wav' })
   expect(api.uploads.at(-1)?.head).toMatch(/^RIFF.{4}WAVE$/s)
-  await page.screenshot({ path: 'test-results/screenshots/voice-sample-handoff.png', fullPage: true })
+  expect(api.voices).toMatchObject([{ name: 'Welsh woman', sample_text: 'Come in and get warm.' }])
+  await go(page, '#/hosts/local/speech')
+  await page.getByText('Saved voices (1)').click()
+  await page.getByRole('button', { name: 'Use Welsh woman' }).click()
+  await expect(page.getByRole('tab', { name: 'From a voice sample' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('button', { name: 'Remove Welsh woman.wav' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /^what the sample says/i })).toHaveValue('Come in and get warm.')
+  await page.screenshot({ path: 'test-results/screenshots/voice-library.png', fullPage: true })
+})
+
+test('the voice library: keep the sample on the form, refuse a repeated name, rename and delete', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { speech: true })
+  await go(page, '#/hosts/local/speech')
+  await page.getByRole('tab', { name: 'From a voice sample' }).click()
+  const panel = page.getByRole('tabpanel', { name: 'From a voice sample' })
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), panel.getByRole('button', { name: /Add audio|Add .*sample/i }).first().click()])
+  await chooser.setFiles({ name: 'mine.wav', mimeType: 'audio/wav', buffer: toneWav() })
+  await panel.getByRole('textbox', { name: /^what the sample says/i }).fill('Hello, it is me.')
+  await page.getByText('Saved voices').click()
+  await page.getByRole('button', { name: 'Save the sample on the form as a voice' }).click()
+  const save = page.getByRole('form', { name: 'Save the sample as a voice' })
+  await save.getByLabel(/^Name for the sample/).fill('Me')
+  await save.getByRole('button', { name: 'Save voice' }).click()
+  await expect(page.getByText('Saved voices (1)')).toBeVisible()
+  expect(api.voices).toMatchObject([{ name: 'Me', sample_text: 'Hello, it is me.' }])
+  await page.getByRole('button', { name: 'Save the sample on the form as a voice' }).click()
+  await save.getByLabel(/^Name for the sample/).fill('me')
+  await save.getByRole('button', { name: 'Save voice' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'already exists' })).toBeVisible()
+  await page.getByRole('button', { name: 'Rename Me' }).click()
+  const rename = page.getByRole('form', { name: 'Rename Me' })
+  await rename.getByLabel('Name', { exact: true }).fill('Me, calm')
+  await rename.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Me, calm')).toBeVisible()
+  await page.getByRole('button', { name: 'Delete Me, calm' }).click()
+  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByText('None yet.')).toBeVisible()
+  expect(api.voices).toEqual([])
 })
 
 test('frames a wide picture for a portrait clip on a preview: drag, keys and zoom', async ({ page }) => {
@@ -862,9 +1091,9 @@ test('keeps a stopped song service free of load controls and points to the Model
 test('leaves a model\'s error out of the sidebar', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { songs: true, songState: 'error' })
   await go(page, '#/hosts/local/overview')
-  const link = page.getByRole('navigation').getByRole('link', { name: 'YuE2 songs' })
+  const link = page.getByRole('navigation').getByRole('link', { name: /^Music/ })
   await expect(link).toBeVisible()
-  await expect(link).toHaveAttribute('title', 'YuE2 songs')
+  await expect(link).toHaveAttribute('title', 'Music')
   await expect(link.getByText('Error')).toHaveCount(0)
 })
 
@@ -882,14 +1111,6 @@ test('shows each running model\'s share of RAM and VRAM in the bars and on its c
   await expect(resources.getByRole('progressbar', { name: 'System memory used' }).getByLabel('Other programs: 6 GiB')).toBeVisible()
   await expect(resources.getByRole('progressbar', { name: 'Fixture GPU used' }).getByLabel('YuE2 songs: 3 GiB')).toBeVisible()
   await page.screenshot({ path: 'test-results/screenshots/model-memory.png' })
-})
-
-test('explains when the host service is too old to preview a start', async ({ page }) => {
-  await connectFixtures(page, 'Fixture desktop', false, { songs: true, songState: 'unloaded' })
-  await page.route('**/api/runtimes/*/estimate', (route) => route.fulfill({ status: 404, json: { detail: 'API route not found' } }))
-  await go(page, '#/hosts/local/models')
-  await openCard(page, 'YuE2 songs')
-  await expect(page.getByRole('status').filter({ hasText: 'Restart the Generation Station service' })).toBeVisible()
 })
 
 test('keeps host memory pinned beside the model list while scrolling on a wide screen', async ({ page }) => {
@@ -916,13 +1137,14 @@ test('keeps host memory pinned beside the model list while scrolling on a wide s
 test('groups the sidebar by what each model makes, with running shown in words', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await connectFixtures(page, 'Fixture desktop', false, { songs: true, videos: true, speech: true })
-  await go(page, '#/hosts/local/services/omnivoice')
+  await go(page, '#/hosts/local/speech')
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
   const groups = nav.getByRole('group')
-  await expect(groups).toHaveCount(3)
-  expect(await groups.evaluateAll((items) => items.map((item) => item.getAttribute('aria-labelledby') && document.getElementById(item.getAttribute('aria-labelledby')!)?.textContent))).toEqual(['Speech', 'Video', 'Music'])
-  await expect(nav.getByRole('group', { name: 'Speech' }).getByRole('link', { name: /OmniVoice speech/ })).toHaveAttribute('aria-current', 'page')
-  await expect(nav.getByRole('link', { name: /OmniVoice speech/ })).toContainText('On')
+  await expect(groups).toHaveCount(0)  // Music, Speech and Video are tools in the sidebar itself, not sections
+  await expect(nav.getByRole('link', { name: /^Video/ })).toContainText('On')
+  await expect(nav.getByRole('link', { name: /^Music/ })).toContainText('On')
+  await expect(nav.getByRole('link', { name: /^Speech/ })).toHaveAttribute('aria-current', 'page')
+  await expect(nav.getByRole('link', { name: /^Speech/ })).toContainText('On')
   await page.screenshot({ path: 'test-results/screenshots/sidebar-groups.png', fullPage: true })
   // Keyboard focus shows the accent ring on every nav link, in order.
   const links = await nav.getByRole('link').count()
@@ -936,7 +1158,7 @@ test('groups the sidebar by what each model makes, with running shown in words',
     expect(ring).toBe('solid 2px rgb(90, 63, 212)')
   }
   await page.setViewportSize({ width: 900, height: 900 })
-  await expect(nav.getByRole('link', { name: /OmniVoice speech/ })).toBeVisible()
+  await expect(nav.getByRole('link', { name: /^Speech/ })).toBeVisible()
   await page.screenshot({ path: 'test-results/screenshots/sidebar-rail.png' })
 })
 
@@ -955,7 +1177,7 @@ test.describe('on a phone', () => {
 
     await menu.click()
     await expect(menu).toHaveAttribute('aria-expanded', 'true')
-    await expect(nav.getByRole('link', { name: /YuE2 songs/ })).toBeVisible()
+    await expect(nav.getByRole('link', { name: /^Music/ })).toBeVisible()
     await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('#sidebar'))).toBe(true)
     await expect.poll(() => page.locator('#sidebar').evaluate((element) => element.getBoundingClientRect().left)).toBe(0)  // slid fully in
     await page.screenshot({ path: 'test-results/screenshots/phone-drawer.png' })
@@ -1053,16 +1275,16 @@ test('chats with the text model, which starts a song; conversations can be attac
     ]) })
   })
 
-  await expect(page.getByRole('navigation').getByRole('group', { name: 'Text' }).getByRole('link', { name: /^Chat/ })).toBeVisible()
+  await expect(page.getByRole('navigation').getByRole('link', { name: /^Chat/ })).toBeVisible()
   await go(page, '#/hosts/local/chat')
   await expect(page.getByRole('heading', { name: 'What would you like to talk about?' })).toBeVisible()
   await expect(page.getByText('YuE2 songs', { exact: false }).first()).toBeVisible()
 
-  // Attach an earlier clip from the picker.
-  await page.getByRole('button', { name: 'Attach', exact: true }).click()
-  const picker = page.getByRole('dialog', { name: 'Attach results' })
+  // Add an earlier clip from the library.
+  await page.getByRole('button', { name: 'Add from library' }).click()
+  const picker = page.getByRole('dialog', { name: 'Add from library' })
   await picker.getByRole('button', { name: /^A woman with a soft Welsh accent/ }).click()
-  await picker.getByRole('button', { name: 'Attach', exact: true }).click()
+  await picker.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(page.getByRole('button', { name: /^Remove A woman with a soft Welsh accent/ })).toBeVisible()
 
   await page.getByLabel('Message').fill('Write me a short song')
@@ -1130,7 +1352,7 @@ test('offers only the thinking levels the running model takes, sends the chosen 
 test('a meeting\'s notes show on the page, the transcript folds out, and every file downloads', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
   await go(page, '#/hosts/local/services/meeting_notes')
-  await expect(page.getByRole('navigation').getByRole('group', { name: 'Text' }).getByRole('link', { name: /Meeting notes/ })).toBeVisible()
+  await expect(page.getByRole('navigation').getByRole('link', { name: /Meeting notes/ })).toBeVisible()
   await page.getByRole('button', { name: /call\.webm|meeting|job-0000/i }).first().click()
   const notes = page.getByRole('region', { name: 'Notes' })
   await expect(notes.getByRole('heading', { name: 'Action items' })).toBeVisible()
@@ -1206,6 +1428,46 @@ test('a meeting transcript can be edited: rename a speaker everywhere, or fix on
   await editor.getByRole('button', { name: 'Save changes' }).click()
   await expect(editor).toHaveCount(0)
   expect(saved[1]).toEqual({ revision: 1, rename: {}, segments: [{ index: 2, speaker: 'Ben' }] })
+})
+
+test('meeting notes can be edited, and what changed shows in a history', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { meeting: true })
+  const record = { revision: 1, speakers: {}, segments: [{ speaker: 'Ben', start: 0, end: 4, text: 'Send the plan.' }], summary: ['Launch is Friday.', 'Budget is fine.'],
+    actions: [{ task: 'Send the plan', owner: 'Ben', time: '00:20' }], decisions: [{ decision: 'Ship Friday', by: 'Sam' }], history: [] as unknown[] }
+  await page.route('**/api/jobs/*/files/meeting.json', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(record) }))
+  const saved: unknown[] = []
+  await page.route('**/api/jobs/*/notes', async (route) => {
+    saved.push(route.request().postDataJSON())
+    record.revision = 2
+    record.history = [{ revision: 2, at: '2026-11-26T15:04:00+00:00', changes: [
+      { section: 'summary', kind: 'changed', before: 'Launch is Friday.', after: 'Launch is Monday.' },
+      { section: 'actions', kind: 'added', before: null, after: 'Book the room — Dana' }] }]
+    await route.fulfill({ status: 200, json: { revision: 2, changes: 2 } })
+  })
+  await go(page, '#/hosts/local/services/meeting_notes')
+  await page.getByRole('button', { name: /call\.webm|meeting|job-0000/i }).first().click()
+  // Nobody has edited it yet, so there is no history.
+  await expect(page.getByText('Change history')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Edit notes' }).click()
+  const editor = page.getByRole('region', { name: 'Edit notes' })
+  await expect(editor.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  await editor.getByRole('textbox', { name: 'Summary point 1' }).fill('Launch is Monday.')
+  await editor.getByRole('button', { name: 'Add an action item' }).click()
+  await editor.getByRole('textbox', { name: 'Task of action item 2' }).fill('Book the room')
+  await editor.getByRole('textbox', { name: 'Owner of action item 2' }).fill('Dana')
+  await editor.getByRole('button', { name: 'Remove decision 1' }).click()
+  await expect(editor.getByText('3 sections changed')).toBeVisible()
+  await editor.getByRole('button', { name: 'Save changes' }).click()
+  await expect(editor).toHaveCount(0)
+  expect(saved).toEqual([{ revision: 1, summary: ['Launch is Monday.', 'Budget is fine.'],
+    actions: [{ task: 'Send the plan', owner: 'Ben', time: '00:20' }, { task: 'Book the room', owner: 'Dana' }], decisions: [] }])
+  // The history lists the change, newest first, with what it was before.
+  await page.getByText('Change history').click()
+  const entry = page.locator('.history-entry').first()
+  await expect(entry).toContainText('Edit 1')
+  await expect(entry.locator('del')).toHaveText('Launch is Friday.')
+  await expect(entry.locator('ins').first()).toHaveText('Launch is Monday.')
+  await expect(entry).toContainText('Added · Action items')
 })
 
 test('a transcript edit the host refuses stays open with the reason', async ({ page }) => {
@@ -1285,13 +1547,13 @@ test('a text model shows its card choice and plain settings, with tuning folded 
   await page.screenshot({ path: 'test-results/screenshots/text-model-card.png', fullPage: true })
 })
 
-test('lists models in the sidebar order: text models first, then speech, pictures, video and music', async ({ page }) => {
+test('lists models in the sidebar order: text models first, then pictures, music, speech and video', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { llm: true, songs: true, speech: true, videos: true })
   await go(page, '#/hosts/local/models')
   await expect(page.getByRole('region', { name: 'Inkling 2 Mini' })).toBeVisible()
   const names = await page.locator('section.model-server').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
   const workloads = names.map((name) => /Inkling/.test(name ?? '') ? 'text' : /speech|OmniVoice/i.test(name ?? '') ? 'speech' : /H3|video/i.test(name ?? '') ? 'video' : /song|YuE/i.test(name ?? '') ? 'music' : 'other')
-  expect(workloads).toEqual([...workloads].sort((a, b) => ['text', 'speech', 'image', 'video', 'music', 'other'].indexOf(a) - ['text', 'speech', 'image', 'video', 'music', 'other'].indexOf(b)))
+  expect(workloads).toEqual([...workloads].sort((a, b) => ['text', 'image', 'music', 'speech', 'video', 'other'].indexOf(a) - ['text', 'image', 'music', 'speech', 'video', 'other'].indexOf(b)))
   expect(workloads[0]).toBe('text')
   expect(new Set(workloads)).toEqual(new Set(['text', 'speech', 'video', 'music']))
 })
@@ -1354,19 +1616,54 @@ test('keeps the search address in host settings: test it, then save it', async (
   if (await gear.getAttribute('aria-expanded') !== 'true') await gear.click()
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Host settings' }).click()
   await expect(page).toHaveURL(/#\/hosts\/local\/settings$/)
+  const search = page.getByRole('form', { name: 'Web search' })
   const address = page.getByLabel('Search service address')
   await expect(address).toHaveValue('http://env-searx:8080')
   await expect(page.getByText("Set in this host's .env file")).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(search.getByRole('button', { name: 'Save' })).toBeDisabled()
   await address.fill('http://searxng.example.lan/')
-  await page.getByRole('button', { name: 'Test' }).click()
-  await expect(page.getByRole('status')).toContainText('Works: 5 results')
+  await search.getByRole('button', { name: 'Test' }).click()
+  await expect(search.getByRole('status')).toContainText('Works: 5 results')
   expect(tested).toEqual(['http://searxng.example.lan/'])
-  await page.getByRole('button', { name: 'Save' }).click()
-  await expect(page.getByRole('status')).toContainText('Saved. The chat uses it from its next answer.')
+  await search.getByRole('button', { name: 'Save' }).click()
+  await expect(search.getByRole('status')).toContainText('Saved. The chat uses it from its next answer.')
   await expect(address).toHaveValue('http://searxng.example.lan')
   await expect(page.getByText("Set in this host's .env file")).toHaveCount(0)
   await page.screenshot({ path: 'test-results/screenshots/host-settings.png', fullPage: true })
+})
+
+test('hosted chat providers are set up in host settings: tested, saved, and the token only named', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { songs: true })
+  let setups: Array<Record<string, unknown>> = [{ id: 'filed', name: 'From the file', source: 'gateway', base_url: 'https://old.example', api_key_env: 'OLD', origin: 'file' }]
+  let saved: unknown = null
+  const tested: Array<Record<string, unknown>> = []
+  await page.route('**/api/settings', (route) => route.fulfill({ json: { searxng_url: '', searxng_source: 'none' } }))
+  await page.route('**/api/providers/config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      saved = route.request().postDataJSON()
+      const mine = (saved as { providers: Array<Record<string, unknown>> }).providers.map((item) => ({ ...item, id: 'work-gateway', origin: 'settings' }))
+      setups = [...setups.filter((item) => item.origin === 'file'), ...mine]
+    }
+    await route.fulfill({ json: { providers: setups } })
+  })
+  await page.route('**/api/providers/test', (route) => { tested.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ json: { ok: true, message: 'Works: 30 chat models, such as claude-haiku-5-5.' } }) })
+  await go(page, '#/hosts/local/settings')
+  const form = page.getByRole('form', { name: 'Hosted chat models' })
+  await expect(form.getByText('From the file is set up in this host')).toBeVisible()
+  await form.getByRole('button', { name: 'Add a provider' }).click()
+  await form.getByLabel('Name').fill('Work gateway')
+  await form.getByLabel('Gateway address').fill('https://litellm.example.com')
+  await form.getByLabel('Token variable').fill('LITELLM_API_KEY')
+  await form.getByRole('button', { name: 'Test' }).click()
+  await expect(form.getByRole('status')).toContainText('Works: 30 chat models')
+  expect(tested[0]).toMatchObject({ name: 'Work gateway', base_url: 'https://litellm.example.com', api_key_env: 'LITELLM_API_KEY' })
+  await form.getByRole('button', { name: 'Save' }).click()
+  await expect(form.getByRole('status')).toContainText('Saved.')
+  expect(JSON.stringify(saved)).not.toMatch(/token"|secret/i)
+  await expect(form.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await form.getByRole('button', { name: 'Remove' }).click()
+  await form.getByRole('button', { name: 'Save' }).click()
+  await expect(form.getByLabel('Name')).toHaveCount(0)
 })
 
 test('a model that also paints pictures labels each tab and result by what it makes', async ({ page }) => {
@@ -1381,19 +1678,21 @@ test('a model that also paints pictures labels each tab and result by what it ma
   await expect(page.getByRole('heading', { name: 'Your results' })).toBeVisible()
 })
 
-test('the assistant bubble opens on every page but Chat, offers to start its model, and keeps one thread', async ({ page }) => {
-  // Two text models: the bubble uses the one marked as the assistant (Inkling), not the first in the list.
+test('the assistant bubble opens on every page but Chat, points to the Models page when no text model runs, and keeps one thread', async ({ page }) => {
+  // Nothing running: the bubble names no model and links to the Models page to start one.
   await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, songs: true })
   const thread = (id: string) => ({ conversation: { id, title: 'Assistant', kind: 'assistant', model_id: 'inkling2', created_at: '2026-11-23T10:00:00Z', updated_at: '2026-11-23T10:00:00Z', busy: false }, messages: [] })
   await page.route('**/api/assistant', (route) => route.fulfill({ json: thread('help-1') }))
   await go(page, '#/overview')
   await page.getByRole('button', { name: 'Open the assistant' }).click()
   const panel = page.getByRole('region', { name: 'Assistant' })
-  await expect(panel.getByText('The assistant runs on Inkling 2 Mini')).toBeVisible()
+  await expect(panel.getByText('No text model is running.')).toBeVisible()
+  await expect(panel.getByText(/Inkling|Basalt/)).toHaveCount(0)
   await expect(panel.getByLabel('Ask the assistant')).toBeDisabled()
-  const start = page.waitForRequest((request) => request.url().includes('/api/runtimes/inkling2/start') && request.method() === 'POST')
-  await panel.getByRole('button', { name: 'Start Inkling 2 Mini' }).click()
-  await start
+  await panel.getByRole('link', { name: /Start one on the Models page/ }).click()
+  await expect(page).toHaveURL(/#\/hosts\/local\/models/)
+  await expect(panel).toHaveCount(0)
+  await page.getByRole('button', { name: 'Open the assistant' }).click()
   await panel.getByRole('button', { name: 'Close the assistant' }).click()
   await expect(panel).toHaveCount(0)
   await go(page, '#/hosts/local/chat')
@@ -1431,4 +1730,590 @@ test('the assistant answers with the page in mind and can start over', async ({ 
   // The panel stays open across pages and reloads on this device.
   await page.reload()
   await expect(page.getByRole('region', { name: 'Assistant' })).toBeVisible()
+})
+
+test('the Models page labels each model by licence, shows the terms, and filters work use from personal use', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, songs: true })
+  await go(page, '#/hosts/local/models')
+  const inkling = page.getByRole('region', { name: 'Inkling 2 Mini' })
+  const songs = page.getByRole('region', { name: 'YuE2 songs' })
+  await expect(inkling.getByText('Work use')).toBeVisible()
+  await expect(songs.getByText('Personal use only')).toBeVisible()
+  await openCard(page, 'YuE2 songs')
+  const licence = songs.getByRole('region', { name: 'Licence' })
+  await expect(licence.getByText('CC BY-NC 4.0 (non-commercial)')).toBeVisible()
+  await expect(licence.getByText('Non-commercial use only.')).toBeVisible()
+  await expect(licence.getByText('not legal advice')).toBeVisible()
+  const filter = page.getByRole('group', { name: 'Show models by licence' })
+  await filter.getByRole('button', { name: 'Work use' }).click()
+  await expect(inkling).toBeVisible()
+  await expect(songs).toHaveCount(0)
+  await filter.getByRole('button', { name: 'Personal use only' }).click()
+  await expect(songs).toBeVisible()
+  await expect(inkling).toHaveCount(0)
+  await filter.getByRole('button', { name: 'All' }).click()
+  await expect(inkling).toBeVisible()
+  await expect(songs).toBeVisible()
+})
+
+test('the Models page groups models by kind and charts their published quality scores', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, songs: true, rated: true })
+  await go(page, '#/hosts/local/models')
+  // One section per kind, in the sidebar's order.
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Chat|Speech|Music)/ })).toHaveText(['Chat1', 'Music1', 'Speech3'])
+  const speech = page.getByRole('region', { name: 'Speech' })
+  // Folded until asked for.
+  const chart = speech.getByRole('figure', { name: 'Speech arena Elo' })
+  await expect(speech.getByText('Quality ranking')).toBeVisible()
+  await expect(chart).toBeHidden()
+  await speech.getByText('Quality ranking').click()
+  await expect(chart).toBeVisible()
+  // Ranked high to low, with an estimate marked, and the unscored model named.
+  await expect(chart.getByRole('listitem')).toHaveText([/Hosted Voice.*reference.*1310/, /Voice A.*1278/, /Voice B.*1104.*est\./])
+  await expect(speech.getByText('Not on this ranking: Voice C.')).toBeVisible()
+  await chart.getByRole('listitem').filter({ hasText: 'Voice B' }).hover()
+  await expect(chart.locator('.quality-detail')).toContainText('Voice B: 1104 (estimated). Estimated from a sibling.')
+  // A reference model that is not run here is drawn as an outlined bar in the ranking it has a score on, never as a card.
+  const hosted = chart.getByRole('listitem').filter({ hasText: 'Hosted Voice' })
+  await expect(hosted).toContainText('reference')
+  await expect(hosted.locator('.quality-bar-reference')).toHaveCount(1)
+  await expect(speech.locator('section.model-server')).toHaveCount(3)
+  await hosted.hover()
+  await expect(chart.locator('.quality-detail')).toContainText('Hosted Voice (not run here): 1310')
+  await chart.getByText('Table').click()
+  await expect(chart.getByRole('cell', { name: 'Estimate: Estimated from a sibling.' })).toBeVisible()
+  // A button switches to the other ranking, which has its own models and its own gap.
+  await speech.getByRole('button', { name: /Naturalness MOS/ }).click()
+  const mos = speech.getByRole('figure', { name: 'Naturalness MOS' })
+  await expect(mos.getByRole('listitem')).toHaveText([/Voice A.*4\.4/, /Voice C.*4\.1/]) // the reference has no score on this ranking
+  await expect(speech.getByText('Not on this ranking: Voice B.')).toBeVisible()
+  await expect(chart).toHaveCount(0)
+  // A kind with one scored model has no chart.
+  await expect(page.getByRole('region', { name: 'Music' }).getByText('Quality ranking')).toHaveCount(0)
+})
+
+test('models within a section sort by name or by the chosen ranking, either way', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { rated: true })
+  await go(page, '#/hosts/local/models')
+  const speech = page.getByRole('region', { name: 'Speech' })
+  const names = () => speech.locator('section.model-server').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
+  // Alphabetical by default (the fixture lists Voice B first). The sidenav has one Speech entry for all of them.
+  expect(await names()).toEqual(['Voice A', 'Voice B', 'Voice C'])
+  await expect(page.getByRole('navigation').getByRole('link', { name: /^Speech/ })).toHaveText([/^Speech/])
+  await speech.getByLabel('Sort').selectOption('name')
+  await speech.getByRole('button', { name: /Z to A|A to Z/ }).click()
+  expect(await names()).toEqual(['Voice C', 'Voice B', 'Voice A'])
+  // Quality starts highest first, with the unscored model last; reversing keeps it last.
+  await speech.getByLabel('Sort').selectOption('quality')
+  expect(await names()).toEqual(['Voice A', 'Voice B', 'Voice C'])
+  await speech.getByRole('button', { name: /highest first/ }).click()
+  expect(await names()).toEqual(['Voice B', 'Voice A', 'Voice C'])
+  // Quality follows the ranking chosen in the chart.
+  await speech.getByText('Quality ranking').click()
+  await speech.getByRole('button', { name: /Naturalness MOS/ }).click()
+  await expect(speech.getByLabel('Sort')).toContainText('Quality (Naturalness MOS)')
+  expect(await names()).toEqual(['Voice C', 'Voice A', 'Voice B'])
+})
+
+test('chat names no model that is not running, and offers a choice between those that are', async ({ page }) => {
+  // Nothing running: the page says so without naming a model.
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true })
+  await go(page, '#/hosts/local/chat')
+  await expect(page.getByText('No text model is running.')).toBeVisible()
+  await expect(page.locator('.chat-main').getByText(/Basalt|Inkling/)).toHaveCount(0)
+})
+
+test('with two chat models running, a dropdown picks which one answers and the choice is sent', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, chatReady: true })
+  await keepFresh(page)
+  const conversation = { id: 'conv-2', title: 'New conversation', model_id: 'basalt', created_at: '2026-11-22T10:00:00Z', updated_at: '2026-11-22T10:00:00Z', busy: false }
+  const sent: Record<string, unknown>[] = []
+  await page.route('**/api/conversations', async (route) => {
+    if (route.request().method() === 'POST') { sent.push({ created: route.request().postDataJSON() }); await route.fulfill({ status: 201, json: { ...conversation, model_id: (route.request().postDataJSON() as { model_id: string }).model_id } }); return }
+    await route.fulfill({ json: { conversations: [] } })
+  })
+  await go(page, '#/hosts/local/chat')
+  const pick = page.getByRole('combobox', { name: 'Model answering' })
+  await expect(pick.locator('option')).toHaveText(['Basalt', 'Inkling 2 Mini'])
+  await expect(pick).toHaveValue('basalt')
+  await pick.selectOption('inkling2')
+  await page.getByLabel('Message').fill('Hello')
+  await page.getByLabel('Message').press('Enter')
+  await expect.poll(() => sent.length).toBe(1)
+  expect(sent[0]).toEqual({ created: { model_id: 'inkling2' } })
+})
+
+test('every decision model is used from one Decision page, with a dropdown over those running', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { decide: true })
+  await go(page, '#/hosts/local/decide')
+  // One entry in the sidenav, under Text, not one per model.
+  await expect(page.getByRole('navigation').getByRole('link', { name: /^Decision/ })).toHaveCount(1)
+  await expect(page.getByRole('link', { name: /Karpo|Small decider/ })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Decision', level: 1 })).toBeVisible()
+  const picker = page.getByRole('combobox', { name: 'Model answering' })
+  await expect(picker.locator('option')).toHaveText(['Karpo 31B', 'Small decider'])
+  // Only a model that reads pictures offers the picture field.
+  await expect(page.getByText('Pictures', { exact: true })).toBeVisible()
+  await picker.selectOption('decide_small')
+  await expect(page.getByRole('textbox', { name: 'Situation' })).toBeVisible()
+  await expect(page.getByText('Pictures', { exact: true })).toHaveCount(0)
+  await picker.selectOption('decide_karpo')
+  await expect(page.getByText('Pictures', { exact: true })).toBeVisible()
+  // Results from every decision model are listed together.
+  await page.getByRole('button', { name: /Which team|charged twice|job-0000/i }).first().click()
+  const decision = page.getByRole('region', { name: 'Decision' })
+  await expect(decision.getByText('Answer: billing')).toBeVisible()
+  await expect(decision.getByRole('cell', { name: '94.1%' })).toBeVisible()
+  await expect(decision.getByText('Confidence: 88.2%')).toBeVisible()
+})
+
+test('the multi-model tools sit directly in the sidenav, alphabetical, and workflows follow below a rule', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, meeting: true, decide: true, speech: true })
+  await go(page, '#/overview')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  const names = (await nav.getByRole('link').allInnerTexts()).map((text) => text.split('\n')[0].trim())
+  // The tools are alphabetical; Meeting notes is a workflow, so it sits last, below its own rule.
+  expect(names.filter((name) => ['Chat', 'Decision', 'Meeting notes', 'Speech'].includes(name))).toEqual(['Chat', 'Decision', 'Speech', 'Meeting notes'])
+  const workflows = nav.getByRole('group', { name: 'Workflows' })
+  await expect(nav.getByRole('group')).toHaveCount(1)
+  await expect(workflows.getByRole('link', { name: /^Meeting notes/ })).toBeVisible()
+  await expect(nav.locator('hr.nav-separator')).toHaveCount(2)
+})
+
+test('Decide shows the model own address and a snippet for the tool picked', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { decide: true })
+  await go(page, '#/hosts/local/decide')
+  await page.getByRole('button', { name: 'Connect a tool' }).click()
+  await expect(page.getByText('http://127.0.0.1:8400/v1/systemone', { exact: true })).toBeVisible()
+  await expect(page.getByText('listens on this computer only')).toBeVisible()
+  await expect(page.locator('.connect-code code')).toContainText("curl http://127.0.0.1:8400/v1/systemone")
+  await page.getByRole('combobox', { name: 'Tool' }).selectOption('Python (requests)')
+  await expect(page.locator('.connect-code code')).toContainText('requests.post("http://127.0.0.1:8400/v1/systemone"')
+  // The choice is kept for next time.
+  await page.reload()
+  await page.getByRole('button', { name: 'Connect a tool' }).click()
+  await expect(page.getByRole('combobox', { name: 'Tool' })).toHaveValue('Python (requests)')
+})
+
+test('Chat names the running model for the tool picked', async ({ page }) => {
+  await page.route('**/api/conversations', (route) => route.fulfill({ json: { conversations: [] } }))
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, llm: true, chatReady: true })
+  await go(page, '#/hosts/local/chat')
+  await page.getByRole('combobox', { name: 'Model answering' }).selectOption({ label: 'Inkling 2 Mini' })
+  await page.getByRole('button', { name: 'Connect a tool' }).click()
+  await expect(page.getByRole('dialog', { name: 'Connect a tool to Inkling 2 Mini' })).toBeVisible()
+  await page.getByRole('combobox', { name: 'Tool' }).selectOption('Aider')
+  await expect(page.locator('.connect-code code')).toContainText('aider --model openai/inkling-2-mini')
+  await expect(page.locator('.connect-code code')).toContainText('OPENAI_API_BASE=http://127.0.0.1:')
+})
+
+test('the paperclip uploads files from the computer and the library lists meetings and decisions', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true, chatReady: true, meeting: true, decide: true })
+  await keepFresh(page)
+  await page.route('**/api/uploads?name=*', async (route) => {
+    const name = new URL(route.request().url()).searchParams.get('name') ?? ''
+    if (name.endsWith('.bin')) { await route.fulfill({ status: 422, json: { detail: 'That type of file is not accepted.' } }); return }
+    await route.fulfill({ status: 201, json: { id: 'f'.repeat(32), name, kind: 'document', mime: 'text/plain', bytes: 12 } })
+  })
+  const conversation = { id: 'conv-3', title: 'New conversation', model_id: 'basalt', created_at: '2026-11-27T10:00:00Z', updated_at: '2026-11-27T10:00:00Z', busy: false }
+  let sent: Record<string, unknown> | null = null
+  await page.route('**/api/conversations', async (route) => {
+    if (route.request().method() === 'POST') { await route.fulfill({ status: 201, json: conversation }); return }
+    await route.fulfill({ json: { conversations: [] } })
+  })
+  const saved: unknown[] = []
+  await page.route('**/api/conversations/conv-3', (route) => route.fulfill({ json: { conversation, messages: saved } }))
+  await page.route('**/api/conversations/conv-3/messages', async (route) => {
+    sent = route.request().postDataJSON() as Record<string, unknown>
+    const user = chatMessage('u1', 1, 'user', { content: 'Summarise this', attachments: [{ file_id: 'f'.repeat(32), name: 'notes.txt', mime: 'text/plain', kind: 'document', bytes: 12 }] })
+    const answer = chatMessage('a1', 2, 'assistant', { content: 'Done.' })
+    saved.push(user, answer)
+    await route.fulfill({ status: 200, contentType: 'text/event-stream', body: chatStream([['message', user], ['start', {}], ['delta', { content: 'Done.' }], ['message', answer], ['done', {}]]) })
+  })
+  await go(page, '#/hosts/local/chat')
+  await expect(page.getByText('Attach a picture, PDF or text file with the paperclip')).toBeVisible()
+  await page.getByLabel('Choose files to attach').setInputFiles([{ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello world!') }, { name: 'odd.bin', mimeType: 'application/octet-stream', buffer: Buffer.from('x') }])
+  await expect(page.getByRole('button', { name: 'Remove notes.txt' })).toBeVisible()
+  await expect(page.getByText('odd.bin: That type of file is not accepted.')).toBeVisible()
+  await page.getByRole('button', { name: 'Remove odd.bin' }).click()
+  // The library has tabs for meetings and decisions, besides pictures, videos and sounds.
+  await page.getByRole('button', { name: 'Add from library' }).click()
+  const picker = page.getByRole('dialog', { name: 'Add from library' })
+  await expect(picker.getByRole('group', { name: 'Show' }).getByRole('button')).toHaveText(['All', 'Meetings', 'Decisions'])
+  await picker.getByRole('button', { name: 'Decisions' }).click()
+  await expect(picker.locator('.chat-pick')).toHaveCount(1)
+  await picker.getByRole('button', { name: 'Meetings' }).click()
+  await picker.locator('.chat-pick').first().click()
+  await picker.getByRole('button', { name: 'Add', exact: true }).click()
+  await page.getByLabel('Message').fill('Summarise this')
+  await page.getByLabel('Message').press('Enter')
+  await expect.poll(() => sent).not.toBeNull()
+  expect(sent).toEqual({ text: 'Summarise this', attachments: [{ file_id: 'f'.repeat(32), name: 'notes.txt' }, { job_id: 'job-00000077', name: 'transcript.md' }], thinking: true })
+  await expect(page.locator('.chat-thread').getByRole('button', { name: 'notes.txt' })).toBeVisible()
+})
+
+test('the Overview names and orders its sections as the Models page and the sidebar do, with Decision and workflows on their own', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, decide: true, meeting: true, songs: true, speech: true, videos: true })
+  await go(page, '#/overview')
+  const sections = page.locator('.overview-services .service-group-label')
+  await expect(sections).toHaveText(['Chat', 'Decision', 'Music', 'Speech', 'Video', 'Workflows'])
+  await expect(page.getByText('Recent results')).toHaveCount(0)
+  await expect(page.locator('.service-group', { hasText: 'Decision' }).locator('a.service-tile').first()).toHaveAttribute('href', '#/hosts/local/decide')
+  await expect(page.locator('.service-group', { hasText: 'Workflows' }).getByText('Meeting notes')).toBeVisible()
+  await go(page, '#/hosts/local/models')
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Chat|Decision|Music|Speech|Video|Workflows)/ })).toHaveText(['Chat1', 'Decision2', 'Music1', 'Speech1', 'Video1'])
+  // Workflows are a tab of their own, not a section among the models.
+  await expect(page.getByRole('tab', { name: 'Local' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: 'Workflows' }).click()
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Chat|Decision|Music|Speech|Video|Workflows)/ })).toHaveText(['Workflows1'])
+})
+
+test('Speech is one page over the running speech models; the text carries over and cues are checked per model', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { speech: true, speech2: true })
+  await go(page, '#/hosts/local/speech')
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Speech/ })).toHaveCount(1)
+  await expect(page.getByRole('heading', { name: 'Speech', level: 1 })).toBeVisible()
+  // The first (alphabetical by id order) model is OmniVoice: sounds in square brackets, no direction field.
+  const picker = page.getByLabel('Model speaking')
+  await expect(picker.locator('option')).toHaveText(['OmniVoice speech (Licence not reviewed)', 'Styled speech (Work use)'])
+  await page.getByRole('textbox', { name: /^what to say/i }).fill('Come in and sit down.')
+  await page.getByRole('button', { name: '[sigh]' }).click()
+  await expect(page.getByRole('textbox', { name: /^what to say/i })).toHaveValue('Come in and sit down. [sigh]')
+  // The words cross over to a model with no cues, which would read the bracket aloud: it offers to remove it.
+  await picker.selectOption('styled')
+  await expect(page.getByRole('textbox', { name: /^what to say/i })).toHaveValue('Come in and sit down. [sigh]')
+  await expect(page.getByText('would read [sigh] aloud')).toBeVisible()
+  await page.getByRole('button', { name: 'Remove cues' }).click()
+  await expect(page.getByRole('textbox', { name: /^what to say/i })).toHaveValue('Come in and sit down.')
+  await expect(page.getByText('would read')).toHaveCount(0)
+  // Direction typed here is not a thing on OmniVoice: it says what it left out and keeps it for the way back.
+  await page.getByRole('textbox', { name: /^how to say it/i }).fill('Whisper, slowly')
+  await picker.selectOption('omnivoice')
+  await expect(page.getByText('no place for the direction')).toBeVisible()
+  await picker.selectOption('styled')
+  await expect(page.getByRole('textbox', { name: /^how to say it/i })).toHaveValue('Whisper, slowly')
+  await page.screenshot({ path: 'test-results/screenshots/speak.png', fullPage: true })
+})
+
+test('Speech: a tab opened by hand starts from what the other tab held', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { speech: true, speech2: true })
+  await go(page, '#/hosts/local/speech')
+  await page.getByRole('textbox', { name: /^what to say/i }).fill('Hello there.')
+  await page.getByRole('tab', { name: 'From a voice sample' }).click()
+  await expect(page.getByRole('tabpanel', { name: 'From a voice sample' }).getByRole('textbox', { name: /^what to say/i })).toHaveValue('Hello there.')
+})
+
+test('a voice sample can be recorded from the microphone, and the sidebar rules off the tools from Models', async ({ page }) => {
+  // A stand-in microphone: the recorder hands back a tone as WAV, which the page decodes as it would a browser recording.
+  const tone = toneWav().toString('base64')
+  await page.addInitScript((data) => {
+    const bytes = Uint8Array.from(atob(data), (char) => char.charCodeAt(0))
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }) } })
+    class FakeRecorder {
+      state = 'inactive'; mimeType = 'audio/wav'; ondataavailable: ((event: { data: Blob }) => void) | null = null; onstop: (() => void) | null = null
+      start() { this.state = 'recording' }
+      stop() { this.state = 'inactive'; this.ondataavailable?.({ data: new Blob([bytes], { type: 'audio/wav' }) }); setTimeout(() => this.onstop?.(), 0) }
+    }
+    ;(window as unknown as { MediaRecorder: unknown }).MediaRecorder = FakeRecorder
+  }, tone)
+  const api = await connectFixtures(page, 'Fixture desktop', false, { speech: true, songs: true })
+  const heard: string[] = []
+  const lines = ['Welcome home, it has been far too long.', 'A second take.', 'Never used.']
+  await page.route('**/api/runtimes/*/transcribe', async (route) => { heard.push(route.request().url()); await route.fulfill({ json: { text: lines[heard.length - 1] } }) })
+  await go(page, '#/hosts/local/speech')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav.getByRole('separator')).toHaveCount(1)
+  await page.getByRole('tab', { name: 'From a voice sample' }).click()
+  const panel = page.getByRole('tabpanel', { name: 'From a voice sample' })
+  // The describe tab has no sample field, so no recorder; the clone tab has one.
+  await expect(page.getByRole('tabpanel', { name: 'Describe a voice' }).getByRole('button', { name: /Record from the microphone/ })).toHaveCount(0)
+  await panel.getByRole('button', { name: /Record from the microphone/ }).click()
+  await expect(panel.getByRole('button', { name: /Stop recording/ })).toBeVisible()
+  await panel.getByRole('button', { name: /Stop recording/ }).click()
+  await expect(panel.getByRole('button', { name: /^Remove recording-.*\.wav$/ })).toBeVisible()
+  // The recording can be played back, and what it says is written down into the field.
+  await expect(panel.getByLabel(/^Play recording-/)).toBeVisible()
+  await expect(panel.getByRole('textbox', { name: /^what the sample says/i })).toHaveValue('Welcome home, it has been far too long.')
+  expect(heard).toHaveLength(1)
+  await page.screenshot({ path: 'test-results/screenshots/record-sample.png', fullPage: true })
+  // A new take replaces words this wrote, but never words the person typed.
+  await panel.getByRole('button', { name: /^Remove recording-/ }).click()
+  await panel.getByRole('button', { name: /Record from the microphone/ }).click()
+  await panel.getByRole('button', { name: /Stop recording/ }).click()
+  await expect(panel.getByRole('textbox', { name: /^what the sample says/i })).toHaveValue('A second take.')
+  await panel.getByRole('textbox', { name: /^what the sample says/i }).fill('My own words.')
+  await panel.getByRole('button', { name: /^Remove recording-/ }).click()
+  await panel.getByRole('button', { name: /Record from the microphone/ }).click()
+  await panel.getByRole('button', { name: /Stop recording/ }).click()
+  await expect(panel.getByRole('button', { name: /^Remove recording-/ })).toBeVisible()
+  await expect(panel.getByRole('textbox', { name: /^what the sample says/i })).toHaveValue('My own words.')
+  expect(heard).toHaveLength(2)
+  expect(api.uploads.at(-1)).toMatchObject({ type: 'audio/wav' })
+  expect(api.uploads.at(-1)?.name).toMatch(/^recording-\d{6}\.wav$/)
+  expect(api.uploads.at(-1)?.head).toMatch(/^RIFF.{4}WAVE$/s)
+  // Other pages that take audio (a song's reference, say) do not get a recorder.
+  await go(page, '#/hosts/local/services/yue2')
+  await expect(page.getByRole('button', { name: /Record from the microphone/ })).toHaveCount(0)
+})
+
+test('a blocked microphone says so instead of failing silently', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => { throw new DOMException('no', 'NotAllowedError') } } })
+    ;(window as unknown as { MediaRecorder: unknown }).MediaRecorder = class {}
+  })
+  await connectFixtures(page, 'Fixture desktop', false, { speech: true })
+  await go(page, '#/hosts/local/speech')
+  await page.getByRole('tab', { name: 'From a voice sample' }).click()
+  await page.getByRole('tabpanel', { name: 'From a voice sample' }).getByRole('button', { name: /Record from the microphone/ }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'microphone is blocked' })).toBeVisible()
+})
+
+test('Images is one entry in the sidebar and one page over the running picture models; the description carries over', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { images: true, llm: true })
+  await go(page, '#/hosts/local/images')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav.getByRole('link', { name: /^Images/ })).toHaveCount(1)
+  await expect(nav.getByText('Pictures', { exact: true })).toHaveCount(0)
+  await expect(nav.getByRole('link', { name: /^Z-Image/ })).toHaveCount(0)  // not a sidebar entry of its own
+  await expect(page.getByRole('heading', { name: 'Images', level: 1 })).toBeVisible()
+  const picker = page.getByLabel('Model drawing')
+  await expect(picker.locator('option')).toHaveText(['Qwen Image (Personal use only)', 'Z-Image Turbo (Work use)'])
+  await page.getByLabel(/^description/i).fill('A fox in the snow')
+  await page.getByLabel(/^avoid/i).fill('blurry')
+  await page.getByLabel(/^shape/i).selectOption('wide')
+  await picker.selectOption('z_img')
+  // The description and the shape cross over; the Avoid list has no place on this model, which says so and keeps it.
+  await expect(page.getByLabel(/^description/i)).toHaveValue('A fox in the snow')
+  await expect(page.getByLabel(/^shape/i)).toHaveValue('wide')
+  await expect(page.getByLabel(/^avoid/i)).toHaveCount(0)
+  await expect(page.getByText('has no place for the things to avoid')).toBeVisible()
+  await picker.selectOption('qwen_img')
+  await expect(page.getByLabel(/^avoid/i)).toHaveValue('blurry')
+  await page.screenshot({ path: 'test-results/screenshots/images.png', fullPage: true })
+})
+
+test('Music is one entry in the sidebar and one page over the running song models; the style and lyrics carry over', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { music: true })
+  await go(page, '#/hosts/local/music')
+  const nav = page.getByRole('navigation', { name: 'Main navigation' })
+  await expect(nav.getByRole('link', { name: /^Music/ })).toHaveCount(1)
+  await expect(nav.getByRole('link', { name: /^ACE-Step/ })).toHaveCount(0)  // not a sidebar entry of its own
+  await expect(nav.getByRole('group')).toHaveCount(0)  // no Music section any more
+  await expect(page.getByRole('heading', { name: 'Music', level: 1 })).toBeVisible()
+  const picker = page.getByLabel('Model composing')
+  await expect(picker.locator('option')).toHaveText(['YuE2 songs (Personal use only)', 'ACE-Step (Work use)', 'MiniMax Music 3 (Work use)'])
+  // YuE2: the song is as long as the lyrics, so there is no length, and lyrics are optional.
+  await expect(page.getByLabel(/^length/i)).toHaveCount(0)
+  await expect(page.getByRole('form', { name: 'Make a song' }).getByRole('button', { name: 'Make a song' })).toBeDisabled()
+  await page.getByRole('textbox', { name: /^style/i }).fill('Dream pop')
+  await expect(page.getByRole('form', { name: 'Make a song' }).getByRole('button', { name: 'Make a song' })).toBeEnabled()
+  // The part tags are inserted into the lyrics where the cursor is.
+  await page.getByRole('textbox', { name: /^lyrics/i }).fill('Sunlight on the floor')
+  await page.getByRole('textbox', { name: /^lyrics/i }).evaluate((element: HTMLTextAreaElement) => { element.focus(); element.setSelectionRange(0, 0) })
+  await page.getByRole('button', { name: '[Chorus]' }).click()
+  await expect(page.getByRole('textbox', { name: /^lyrics/i })).toHaveValue('[Chorus]\nSunlight on the floor')
+  await picker.selectOption('ace_step')
+  await expect(page.getByRole('textbox', { name: /^style/i })).toHaveValue('Dream pop')
+  await expect(page.getByRole('textbox', { name: /^lyrics/i })).toHaveValue('[Chorus]\nSunlight on the floor')
+  await expect(page.getByLabel(/^length/i)).toHaveValue('60')
+  await page.getByRole('spinbutton', { name: /^tempo/i }).fill('90')
+  await picker.selectOption('minimax_music')
+  await expect(page.getByRole('textbox', { name: /^style/i })).toHaveValue('Dream pop')
+  await expect(page.getByRole('spinbutton', { name: /^tempo/i })).toHaveCount(0)
+  await expect(page.getByText('has no place for the tempo')).toBeVisible()
+  await picker.selectOption('ace_step')
+  await expect(page.getByRole('spinbutton', { name: /^tempo/i })).toHaveValue('90')
+  await page.screenshot({ path: 'test-results/screenshots/music.png', fullPage: true })
+})
+
+test('ACE-Step makes a new version of a song or redoes a section of it, starting from a song made here', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { music: true })
+  // A song made earlier on this model.
+  api.jobs.unshift({ id: 'job-00000042', model_id: 'ace_step', inputs: { mode: 'song', style: 'Warm folk', length: '60' }, status: 'done', progress: 'Done', outputs: [{ name: 'song.wav', mime: 'audio/wav', bytes: 44 }],
+    error_message: null, created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:01:00Z', details: { seed: 7, audio_seconds: 60, seconds: 20 }, launch: { preset: 'mlx', settings: {}, gpus: [0] }, ticks: 9 })
+  await page.reload()
+  await go(page, '#/hosts/local/music')
+  await expect.poll(() => pushFrame(page, fixtureHost())).toBe(true)  // the page has reloaded: a measurement makes the connection live
+  await page.getByLabel('Model composing').selectOption('ace_step')
+  await expect(page.getByRole('tab', { name: 'New song' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'New version of a song' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Redo a section' })).toBeVisible()
+  const rail = page.getByRole('complementary', { name: 'Your songs' })
+  const item = rail.getByRole('button', { name: /^Warm folk/ })
+  await item.click()
+  const modal = page.getByRole('dialog', { name: 'Warm folk' })
+  await modal.getByRole('button', { name: 'Use as source song' }).click()
+  // The song is now the form's song, on the tab for a new version.
+  await expect(page.getByRole('tab', { name: 'New version of a song' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText(/-song\.wav$/).first()).toBeVisible()
+  await page.getByRole('textbox', { name: /^style/i }).fill('Slow jazz')
+  await page.getByRole('spinbutton', { name: /^how closely/i }).fill('30')
+  await page.getByRole('button', { name: 'Make a song' }).click()
+  await expect.poll(() => (api.jobBody?.inputs as Record<string, unknown>)?.mode).toBe('cover')
+  expect(api.jobBody).toMatchObject({ inputs: { mode: 'cover', style: 'Slow jazz', strength: 30 } })
+  expect(((api.jobBody?.inputs as Record<string, unknown>).source as string[]).length).toBe(1)
+  await page.getByRole('tab', { name: 'Redo a section' }).click()
+  await expect(page.locator('[role=tabpanel]:not([hidden])').getByText(/-song\.wav$/).first()).toBeVisible()  // the same song is on the other tab
+  await expect(page.getByRole('spinbutton', { name: /^from/i })).toBeVisible()
+  // YuE2 starts from a song too, as a field of its one form: the song comes with the person.
+  await page.getByLabel('Model composing').selectOption('yue2')
+  await expect(page.getByText(/-song\.wav$/).first()).toBeVisible()
+  await expect(page.getByText('has no place for the song to start from')).toHaveCount(0)
+  // A model that cannot start from a song says so and keeps it for the way back.
+  await page.getByLabel('Model composing').selectOption('minimax_music')
+  await expect(page.getByText('has no place for the song to start from')).toBeVisible()
+})
+
+test('a video model with a picture tab shows it on Images and keeps its clip tabs on its own page', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { images: true, videos: true, h3images: true })
+  await go(page, '#/hosts/local/images')
+  await page.getByLabel('Model drawing').selectOption('minimax_h3')
+  await expect(page.getByRole('tab', { name: 'A picture' })).toHaveCount(0)  // one tab: no tab bar
+  await expect(page.getByLabel(/^size/i)).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'From pictures' })).toHaveCount(0)
+  await go(page, '#/hosts/local/video')
+  await expect(page.getByRole('tab', { name: 'From a description' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'A picture' })).toHaveCount(0)
+})
+
+test('Video is one entry in the sidebar and one page over the running clip models; the description and length carry over', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { videos: true, clips: true })
+  await go(page, '#/hosts/local/video')
+  const picker = page.getByLabel('Model filming')
+  await expect(picker.locator('option')).toHaveText(['MiniMax H3 videos (Personal use only)', 'LongCat video (Work use)'])
+  await expect(page.getByText('The clip comes with sound the model makes itself')).toBeVisible()
+  await page.getByRole('textbox', { name: /^description/i }).fill('A fox in the snow')
+  await picker.selectOption('longcat_video')
+  await expect(page.getByText('This model makes silent clips.')).toBeVisible()
+  await expect(page.getByRole('textbox', { name: /^description/i })).toHaveValue('A fox in the snow')
+  await expect(page.getByRole('tab', { name: 'From a picture' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'Continue a clip' })).toBeVisible()
+  await page.getByRole('combobox', { name: /^length/i }).selectOption('long')
+  await page.getByRole('button', { name: 'Make a clip' }).click()
+  await expect.poll(() => api.jobBody).not.toBeNull()
+  expect(api.jobBody).toMatchObject({ inputs: { mode: 'text', prompt: 'A fox in the snow', length: 'long' } })
+  await page.screenshot({ path: 'test-results/screenshots/video.png', fullPage: true })
+})
+
+test('a finished clip becomes the next one: its last frame as a first picture, or the clip itself to continue', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { videos: true, clips: true })
+  api.jobs.unshift({ id: 'job-00000051', model_id: 'longcat_video', inputs: { mode: 'text', prompt: 'A fox walks', length: 'short' }, status: 'done', progress: 'Done', outputs: [{ name: 'clip.webm', mime: 'video/webm', bytes: 100 }],
+    error_message: null, created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:01:00Z', details: { seed: 7, seconds: 60 }, launch: { preset: 'q8', settings: {}, gpus: [0] }, ticks: 9 })
+  await page.route('**/api/jobs/job-00000051/files/clip.webm', (route) => route.fulfill({ status: 200, contentType: 'video/webm', body: readFileSync(new URL('./fixtures/black-start.webm', import.meta.url)) }))
+  await page.reload()
+  await go(page, '#/hosts/local/video')
+  await expect.poll(() => pushFrame(page, fixtureHost())).toBe(true)
+  await page.getByLabel('Model filming').selectOption('longcat_video')
+  await page.getByRole('complementary').getByRole('button', { name: /^A fox walks/ }).click()
+  const detail = page.getByRole('dialog').getByRole('article')
+  await detail.getByRole('button', { name: 'Use as source clip' }).click()
+  await expect(page.getByRole('tab', { name: 'Continue a clip' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText(/-clip\.mp4$|-clip\.webm$/).first()).toBeVisible()
+  await page.getByRole('complementary').getByRole('button', { name: /^A fox walks/ }).click()
+  await page.getByRole('dialog').getByRole('article').getByRole('button', { name: 'Use last frame as first picture' }).click()
+  await expect(page.getByRole('tab', { name: 'From a picture' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('job-0000-last-frame.png')).toBeVisible()
+  expect(api.uploads.map(({ type }) => type)).toContain('image/png')
+  // A model that has no tab to continue a clip keeps its picture ways only.
+  await page.getByLabel('Model filming').selectOption('minimax_h3')
+  await expect(page.getByRole('tab', { name: 'From pictures' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('job-0000-last-frame.png')).toBeVisible()
+})
+
+test('Images: a custom size shows its width and height, and a starting picture is added, carried across models and noted when a model cannot take it', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { images: true })
+  await go(page, '#/hosts/local/images')
+  await expect(page.getByLabel(/^width/i)).toHaveCount(0)
+  await page.getByLabel(/^shape/i).selectOption('custom')
+  await page.getByLabel(/^width/i).fill('1280')
+  await page.getByLabel(/^height/i).fill('720')
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /Add picture: Start from a picture/ }).click()])
+  await chooser.setFiles({ name: 'start.png', mimeType: 'image/png', buffer: readFileSync(new URL('./fixtures/wide.png', import.meta.url)) })
+  await expect(page.getByRole('button', { name: 'Remove start.png' })).toBeVisible()
+  await page.getByLabel('Model drawing').selectOption('z_img')
+  await expect(page.getByLabel(/^width/i)).toHaveValue('1280')
+  await expect(page.getByRole('button', { name: 'Remove start.png' })).toBeVisible()  // this model can start from a picture too
+  expect(api.uploads.at(-1)?.name).toBe('start.png')
+})
+
+test('Transcribe is one entry in the sidebar and one page over the running speech-to-text models; the words to expect carry over', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { asr: true })
+  await go(page, '#/hosts/local/transcribe')
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Transcription/ })).toContainText('On')
+  const picker = page.getByLabel('Model transcribing')
+  await expect(picker.locator('option')).toHaveText(['Whisper (Work use)', 'Parakeet (Work use)'])
+  await expect(page.getByText('Each line has its time, and captions (.srt and .vtt) are written.')).toBeVisible()
+  await page.getByRole('combobox', { name: /^language/i }).selectOption('French')
+  await page.getByRole('textbox', { name: /^words to expect/i }).fill('Zephyrine, Priya')
+  await picker.selectOption('parakeet_asr')
+  await expect(page.getByRole('textbox', { name: /^words to expect/i })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: /^language/i })).toHaveCount(0)
+  await expect(page.getByText(/Parakeet has no place for the language/)).toBeVisible()
+  await expect(page.getByText(/Parakeet has no place for .*words to expect/)).toBeVisible()
+  await picker.selectOption('whisper_asr')
+  await expect(page.getByRole('combobox', { name: /^language/i })).toHaveValue('French')  // kept for the way back
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /^Add (audio|file|recording)/i }).first().click()])
+  await chooser.setFiles({ name: 'talk.wav', mimeType: 'audio/wav', buffer: Buffer.from('RIFF0000WAVE') })
+  await expect(page.getByRole('button', { name: 'Remove talk.wav' })).toBeVisible()
+  await page.getByRole('button', { name: 'Transcribe', exact: true }).click()
+  await expect.poll(() => api.jobBody).not.toBeNull()
+  expect(api.jobBody).toMatchObject({ inputs: { language: 'French', terms: 'Zephyrine, Priya', speakers: 'no' } })
+  await page.screenshot({ path: 'test-results/screenshots/transcribe.png', fullPage: true })
+})
+
+test('a transcript is shown open, can be copied, and offers its files', async ({ page }) => {
+  const api = await connectFixtures(page, 'Fixture desktop', false, { asr: true })
+  api.jobs.unshift({ id: 'job-00000061', model_id: 'whisper_asr', inputs: { recording: [{ name: '01-talk.wav', kind: 'audio', mime: 'audio/wav', original: 'talk.wav' }], language: 'auto', speakers: 'no' }, status: 'done', progress: 'Done', error_message: null,
+    outputs: ['transcript.md', 'transcript.txt', 'transcript.srt', 'transcript.vtt', 'transcript.json'].map((name) => ({ name, mime: 'text/plain', bytes: 40 })),
+    created_at: '2026-11-12T00:00:00Z', finished_at: '2026-11-12T00:01:00Z', details: { engine: 'whisper', audio_seconds: 12, words: 5, language: 'en', times: 'yes' }, launch: { preset: 'mlx', settings: {}, gpus: [0] }, ticks: 9 })
+  await page.route('**/api/jobs/job-00000061/files/transcript.*', (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: 'x' }))
+  await page.route('**/api/jobs/job-00000061/files/transcript.md', (route) => route.fulfill({ status: 200, contentType: 'text/markdown', body: '# Transcript\n\n**[00:00]** Good morning everyone.\n' }))
+  await page.route('**/api/jobs/job-00000061/files/transcript.txt', (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: '[00:00] Good morning everyone.\n' }))
+  await page.reload()
+  await go(page, '#/hosts/local/transcribe')
+  await expect.poll(() => pushFrame(page, fixtureHost())).toBe(true)
+  await page.getByRole('complementary').getByRole('button', { name: /talk\.wav|job-0000/ }).first().click()
+  const detail = page.getByRole('dialog').getByRole('article')
+  await expect(detail.getByText('Good morning everyone.')).toBeVisible()  // open, not folded away
+  await expect(detail.getByRole('button', { name: 'Copy the text' })).toBeVisible()
+  await detail.getByRole('button', { name: /^Download transcript/ }).click()
+  await expect(page.getByRole('link', { name: /Plain text/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Captions \(\.srt\)/ })).toBeVisible()
+})
+
+test('a hosted provider lists its models on the Models page; the ones ticked appear in the Chat, which then works without a local model', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { runtime: true })
+  await keepFresh(page)
+  const models = [{ id: 'claude-haiku-5-5', name: 'claude-haiku-5-5', enabled: false }, { id: 'claude-opus-4-5', name: 'claude-opus-4-5', enabled: false }, { id: 'claude-sonnet-5-5', name: 'claude-sonnet-5-5', enabled: false }]
+  const reply = () => ({ providers: [{ id: 'litellm', name: 'LiteLLM', address: 'https://gateway.example', token_variable: 'GATEWAY_TOKEN', token_set: true, error: null, models }] })
+  let refreshed = 0
+  await page.route('**/api/providers', (route) => route.fulfill({ json: reply() }))
+  await page.route('**/api/providers/litellm/refresh', (route) => { refreshed += 1; return route.fulfill({ json: reply() }) })
+  await page.route('**/api/providers/litellm/models', async (route) => {
+    const { enabled } = route.request().postDataJSON() as { enabled: string[] }
+    models.forEach((model) => { model.enabled = enabled.includes(model.id) })
+    await route.fulfill({ json: reply() })
+  })
+  await page.route('**/api/conversations', (route) => route.fulfill({ json: { conversations: [] } }))
+
+  await go(page, '#/hosts/local/models')
+  await page.reload()
+  await expect(page.getByRole('tab', { name: 'Local' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: 'Hosted' }).click()
+  const section = page.getByRole('region', { name: 'LiteLLM' })
+  await expect(page.getByRole('heading', { name: 'Chat' })).toBeHidden()
+  await expect(section).toContainText('0 of 3')
+  await expect(section).toContainText('GATEWAY_TOKEN')
+  await section.getByRole('checkbox', { name: 'claude-sonnet-5-5' }).click()
+  await expect(section.getByRole('checkbox', { name: 'claude-sonnet-5-5' })).toBeChecked()
+  await section.getByRole('checkbox', { name: 'claude-haiku-5-5' }).click()
+  await expect(section.getByRole('checkbox', { name: 'claude-haiku-5-5' })).toBeChecked()
+  await expect(section).toContainText('2 of 3')
+  await section.getByRole('button', { name: 'Refresh' }).click()
+  await expect.poll(() => refreshed).toBe(1)
+
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Chat/ })).toBeVisible()
+  await go(page, '#/hosts/local/chat')
+  const picker = page.getByRole('combobox', { name: /model/i }).first()
+  await expect(picker.locator('option')).toHaveText(['claude-haiku-5-5 (LiteLLM)', 'claude-sonnet-5-5 (LiteLLM)'])
 })

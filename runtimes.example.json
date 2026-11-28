@@ -36,6 +36,12 @@
             }
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "CC BY-NC 4.0 (non-commercial)",
+        "note": "Non-commercial use only.",
+        "url": "https://huggingface.co/m-a-p/YuE2-3B"
       }
     },
     "qwen_image": {
@@ -106,6 +112,12 @@
             }
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "Qwen Research License (non-commercial); the default preset is a community fine-tune of it",
+        "note": "Research and evaluation only; any commercial use needs a separate licence from Qwen.",
+        "url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE"
       }
     },
     "minimax_h3": {
@@ -149,6 +161,12 @@
             }
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "MiniMax H3 Community License (excludes the US, EU, UK and South Korea)",
+        "note": "Rights are granted only outside the US, EU, UK and South Korea, and use there is not licensed. Keep it to your own machine.",
+        "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE"
       }
     },
     "omnivoice": {
@@ -185,6 +203,12 @@
             }
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "CC BY-NC (non-commercial); its audio tokenizer adds a 100,000-user cap",
+        "note": "Non-commercial use only.",
+        "url": "https://huggingface.co/k2-fsa/OmniVoice"
       }
     },
     "qwen3_tts": {
@@ -222,6 +246,11 @@
             }
           }
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base"
       }
     },
     "deepseek41": {
@@ -608,12 +637,18 @@
             }
           }
         }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "Fish Audio Community License 1.0",
+        "note": "Free only while the annual revenue of you and your affiliates is under US$500,000, so not for company use here; no hosted service for third parties either. Output may not train other speech models.",
+        "url": "https://huggingface.co/fishaudio/drama-3"
       }
     },
     "meeting_notes": {
       "kind": "meeting_notes",
       "name": "Meeting notes",
-      "workload": "text",
+      "workload": "workflow",
       "description": "A meeting recording in; a transcript with who said what, a summary, action items and decisions out. The speech model loads for each job and frees its card when done; the notes use a text model, started for the job if none is running.",
       "python": "C:\\Projects\\generationstation\\backend\\.venv\\Scripts\\python.exe",
       "output_dir": "D:\\ai\\outputs\\meeting-notes",
@@ -651,6 +686,13 @@
             "gpu_min_free_gib": {
               "0": 1
             }
+          },
+          "license": {
+            "use": "work",
+            "weights": "NVIDIA Nemotron 3.5 Transcribe: OpenMDW-1.1 (NVIDIA says it is ready for commercial use).",
+            "code": "vLLM: Apache-2.0. RapidOCR with its PaddleOCR models: Apache-2.0.",
+            "note": "The notes come from the text model you pick, which has its own licence.",
+            "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-NVFP4"
           }
         },
         "qwen": {
@@ -679,6 +721,13 @@
               "0": 1,
               "1": 1
             }
+          },
+          "license": {
+            "use": "personal",
+            "weights": "DiariZen speaker model (BUT-FIT): CC BY-NC 4.0, non-commercial. Qwen3-ASR: Apache-2.0.",
+            "code": "DiariZen and pyannote.audio: MIT. RapidOCR with its PaddleOCR models: Apache-2.0.",
+            "note": "The speaker model's weights are non-commercial because some of its training data is research-only. Use the Nemotron version for work.",
+            "url": "https://huggingface.co/BUT-FIT/diarizen-wavlm-large-s80-md"
           }
         }
       }

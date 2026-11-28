@@ -15,9 +15,9 @@ model's **Your results**. The desktop has two graphics cards: an RTX 5090 (32 GB
 
 # Finding your way
 
-- The menu on the left lists the models by what they make: **Text** (with **Chat**), **Speech**, **Pictures**,
-  **Video** and **Music**. A green **On** next to a model means it is running and ready.
-- **Overview** shows the desktop's cards and memory, what is running, and recent results.
+- The menu on the left has one entry for each tool that serves several models: **Chat**, **Decision**, **Images**,
+  **Meeting notes**, **Music**, **Speech**, **Transcribe** and **Video**. Each picks among the models of its kind that are running. A green **On** next to an entry means a model is running and ready.
+- **Overview** shows the desktop's cards and memory and what is running, in the same sections as the **Models** page.
 - **Models** lists every model as a card. Each card shows which graphics card it uses (the small chips: click
   one to choose), a word on whether it fits right now, and **Start** or **Stop**. **Show details** opens the
   card: what the model is, its settings, and **Advanced** settings most people never need.
@@ -31,15 +31,18 @@ model's **Your results**. The desktop has two graphics cards: an RTX 5090 (32 GB
 
 1. Start the model: on **Models**, press **Start** on its card (or ask me to start it). Starting takes from a
    few seconds to a minute or two. When its card says it is running, it is ready.
-2. Open the model's page from the menu on the left. Some models have tabs for different ways of making things
-   (for example **From a description** and **From pictures**); pick one.
+2. Open its page from the menu on the left (**Images** for any picture model, **Speech** for any speech model, **Video** for any clip model, **Transcribe** to write down a recording). If
+   several models are running, the dropdown at the top of the page chooses which one makes it, and what you typed
+   moves with you. Some models have tabs for different ways of making things (for example **From a description** and
+   **From pictures**); pick one.
 3. Fill in the form. Fields marked as required must be filled; the rest have sensible defaults. Under the
    button the page says about how long it will take.
 4. Press the button at the bottom (**Make a song**, **Make a picture**, **Make a video**, **Make speech**).
    The result appears at the top of **Your results** on the right, with its progress. You can keep making
    more; they wait in line. **Cancel** stops one.
 5. Click a result to open it: play it or see it full size, see the settings it used, **Use these settings**
-   (to make a variation), or **Delete** it.
+   (to make a variation), or **Delete** it. On a clip, **Use last frame as first picture** starts the next clip
+   from where this one ended, and **Use as source clip** continues it on a model that can.
 
 # When something goes wrong
 

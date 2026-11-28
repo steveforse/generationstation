@@ -16,11 +16,18 @@ KINDS = {
     "image": {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"},
     "video": {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".m4v": "video/mp4"},
     "audio": {".wav": "audio/wav", ".mp3": "audio/mpeg", ".flac": "audio/flac", ".m4a": "audio/mp4", ".ogg": "audio/ogg"},
+    # Files for the chat to read: a PDF (its text is extracted), and text or code (.txt and .md count as transcripts below).
+    "document": {".pdf": "application/pdf", ".csv": "text/csv", ".json": "application/json", ".log": "text/plain",
+                 ".yaml": "text/yaml", ".yml": "text/yaml", ".toml": "text/plain", ".xml": "application/xml",
+                 ".html": "text/html", ".htm": "text/html", ".css": "text/css", ".sql": "text/plain", ".sh": "text/plain",
+                 ".py": "text/x-python", ".js": "text/javascript", ".ts": "text/plain", ".tsx": "text/plain",
+                 ".jsx": "text/plain", ".java": "text/plain", ".c": "text/plain", ".h": "text/plain", ".cpp": "text/plain",
+                 ".rs": "text/plain", ".go": "text/plain", ".rb": "text/plain", ".ini": "text/plain"},
     # A transcript someone already has (a Zoom .vtt or .txt, an .srt, notes): text, UTF-8.
     "transcript": {".txt": "text/plain", ".md": "text/markdown", ".vtt": "text/vtt", ".srt": "application/x-subrip"},
 }
 # Video and audio allow an hour-long meeting recording (a Zoom MP4 of an hour is often 300-800 MB).
-MAX_BYTES = {"image": 25 * 1024**2, "video": 2048 * 1024**2, "audio": 600 * 1024**2, "transcript": 20 * 1024**2}
+MAX_BYTES = {"image": 25 * 1024**2, "video": 2048 * 1024**2, "audio": 600 * 1024**2, "transcript": 20 * 1024**2, "document": 30 * 1024**2}
 UPLOAD_ID = re.compile(r"^[0-9a-f]{32}$")
 KEEP_SECONDS = 24 * 3600
 
@@ -56,7 +63,9 @@ def _looks_like(suffix: str, head: bytes) -> bool:
         return head.startswith(b"fLaC")
     if suffix == ".ogg":
         return head.startswith(b"OggS")
-    if suffix in KINDS["transcript"]:
+    if suffix == ".pdf":
+        return head.startswith(b"%PDF-")
+    if suffix in KINDS["transcript"] or suffix in KINDS["document"]:
         return _looks_like_text(head)
     return False
 

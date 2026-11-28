@@ -4,10 +4,12 @@ The worker (workers/meeting_notes_worker.py) runs the speech engine in WSL, one 
 when the transcript is done. For the notes it asks the host for a text model (TextModelBroker in text_models.py), which
 starts one through the normal capacity checks when none is running and stops it again afterwards if it started it.
 """
+import difflib
 import importlib.util
 import json
 import os
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar, Literal
 
@@ -54,10 +56,69 @@ def _label(value, what):
     return value
 
 
-def _write(path: Path, text: str):
+def _write(path: Path, text: str, *, exact: bool = False):
+    """Replace a file in one step. `exact` keeps line endings as given (CSV files end lines with \\r\\n)."""
     temp = path.with_name(path.name + ".tmp")
-    temp.write_text(text, encoding="utf-8")
+    if exact:
+        with open(temp, "w", newline="", encoding="utf-8") as handle:
+            handle.write(text)
+    else:
+        temp.write_text(text, encoding="utf-8")
     os.replace(temp, path)
+
+
+MAX_HISTORY = 200  # entries kept in meeting.json, newest last
+MAX_CHANGES = 200  # changes kept in one entry
+
+
+def _diff(section: str, before: list[str], after: list[str]) -> list[dict]:
+    """What changed between two lists of lines: removed, added, and changed (a line replaced by another)."""
+    changes = []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(a=before, b=after, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        old, new = before[i1:i2], after[j1:j2]
+        for old_line, new_line in zip(old, new):
+            changes.append({"section": section, "kind": "changed", "before": old_line, "after": new_line})
+        changes += [{"section": section, "kind": "removed", "before": line, "after": None} for line in old[len(new):]]
+        changes += [{"section": section, "kind": "added", "before": None, "after": line} for line in new[len(old):]]
+    return changes
+
+
+def _log(record: dict, revision: int, changes: list[dict]):
+    """Append a history entry for a saved edit: when, the new revision, and what changed."""
+    entry = {"revision": revision, "at": datetime.now(UTC).isoformat(timespec="seconds"), "changes": changes[:MAX_CHANGES]}
+    if len(changes) > MAX_CHANGES:
+        entry["more"] = len(changes) - MAX_CHANGES
+    record["history"] = [*(record.get("history") or []), entry][-MAX_HISTORY:]
+
+
+def _line(value, what, limit):
+    value = " ".join(str(value).split())
+    if not value or len(value) > limit:
+        raise TranscriptEditError(f"A {what} needs 1 to {limit} characters.")
+    return value
+
+
+def _item(value, main, extras, what):
+    """A person's action item or decision: its main text is required, the other fields (owner, due, time) are optional."""
+    if not isinstance(value, dict):
+        raise TranscriptEditError(f"A {what} must be an object.")
+    item = {main: _line(value.get(main) or "", f"{what} {main}", 400)}
+    for key in extras:
+        text = " ".join(str(value.get(key) or "").split())
+        if len(text) > 80:
+            raise TranscriptEditError(f"The {key} of a {what} can be at most 80 characters.")
+        if text:
+            item[key] = text
+    return item
+
+
+def _write_notes(folder: Path, record: dict):
+    notes = {section: record.get(section) or [] for section in ("summary", "actions", "decisions")}
+    files = _transcript_module().render_notes(notes, record.get("speakers") or {})
+    for name, text in files.items():
+        _write(folder / name, text, exact=name.endswith(".csv"))
 
 
 class MeetingNotesPreset(WorkerPreset):
@@ -147,18 +208,23 @@ class MeetingNotesPlugin(WorkerPlugin):
                 raise TranscriptEditError("The transcript changed since you opened it. Reload it and edit again.", "TRANSCRIPT_CHANGED", 409)
             segs = [dict(seg) for seg in record.get("segments") or []]
             names = dict(record.get("speakers") or {})
+            changes = []
             for old, new in (payload.get("rename") or {}).items():
                 new = _label(new, "speaker name")
                 if not any(seg["speaker"] == old for seg in segs):
                     raise TranscriptEditError(f"There is no speaker {old!r}.")
+                count = 0
                 for seg in segs:
                     if seg["speaker"] == old:
                         seg["speaker"] = new
+                        count += 1
+                changes.append({"section": "transcript", "kind": "renamed", "before": old, "after": new, "detail": f"{count} segment{'s' if count != 1 else ''}"})
                 names.pop(old, None)  # a name a person typed replaces the one the notes proposed
             for edit in payload.get("segments") or []:
                 index = edit.get("index")
                 if not isinstance(index, int) or not 0 <= index < len(segs):
                     raise TranscriptEditError(f"There is no segment {index!r}.")
+                was = f"{segs[index]['speaker']}: {segs[index]['text']}"
                 if edit.get("speaker") is not None:
                     segs[index]["speaker"] = _label(edit["speaker"], "speaker name")
                 if edit.get("text") is not None:
@@ -166,10 +232,51 @@ class MeetingNotesPlugin(WorkerPlugin):
                     if not text:
                         raise TranscriptEditError("A segment cannot be empty.")
                     segs[index]["text"] = text
+                now = f"{segs[index]['speaker']}: {segs[index]['text']}"
+                if now != was:
+                    changes.append({"section": "transcript", "kind": "changed", "before": was, "after": now, "detail": f"segment {index + 1}"})
             names = {label: name for label, name in names.items() if any(seg["speaker"] == label for seg in segs)}
             record.update(segments=segs, speakers=names, revision=revision + 1, edited=True)
+            if changes:
+                _log(record, revision + 1, changes)
             files = _transcript_module().render(segs, names)
             for name, text in files.items():
                 _write(folder / name, text)
             _write(path, json.dumps(record, indent=1))
             return {"revision": revision + 1, "segments": len(segs)}
+
+    def edit_notes(self, folder: Path, payload: dict):
+        """Replace a finished meeting's summary, action items and/or decisions with a person's version. Each list sent
+        replaces the one saved. Rewrites meeting.json, notes.md and the two CSV files, logs what changed in the history
+        and returns the new revision. The notes as first written are kept once, as `notes_original`."""
+        path = folder / "meeting.json"
+        with _EDIT_LOCK:
+            if not path.is_file():
+                raise TranscriptEditError("This result has no notes to edit.", "JOB_NOT_FOUND", 404)
+            record = json.loads(path.read_text(encoding="utf-8"))
+            if "summary" not in record:
+                raise TranscriptEditError("This meeting was made without notes.", "JOB_NOT_FOUND", 404)
+            revision = int(record.get("revision", 1))
+            if payload.get("revision") != revision:
+                raise TranscriptEditError("The notes changed since you opened them. Reload them and edit again.", "TRANSCRIPT_CHANGED", 409)
+            module = _transcript_module()
+            lines = {"summary": lambda item: item, "actions": module.action_line, "decisions": module.decision_line}
+            before = {section: record.get(section) or [] for section in lines}
+            after = dict(before)
+            if payload.get("summary") is not None:
+                after["summary"] = [_line(item, "summary point", 600) for item in payload["summary"]]
+            if payload.get("actions") is not None:
+                after["actions"] = [_item(item, "task", ("owner", "due", "time"), "action item") for item in payload["actions"]]
+            if payload.get("decisions") is not None:
+                after["decisions"] = [_item(item, "decision", ("by", "time"), "decision") for item in payload["decisions"]]
+            changes = []
+            for section, show in lines.items():
+                changes += _diff(section, [show(item) for item in before[section]], [show(item) for item in after[section]])
+            if not changes and all(after[key] == before[key] for key in after):
+                raise TranscriptEditError("Nothing was changed.")
+            record.setdefault("notes_original", before)
+            record.update(after, revision=revision + 1, edited=True)
+            _log(record, revision + 1, changes)
+            _write_notes(folder, record)
+            _write(path, json.dumps(record, indent=1))
+            return {"revision": revision + 1, "changes": len(changes)}

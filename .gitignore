@@ -25,3 +25,4 @@ backups/
 *.pth
 runtimes.json
 runtimes.json.bak*
+workers/.cache/

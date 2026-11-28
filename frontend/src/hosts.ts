@@ -3,7 +3,6 @@
 export type SavedHost = { id: string; label: string; url: string; token: string }
 
 const HOSTS_KEY = 'generation-station.hosts'
-const OLD_URL_KEY = 'generation-station.server-url'
 
 export function newHostId() {
   const bytes = crypto.getRandomValues(new Uint8Array(6))
@@ -24,8 +23,7 @@ export function loadHosts(): SavedHost[] {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed)) return parsed.filter(valid)
     }
-    const oldUrl = localStorage.getItem(OLD_URL_KEY)
-    return [{ id: 'local', label: '', url: oldUrl ?? '', token: '' }]
+    return [{ id: 'local', label: '', url: '', token: '' }]
   } catch {
     return [{ id: 'local', label: '', url: '', token: '' }]
   }
@@ -34,6 +32,5 @@ export function loadHosts(): SavedHost[] {
 export function saveHosts(hosts: SavedHost[]) {
   try {
     localStorage.setItem(HOSTS_KEY, JSON.stringify(hosts))
-    localStorage.removeItem(OLD_URL_KEY)
   } catch { /* storage unavailable: hosts stay in memory for this page */ }
 }

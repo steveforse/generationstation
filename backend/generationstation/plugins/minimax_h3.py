@@ -4,6 +4,8 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, SettingSpec, TimingSpec
+from .images import ImageInfo
+from .video import VideoInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 PROMPT = InputSpec(
@@ -294,6 +296,13 @@ class MiniMaxH3Plugin(WorkerPlugin):
             }),
     }
 
+    image: ClassVar[ImageInfo] = ImageInfo(
+        guidance=("Describe the picture: the subject, the setting, the light, the style and the framing. To edit, name the "
+                  "pictures you give as \"picture 1\", \"picture 2\" and say what to keep and what changes."),
+        create="picture", edit="edit",
+        roles={"picture": {"prompt": "prompt", "shape": "shape", "size": "size", "quality": "quality", "seed": "seed"},
+               "edit": {"pictures": "images", "prompt": "prompt", "notes": "notes", "shape": "shape", "size": "size", "quality": "quality", "seed": "seed"}})
+
     def check_inputs(self, mode, values, files):
         if mode == "frames" and not (files.get("first") or files.get("last")):
             return ["Add a first frame, a last frame, or both."]
@@ -316,3 +325,17 @@ class MiniMaxH3Plugin(WorkerPlugin):
             if sum(counts.values()) > 12:
                 return ["Use at most 12 references in all."]
         return []
+
+    video: ClassVar[VideoInfo] = VideoInfo(
+        guidance=("Describe what is seen and what happens, in order, and how the camera moves. Put what is said in quotes, and use "
+                  "the sounds and music fields for what is heard. It can start from a first picture, end on a last one, or both, "
+                  "and can use pictures, clips and audio as references."),
+        sound="prompted", create="text", picture="frames", references="reference",
+        seconds={"5": 5, "10": 10, "15": 15},
+        roles={"text": {"prompt": "prompt", "sounds": "sounds", "music": "music", "shape": "shape", "resolution": "resolution",
+                        "length": "length", "quality": "quality", "seed": "seed"},
+               "frames": {"prompt": "prompt", "sounds": "sounds", "music": "music", "shape": "shape", "resolution": "resolution",
+                          "length": "length", "quality": "quality", "seed": "seed", "first": "first", "last": "last"},
+               "reference": {"prompt": "prompt", "notes": "notes", "sounds": "sounds", "music": "music", "shape": "shape",
+                             "resolution": "resolution", "length": "length", "quality": "quality", "seed": "seed",
+                             "references": "images", "videos": "videos", "audio": "audio"}})

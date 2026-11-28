@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from generationstation.chat import ChatManager, tool_name
+from generationstation.chat import ChatManager
 from generationstation.chat_tools import JobTools
 from generationstation.lifecycle import LifecycleError
 from generationstation.plugins import get_plugin
@@ -99,8 +99,6 @@ class Generation:
         self.store, self.root, self.created = store, root, []
 
     def create(self, model_id, inputs):
-        if model_id == "yue2" and not inputs.get("lyrics"):
-            raise LifecycleError("INPUTS_INVALID", "Lyrics is required.", 422)
         job = {"id": str(uuid.uuid4()), "model_id": model_id, "inputs": inputs, "status": "queued", "outputs": []}
         self.created.append(job)
         self.store.jobs[job["id"]] = job
@@ -168,18 +166,19 @@ def test_tools_offer_each_way_of_making_on_running_models(setup):
     store.states["h3"] = {"state": "unloaded"}
     tools, _ = ChatManager(store, cat, generation, uploads)._tools()
     names = [tool["function"]["name"] for tool in tools]
-    assert names == [tool_name("yue2", mode) for mode in get_plugin("yue2").modes] or names == [tool_name("yue2")]
+    assert names == ["make_song"]  # every song model is reached through the one tool
     song = tools[0]["function"]["parameters"]
-    assert {"style", "lyrics"} <= set(song["required"]) and song["properties"]["lyrics"]["type"] == "string"
+    assert song["required"] == ["style"] and song["properties"]["lyrics"]["type"] == "string"
     store.states["h3"] = {"state": "ready"}
     tools, _ = ChatManager(store, cat, generation, uploads)._tools()
-    pictures = next(t for t in tools if t["function"]["name"] == tool_name("h3", "frames"))["function"]["parameters"]
-    assert pictures["properties"]["first"]["type"] == "array"
+    assert [tool["function"]["name"] for tool in tools] == ["make_image", "make_video", "make_song"]  # every clip model is reached through the one tool
+    clip = next(t for t in tools if t["function"]["name"] == "make_video")["function"]["parameters"]
+    assert clip["required"] == ["prompt"] and {"first_picture", "last_picture"} <= set(clip["properties"])
 
 
 def test_a_tool_call_starts_a_job_and_the_model_then_replies(setup):
     store, cat, generation, uploads = setup
-    name = tool_name("yue2", next(iter(get_plugin("yue2").modes), None))
+    name = "make_song"
     call = {"index": 0, "id": "call_1", "function": {"name": name, "arguments": ""}}
     args = {"index": 0, "function": {"arguments": json.dumps({"style": "dream pop", "lyrics": "[Verse]\nla"})}}
     server = Server([({"tool_calls": [call]}, None), ({"tool_calls": [args]}, "tool_calls")],
@@ -221,14 +220,13 @@ def test_a_turn_that_spends_every_round_on_tools_still_ends_with_an_answer(setup
 
 def test_a_refused_tool_call_is_reported_to_the_model(setup):
     store, cat, generation, uploads = setup
-    name = tool_name("yue2", next(iter(get_plugin("yue2").modes), None))
-    call = {"index": 0, "id": "c", "function": {"name": name, "arguments": json.dumps({"style": "pop"})}}
+    call = {"index": 0, "id": "c", "function": {"name": "make_song", "arguments": json.dumps({"style": "pop", "source_song": "1a2b3c4d", "start": 5})}}
     server = Server([({"tool_calls": [call]}, "tool_calls")], [({"content": "Sorry."}, "stop")])
     chat = ChatManager(store, cat, generation, uploads, opener=server)
     conversation = chat.create()
     follow(chat.start(conversation["id"], "song", []))
     tool = next(m for m in store.messages if m["role"] == "tool")
-    assert tool["status"] == "error" and tool["content"] == "Not started: Lyrics is required."
+    assert tool["status"] == "error" and tool["content"] == "Not started: No running model can redo a section of a song."
     assert not generation.created
 
 
@@ -239,8 +237,8 @@ def test_attached_pictures_reach_the_model_and_feed_tools_by_reference(setup, tm
     store.jobs[picture["id"]] = picture
     (tmp_path / "jobs" / picture["id"]).mkdir(parents=True)
     (tmp_path / "jobs" / picture["id"] / "picture.png").write_bytes(PNG)
-    call = {"index": 0, "id": "c", "function": {"name": tool_name("h3", "frames"),
-                                                "arguments": json.dumps({"prompt": "waves", "first": ["1a2b3c4d"]})}}
+    call = {"index": 0, "id": "c", "function": {"name": "make_video",
+                                                "arguments": json.dumps({"prompt": "waves", "first_picture": "1a2b3c4d"})}}
     server = Server([({"tool_calls": [call]}, "tool_calls")], [({"content": "Animating it."}, "stop")])
     chat = ChatManager(store, cat, generation, uploads, opener=server)
     conversation = chat.create()
@@ -399,22 +397,69 @@ def test_the_help_assistant_keeps_one_thread_knows_the_app_and_the_page(setup):
     assert not chat._context(store.get_conversation(plain["id"]), {})[0]["content"].startswith("You are the help assistant")
 
 
-def test_the_assistant_runs_on_the_model_marked_for_it(setup, tmp_path):
-    """Not the first text model, nor whichever is running: the one marked `assistant` (Inkling on the desktop)."""
+def test_the_assistant_uses_a_running_model_and_prefers_the_one_marked_for_it(setup, tmp_path):
+    """A running chat model answers, the marked one (`assistant`, Inkling on the desktop) if it is among them; with
+    none running, the marked one is the one to start."""
     store, _, generation, uploads = setup
     entry = {"kind": "basalt", "workload": "text", "executable": "basalt.exe", "default_preset": "fn", "presets": {"fn": {
         "name": "FN", "alias": "FN", "model_path": "D:/fn.basalt", "gpus": [0], "settings": {},
         "estimate": {"ram_gib": 4, "gpu_min_free_gib": {"0": 4}}}}}
     cat = parse_catalog({"runtimes": {"big": {**entry, "name": "Big model", "port": 8160},
                                       "helper": {**entry, "name": "Helper", "port": 8161, "assistant": True}}})
-    store.states = {"big": {"state": "ready"}, "helper": {"state": "unloaded"}}
     chat = ChatManager(store, cat, generation, uploads, opener=Server())
-    assert chat.assistant()["conversation"]["model_id"] == "helper"
-    assert chat.create()["model_id"] == "big"  # the Chat page still takes a running model
-    # A thread made before the mark moves to the marked model.
+    store.states = {"big": {"state": "unloaded"}, "helper": {"state": "unloaded"}}
+    assert chat.assistant_model() == "helper"  # nothing running: the one to start
+    store.states = {"big": {"state": "ready"}, "helper": {"state": "unloaded"}}
+    assert chat.assistant()["conversation"]["model_id"] == "big"  # a running model answers, whatever it is
+    assert chat.create()["model_id"] == "big"
+    store.states = {"big": {"state": "ready"}, "helper": {"state": "ready"}}
+    assert chat.assistant()["conversation"]["model_id"] == "helper"  # both running: the marked one
     row = store.latest_conversation("assistant")
     store.update_conversation(row["id"], model_id="big")
     assert chat.assistant()["conversation"]["model_id"] == "helper"
+
+
+def test_only_the_assistant_calls_itself_the_assistant(setup, tmp_path):
+    store, _, generation, uploads = setup
+    entry = {"kind": "basalt", "workload": "text", "executable": "basalt.exe", "default_preset": "fn", "presets": {"fn": {
+        "name": "FN", "alias": "FN", "model_path": "D:/fn.basalt", "gpus": [0], "settings": {},
+        "estimate": {"ram_gib": 4, "gpu_min_free_gib": {"0": 4}}}}}
+    cat = parse_catalog({"runtimes": {"big": {**entry, "name": "Big model", "port": 8160}}})
+    store.states = {"big": {"state": "ready"}}
+    chat = ChatManager(store, cat, generation, uploads, opener=Server())
+    general = chat._conversation(chat.create()["id"])
+    helper = chat._conversation(chat.assistant()["conversation"]["id"])
+    system = lambda conversation: chat._context(conversation, {})[0]["content"]
+    assert "You are the assistant" not in system(general) and "chat model running on the user's own computer" in system(general)
+    assert system(helper).count("You are the assistant inside Generation Station") == 1
+
+
+def test_a_message_can_move_the_conversation_to_another_running_chat_model(setup, tmp_path):
+    store, _, generation, uploads = setup
+    entry = {"kind": "basalt", "workload": "text", "executable": "basalt.exe", "default_preset": "fn", "presets": {"fn": {
+        "name": "FN", "alias": "FN", "model_path": "D:/fn.basalt", "gpus": [0], "settings": {},
+        "estimate": {"ram_gib": 4, "gpu_min_free_gib": {"0": 4}}}}}
+    cat = parse_catalog({"runtimes": {"big": {**entry, "name": "Big model", "port": 8160},
+                                      "helper": {**entry, "name": "Helper", "port": 8161},
+                                      "off": {**entry, "name": "Stopped", "port": 8162}}})
+    store.states = {"big": {"state": "ready"}, "helper": {"state": "ready"}, "off": {"state": "unloaded"}}
+    server = Server(*[[({"content": "ok"}, "stop")] for _ in range(3)])
+    chat = ChatManager(store, cat, generation, uploads, opener=server)
+    conversation = chat.create("big")
+    assert conversation["model_id"] == "big"
+    # A model that is not running, or is not a chat model, is refused and the conversation stays where it was.
+    for target, code in [("off", "MODEL_NOT_READY"), ("nowhere", "MODEL_NOT_FOUND")]:
+        with pytest.raises(LifecycleError) as refused:
+            chat.start(conversation["id"], "hi", [], model_id=target)
+        assert refused.value.code == code
+    assert chat.get(conversation["id"])["conversation"]["model_id"] == "big" and chat.get(conversation["id"])["messages"] == []
+    follow(chat.start(conversation["id"], "hi", [], model_id="helper"))
+    assert chat.get(conversation["id"])["conversation"]["model_id"] == "helper"
+    # Naming the model it is already on changes nothing, and the help assistant keeps its own model.
+    follow(chat.start(conversation["id"], "again", [], model_id="helper"))
+    assistant = chat.assistant()["conversation"]
+    chat.start(assistant["id"], "hello", [], model_id="big")
+    assert chat.get(assistant["id"])["conversation"]["model_id"] == assistant["model_id"]
 
 
 def leveled_chat(tmp_path, levels=("minimal", "low", "high", "max"), default="low", off=True):

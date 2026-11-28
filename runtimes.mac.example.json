@@ -36,7 +36,71 @@
           },
           "description": "Good quality. 16-29 tok/s. About 20 GiB of memory."
         }
-      }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "oMLX: Apache-2.0",
+        "url": "https://huggingface.co/mlx-community/Qwen3.8-27B-4bit"
+      },
+      "quality": {
+        "metric": "Intelligence Index v5 (Artificial Analysis)",
+        "score": 19.5,
+        "estimated": true,
+        "source": "https://artificialanalysis.ai/models/qwen3-8-27b",
+        "as_of": "2026-11-26",
+        "note": "ESTIMATE for the quantised build run here: Artificial Analysis scores the full-precision hosted model, and no score has been published for this quant. Full precision scores 20 at the highest reasoning setting (18 at medium). 4-bit usually costs 0-1 point (range 19-20)."
+      },
+      "rankings": [
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 43.2,
+          "estimated": true,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 42.2,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-27B",
+          "as_of": "2026-11-26",
+          "note": "Agentic coding, reported by the vendor. Best of two harnesses (Claude Code, mini-SWE-agent) at xhigh reasoning. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1437.7,
+          "estimated": true,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, rank 85 in the 2026-11-22 snapshot (37,444 votes), read through LMArena's Hugging Face mirror because arena.ai blocks scripts. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 69.3,
+          "estimated": true,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0, run by the LiveBench team (independent). Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 89.2,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-27B",
+          "as_of": "2026-11-26",
+          "note": "Reported by Qwen on its model card; no sample count or effort stated. Artificial Analysis measured 90.5 at its highest effort. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 73.0,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-27B",
+          "as_of": "2026-11-26",
+          "note": "Reported by Qwen on its model card (agent 'Terminus'). Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        }
+      ]
     },
     "flash_next": {
       "kind": "llm",
@@ -73,7 +137,15 @@
               }
             }
           },
-          "description": "Good quality. 80-110 tok/s. About 34 GiB of memory."
+          "description": "Good quality. 80-110 tok/s. About 34 GiB of memory.",
+          "quality": {
+            "metric": "Intelligence Index v5 (Artificial Analysis)",
+            "score": 24,
+            "estimated": true,
+            "source": "https://artificialanalysis.ai/models/qwen3-8-flash-next",
+            "as_of": "2026-11-26",
+            "note": "ESTIMATE for the quantised build run here: Artificial Analysis scores the full-precision hosted model, and no score has been published for this quant. Full precision scores 28. Gyro-S (TQ1_0) has the largest measured drift from the original (KL divergence 0.33, top-1 agreement 77%, agentionai's card), so a loss of about 2-6 points is assumed (range 22-26)."
+          }
         },
         "quality": {
           "name": "Gyro-M",
@@ -103,7 +175,15 @@
               }
             }
           },
-          "description": "Better quality. 60-70 tok/s. About 38 GiB of memory."
+          "description": "Better quality. 60-70 tok/s. About 38 GiB of memory.",
+          "quality": {
+            "metric": "Intelligence Index v5 (Artificial Analysis)",
+            "score": 26,
+            "estimated": true,
+            "source": "https://artificialanalysis.ai/models/qwen3-8-flash-next",
+            "as_of": "2026-11-26",
+            "note": "ESTIMATE for the quantised build run here: Artificial Analysis scores the full-precision hosted model, and no score has been published for this quant. Full precision scores 28. Gyro-M (TQ2_0) drifts less (KL divergence 0.29, top-1 agreement 79%), so a loss of about 1-3 points is assumed (range 25-27)."
+          }
         },
         "large": {
           "name": "Gyro-L",
@@ -133,9 +213,58 @@
               }
             }
           },
-          "description": "Highest quality (matched M in our tests). 50-55 tok/s. About 38 GiB of memory."
+          "description": "Highest quality (matched M in our tests). 50-55 tok/s. About 38 GiB of memory.",
+          "quality": {
+            "metric": "Intelligence Index v5 (Artificial Analysis)",
+            "score": 27.5,
+            "estimated": true,
+            "source": "https://artificialanalysis.ai/models/qwen3-8-flash-next",
+            "as_of": "2026-11-26",
+            "note": "ESTIMATE for the quantised build run here: Artificial Analysis scores the full-precision hosted model, and no score has been published for this quant. Full precision scores 28. Gyro-L drifts least (KL divergence 0.15, top-1 agreement 84%), so a loss of under 1 point is assumed (range 27-28)."
+          }
         }
-      }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Qwen Community License 1.0",
+        "code": "Strata: MIT",
+        "note": "Free to use, including commercially. A separate licence is needed only to run a Model-as-a-Service or AI work-assistant business; large products (100M monthly users or US$20M monthly revenue) must credit the model.",
+        "url": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next/blob/main/LICENSE"
+      },
+      "rankings": [
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 47.02,
+          "estimated": true,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 58.7,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
+          "as_of": "2026-11-26",
+          "note": "Agentic coding, reported by the vendor. Best of two harnesses (Claude Code, mini-SWE-agent) at xhigh reasoning. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 91.7,
+          "estimated": true,
+          "source": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
+          "as_of": "2026-11-26",
+          "note": "Reported by Qwen on its model card; no sample count or effort stated. Artificial Analysis measured 92.3. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 86.1,
+          "estimated": true,
+          "source": "https://benchlm.ai/models/qwen3-8-flash-next",
+          "as_of": "2026-11-26",
+          "note": "Artificial Analysis harness (Terminus 2, pass@1 over 3 runs), read through BenchLM and not checked on Artificial Analysis itself. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        }
+      ]
     },
     "hy4_flash": {
       "kind": "llm",
@@ -194,7 +323,48 @@
             }
           }
         }
-      }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Tencent Hy License 1.0 (Apache-2.0 with extra terms)",
+        "code": "Strata: MIT",
+        "note": "Apache-2.0 plus extra terms in section 10 for large Model-as-a-Service operators; ordinary internal use is not affected.",
+        "url": "https://huggingface.co/tencent/Hy4-flash/blob/main/LICENSE"
+      },
+      "rankings": [
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 40.95,
+          "estimated": true,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 64.6,
+          "estimated": true,
+          "source": "https://llmlearner.com/models/hy4-flash",
+          "as_of": "2026-11-26",
+          "note": "Agentic coding, reported by the vendor. Second-hand: Tencent's figure (Thinking High, with tools) as quoted by a mirror, harness not stated. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 89.3,
+          "estimated": true,
+          "source": "https://openrouter.ai/tencent/hy4-flash",
+          "as_of": "2026-11-26",
+          "note": "Indicative only: Tencent publishes no GPQA figure. This is OpenRouter's quality panel for providers serving Hy4-Flash (88.2 to 91.2 by provider), a different method from the model-card figures of the other local models. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 15.15,
+          "estimated": true,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. Tencent's card says 19.2 and tbench.ai's 4.1 board 11.8. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        }
+      ]
     },
     "inkling2": {
       "kind": "llm",
@@ -242,12 +412,83 @@
           },
           "description": "Good quality. 60-90 tok/s. About 24 GiB of memory."
         }
-      }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "oMLX: Apache-2.0"
+      },
+      "quality": {
+        "metric": "Intelligence Index v5 (Artificial Analysis)",
+        "score": 20,
+        "estimated": true,
+        "source": "https://artificialanalysis.ai/models/inkling-2-mini",
+        "as_of": "2026-11-26",
+        "note": "ESTIMATE for the quantised build run here: Artificial Analysis scores the full-precision hosted model, and no score has been published for this quant. Full precision scores 20 (20.1 on the vendor's card). The vendor's own checkpoint is already mixed NVFP4 and MXFP8, and this oQ4e build (about 4.9 bits per weight) keeps attention at 8 bits, so little loss is assumed."
+      },
+      "rankings": [
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 39.36,
+          "estimated": true,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "An aggregate index built mostly from vendor-reported benchmarks. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 48.2,
+          "estimated": true,
+          "source": "https://thinkingmachines.ai/model-card/inkling-2-mini",
+          "as_of": "2026-11-26",
+          "note": "Agentic coding, reported by the vendor. mini-swe-agent v2.4.6 only, so not like-for-like with the Qwen figures. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1343.7,
+          "estimated": true,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, rank 220 in the 2026-11-22 snapshot, read through LMArena's Hugging Face mirror. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 59.0,
+          "estimated": true,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0, run by the LiveBench team (independent). Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 86.6,
+          "estimated": true,
+          "source": "https://thinkingmachines.ai/model-card/inkling-2-mini",
+          "as_of": "2026-11-26",
+          "note": "Reported by Thinking Machines on its model card; no effort, tools or sample count stated. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 6.57,
+          "estimated": true,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. Thinking Machines reports 5.6. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 71.6,
+          "estimated": true,
+          "source": "https://thinkingmachines.ai/model-card/inkling-2-mini",
+          "as_of": "2026-11-26",
+          "note": "Reported by Thinking Machines (agent 'pi v0.83.0'); no independent run found. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models. Scores the hosted full-precision model, not the quantised build run here, so the build may score lower."
+        }
+      ]
     },
     "meeting_notes": {
       "kind": "meeting_notes",
       "name": "Meeting notes",
-      "workload": "text",
+      "workload": "workflow",
       "description": "A recording or transcript in; a transcript with speakers, a summary, action items and decisions out.",
       "python": "/Users/YOU/workspace/generationstation/backend/.venv/bin/python",
       "output_dir": "/Users/YOU/ai/outputs/meeting-notes",
@@ -281,7 +522,1646 @@
             "gpu_min_free_gib": {}
           }
         }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Qwen3-ASR: Apache-2.0. Speaker detection: pyannote segmentation 3.0 (MIT) and NVIDIA TitaNet-S (Apache-2.0, the NeMo toolkit licence).",
+        "code": "sherpa-onnx and RapidOCR with its PaddleOCR models: Apache-2.0. mlx-audio and mlx-lm: MIT. ffmpeg runs as a separate program.",
+        "note": "Every speech, speaker and name-reading piece is permissively licensed. The notes themselves come from the text model you pick, which has its own licence; check it on its card.",
+        "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B"
+      }
+    },
+    "qwen_image": {
+      "kind": "qwen_image",
+      "name": "Qwen Image 2.1",
+      "workload": "image",
+      "description": "Pictures from a written description, with legible lettering. Turbo is fast; the full model is slower and finer.",
+      "python": "/Users/YOU/ai/envs/mflux/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/qwen-image",
+      "port": 8180,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "worker_script": "qwen_image_mflux_worker.py",
+      "presets": {
+        "mlx": {
+          "name": "Qwen Image 2.1 Turbo (MLX, 8-bit)",
+          "description": "8 steps, one 1344x768 picture in about 17 s. The model stays loaded (about 9 GiB held) and a picture peaks near 13 GiB.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/qwen-image-2-1-turbo-mflux-q8",
+            "steps": 8
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          },
+          "quality": {
+            "metric": "Image arena Elo (Artificial Analysis)",
+            "score": 1026,
+            "estimated": false,
+            "source": "https://artificialanalysis.ai/image/leaderboard/text-to-image",
+            "as_of": "2026-11-26",
+            "note": "Qwen-Image-2.1-Turbo, 5,535 votes. Rated on the hosted full-precision model, not the quantised build run here."
+          }
+        },
+        "qwen21": {
+          "name": "Qwen Image 2.1 (MLX, 8-bit, best quality)",
+          "description": "The full model behind Turbo: 30 guided steps with a negative prompt, about 130 s per 1344x768 picture. Stays loaded (about 9 GiB held) and peaks near 16 GiB.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/qwen-image-2-1-mflux-q8",
+            "steps": 30,
+            "guidance": 5.0,
+            "negative": true
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 18,
+            "gpu_min_free_gib": {}
+          },
+          "quality": {
+            "metric": "Image arena Elo (Artificial Analysis)",
+            "score": 1049,
+            "estimated": false,
+            "source": "https://artificialanalysis.ai/image/leaderboard/text-to-image",
+            "as_of": "2026-11-26",
+            "note": "Qwen-Image-2.1, 6,551 votes. Rated on the hosted full-precision model, not the quantised build run here."
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "Qwen Research License (non-commercial)",
+        "code": "mflux: MIT",
+        "note": "Research and evaluation only; any commercial use needs a separate licence from Qwen. Use Qwen-Image 2512 or Z-Image Turbo for work.",
+        "url": "https://huggingface.co/Qwen/Qwen-Image-2.1/blob/main/LICENSE"
+      }
+    },
+    "yue2": {
+      "kind": "yue2",
+      "name": "YuE2 songs",
+      "workload": "music",
+      "description": "Full songs with vocals from lyrics and a style description (the MLX port; non-commercial licence).",
+      "python": "/Users/YOU/ai/tools/mlx-Yue/.venv/bin/python",
+      "worker_script": "yue2_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/yue2",
+      "port": 8170,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "YuE2 3B (MLX, 8-bit)",
+          "description": "About real time: a three-minute song takes about three minutes. Language model in 8 bits, audio model in bf16.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/yue2-mlx/mlx-Yue2-3B",
+            "vae_dir": "/Users/YOU/ai/models/yue2-mlx/YuE2-Vae",
+            "precision": "8bit",
+            "memory_budget_gib": 16
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "CC BY-NC 4.0 (non-commercial)",
+        "code": "mlx-Yue: Apache-2.0",
+        "note": "Non-commercial use only.",
+        "url": "https://huggingface.co/m-a-p/YuE2-3B"
+      },
+      "quality": {
+        "metric": "SongBench average (WildSongBench)",
+        "score": 6.73,
+        "estimated": false,
+        "source": "https://huggingface.co/m-a-p/YuE2-3B",
+        "as_of": "2026-11-26",
+        "note": "Scored by the YuE2 authors on their WildSongBench, so it is vendor-run. Automatic metric (a model judges the song), not listener votes. Best-of-8 sampling scores 6.96."
+      }
+    },
+    "qwen3_tts": {
+      "kind": "qwen3_tts",
+      "name": "Qwen3-TTS speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "qwen3_tts_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/qwen3-tts",
+      "port": 8210,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Qwen3-TTS 1.7B (MLX, 8-bit)",
+          "description": "Qwen's Qwen3-TTS 12Hz 1.7B in 8 bits: CustomVoice, VoiceDesign and Base, one in memory at a time. Apache 2.0.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "custom_voice_dir": "/Users/YOU/ai/models/tts/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+            "voice_design_dir": "/Users/YOU/ai/models/tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign-8bit",
+            "base_dir": "/Users/YOU/ai/models/tts/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+            "asr_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 8,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "mlx-audio: MIT",
+        "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+      },
+      "quality": {
+        "metric": "Speech arena Elo (Artificial Analysis)",
+        "score": 931,
+        "estimated": true,
+        "source": "https://artificialanalysis.ai/text-to-speech/leaderboard/provider-voice",
+        "as_of": "2026-11-26",
+        "note": "ESTIMATE: Artificial Analysis rates a model called Qwen3 TTS (3,230 votes) without saying which checkpoint; the open 1.7B weights run here have no score of their own."
+      }
+    },
+    "omnivoice": {
+      "kind": "omnivoice",
+      "name": "OmniVoice speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "omnivoice_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/omnivoice",
+      "port": 8200,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "OmniVoice (MLX, bf16)",
+          "description": "OmniVoice in 646+ languages, voice cloning or a described voice. The model is CC BY-NC: non-commercial use only.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/tts/OmniVoice-bf16",
+            "asr_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "CC BY-NC (non-commercial); its audio tokenizer adds a 100,000-user cap",
+        "code": "mlx-audio: MIT",
+        "note": "Non-commercial use only.",
+        "url": "https://huggingface.co/k2-fsa/OmniVoice"
+      }
+    },
+    "fish_drama3": {
+      "kind": "fish_drama3",
+      "name": "Drama 3 speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "fish_drama3_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/fish-drama3",
+      "port": 8220,
+      "ready_timeout_seconds": 600,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Drama 3 (MLX, 3-bit)",
+          "description": "Fish Audio's Drama 3 with speaker tags and scenes, 3-bit. Fish Audio Community License: free below USD 500,000 annual revenue, no hosted services.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/tts/fish-audio-drama-3-3bit",
+            "max_frames": 1024
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 26,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "Fish Audio Community License 1.0",
+        "code": "mlx-audio: MIT",
+        "note": "Free only while the annual revenue of you and your affiliates is under US$500,000, so not for company use here; no hosted service for third parties either. Output may not train other speech models.",
+        "url": "https://huggingface.co/fishaudio/drama-3"
+      },
+      "quality": {
+        "metric": "Speech arena Elo (Artificial Analysis)",
+        "score": 1278,
+        "estimated": false,
+        "source": "https://artificialanalysis.ai/text-to-speech/leaderboard/provider-voice",
+        "as_of": "2026-11-26",
+        "note": "Fish Audio Drama 3, 2,145 votes, rank 9 of 106. Rated on the hosted full-precision model, not the quantised build run here."
+      }
+    },
+    "fish_s2": {
+      "kind": "fish_s2",
+      "name": "S2 Pro speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "fish_s2_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/fish-s2",
+      "port": 8240,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "S2 Pro (MLX, 8-bit)",
+          "description": "Fish Audio S2 Pro with [cue] tags. Fish Audio Research License: research and personal use only.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/tts/fish-audio-s2-pro-8bit",
+            "asr_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "Fish Audio Research License",
+        "code": "mlx-audio: MIT",
+        "note": "Research and personal use only. The licence counts a company's internal operations as commercial use.",
+        "url": "https://huggingface.co/fishaudio/s2-pro"
+      },
+      "quality": {
+        "metric": "Speech arena Elo (Artificial Analysis)",
+        "score": 1104,
+        "estimated": false,
+        "source": "https://artificialanalysis.ai/text-to-speech/leaderboard/provider-voice",
+        "as_of": "2026-11-26",
+        "note": "Fish Audio S2 Pro, 3,154 votes, rank 48. Its newer S2.1 Pro scores 1182. Rated on the hosted full-precision model, not the quantised build run here."
+      }
+    },
+    "breeze_tts": {
+      "kind": "breeze_tts",
+      "name": "Breeze TTS 2 speech",
+      "workload": "speech",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "worker_script": "breeze_tts_mlx_worker.py",
+      "output_dir": "/Users/YOU/ai/outputs/breeze-tts",
+      "port": 8250,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Breeze TTS 2 (MLX, 8-bit)",
+          "description": "English and Chinese speech from a described or cloned voice. BreezeBlue non-commercial licence.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/tts/Breeze-TTS-2-mlx-8bit",
+            "asr_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 9,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "BreezeBlue Research and Non-Commercial License",
+        "code": "mlx-audio: MIT",
+        "note": "Non-commercial use only, including no use for an organisation's internal operations.",
+        "url": "https://huggingface.co/BreezeBlue/Breeze-TTS-2"
+      },
+      "quality": {
+        "metric": "Speech arena Elo (Artificial Analysis)",
+        "score": 1229,
+        "estimated": false,
+        "source": "https://artificialanalysis.ai/text-to-speech/leaderboard/provider-voice",
+        "as_of": "2026-11-26",
+        "note": "Breeze TTS 2, 3,249 votes, rank 15. One score for English and Chinese. Rated on the hosted full-precision model, not the quantised build run here."
+      }
+    },
+    "wan_video": {
+      "kind": "wan_video",
+      "name": "Wan 2.2 video",
+      "workload": "video",
+      "description": "Short clips from a description or a first picture (Apache-2.0).",
+      "python": "/Users/YOU/ai/envs/mlx-video/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/wan-video",
+      "port": 8260,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Wan 2.2 TI2V 5B (MLX, 8-bit)",
+          "description": "832x480, up to 1.4 s, about 100 s per clip. The model is loaded for each clip, and the clip needs about 29 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/wan/wan22-ti2v-5b-mlx-q8",
+            "memory_limit_gib": 26,
+            "steps": 20,
+            "tiling": "none"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 30,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "mlx-video: MIT",
+        "url": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B"
+      },
+      "quality": {
+        "metric": "Text-to-video arena Elo (Arena AI)",
+        "score": 1132,
+        "estimated": true,
+        "source": "https://benchmarklist.com/benchmarks/arena_ai_text_to_video/",
+        "as_of": "2026-11-10",
+        "note": "ESTIMATE: Arena AI rates Wan 2.2 A14B (1131.78), not the 5B run here, so this is an upper bound. Read through the benchmarklist.com mirror of arena.ai (dated 2026-11-10)."
+      },
+      "rankings": [
+        {
+          "metric": "VBench total (Vchitect, text to video)",
+          "score": 82.61,
+          "estimated": true,
+          "source": "https://benchmarklist.com/benchmarks/vbench_video_generation/",
+          "as_of": "2026-11-27",
+          "note": "ESTIMATE: VBench rates Wan2.2-T2V-A14B (82.61 without prompt optimising, 84.23 with), not the 5B run here, so this is an upper bound. Self-reported on the VBench leaderboard (read through benchmarklist.com, 2026-10-29)."
+        }
+      ]
+    },
+    "qwen_image_2512": {
+      "kind": "qwen_image",
+      "name": "Qwen-Image 2512",
+      "workload": "image",
+      "description": "Qwen's December 2025 base model (Apache-2.0): 20 guided steps with a negative prompt. Heavy: about 22 GiB held while loaded and a picture peaks near 35 GiB.",
+      "python": "/Users/YOU/ai/envs/mflux/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/qwen-image-2512",
+      "port": 8181,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "qwen2512",
+      "worker_script": "qwen_image_mflux_worker.py",
+      "presets": {
+        "qwen2512": {
+          "name": "Qwen-Image 2512 (MLX, 8-bit; heavy)",
+          "description": "Qwen's December 2025 base model, Apache-2.0: 20 steps with a negative prompt, about 8 s per step. Heavy: about 22 GiB held while loaded and a picture peaks near 35 GiB, so only start it with the other large models stopped.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/qwen-image-2512-mflux-q8",
+            "command": "mflux-generate-qwen",
+            "base_model": "qwen-image",
+            "steps": 20,
+            "guidance": 4.0,
+            "negative": true
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 38,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "mflux: MIT",
+        "url": "https://huggingface.co/Qwen/Qwen-Image-2512"
+      },
+      "quality": {
+        "metric": "Image arena Elo (Artificial Analysis)",
+        "score": 979,
+        "estimated": true,
+        "source": "https://artificialanalysis.ai/image/leaderboard/text-to-image",
+        "as_of": "2026-11-26",
+        "note": "ESTIMATE: Artificial Analysis does not rate 2512. Z-Image Turbo's 937 plus the 42 points Arena AI puts 2512 above it (1124 vs 1082). Low confidence, two arenas combined."
+      }
+    },
+    "z_image": {
+      "kind": "qwen_image",
+      "name": "Z-Image Turbo",
+      "workload": "image",
+      "description": "Tongyi-MAI's 6B distilled picture model (Apache-2.0): 9 steps, about 14 s per picture.",
+      "python": "/Users/YOU/ai/envs/mflux/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/z-image",
+      "port": 8182,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "zimage",
+      "worker_script": "qwen_image_mflux_worker.py",
+      "presets": {
+        "zimage": {
+          "name": "Z-Image Turbo (MLX, 8-bit)",
+          "description": "Tongyi-MAI's 6B distilled model, Apache-2.0. 9 steps, one picture in about 14 s; no negative prompt. Stays loaded and peaks near 7 GiB.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/qwen-image-mac/z-image-turbo-mflux-q8",
+            "command": "mflux-generate-z-image-turbo",
+            "steps": 9,
+            "start_picture": true
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 9,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "mflux: MIT",
+        "url": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo"
+      },
+      "quality": {
+        "metric": "Image arena Elo (Artificial Analysis)",
+        "score": 937,
+        "estimated": false,
+        "source": "https://artificialanalysis.ai/image/leaderboard/text-to-image",
+        "as_of": "2026-11-26",
+        "note": "Z-Image Turbo, 9,034 votes. Rated on the hosted full-precision model, not the quantised build run here."
+      }
+    },
+    "h3_video": {
+      "kind": "h3_video",
+      "name": "MiniMax H3 video",
+      "workload": "video",
+      "description": "Short clips with sound from a description or from first and last pictures, through the h3.c Metal engine. Personal use only: the H3 licence excludes the US, EU, UK and South Korea.",
+      "python": "/Users/YOU/ai/envs/mlx-video/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/h3-video",
+      "port": 8270,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "MiniMax H3 (Metal, SSD streaming)",
+          "description": "The original BF16 weights streamed from the SSD: about 11 GiB while a clip is made. A 5 s clip at 480p takes about 3 minutes as a draft.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "h3_dir": "/Users/YOU/ai/tools/h3.c",
+            "model_dir": "/Users/YOU/ai/models/minimax-h3/MiniMax-H3",
+            "ssd_streaming": true
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "MiniMax H3 Community License (excludes the US, EU, UK and South Korea)",
+        "code": "h3.c: MIT",
+        "note": "Rights are granted only outside the US, EU, UK and South Korea, and use there is not licensed. Keep it to your own machine.",
+        "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE"
+      },
+      "quality": {
+        "metric": "Text-to-video arena Elo (Arena AI)",
+        "score": 1456,
+        "estimated": false,
+        "source": "https://benchmarklist.com/benchmarks/arena_ai_text_to_video/",
+        "as_of": "2026-11-10",
+        "note": "MiniMax H3, 29,257 votes. Read through the benchmarklist.com mirror of arena.ai (dated 2026-11-10). Rated on the hosted full-precision model, not the quantised build run here."
+      },
+      "rankings": [
+        {
+          "metric": "Open-weights video arena Elo (Artificial Analysis)",
+          "score": 1164,
+          "estimated": false,
+          "source": "https://artificialanalysis.ai/video/leaderboard/text-to-video/open-weights",
+          "as_of": "2026-11-26",
+          "note": "MiniMax H3 on the open-weights board. Blind human votes run by Artificial Analysis; rated on the hosted model, not the quantised build run here."
+        }
+      ]
+    },
+    "ace_step": {
+      "kind": "ace_step",
+      "name": "ACE-Step songs",
+      "workload": "music",
+      "description": "Songs with vocals, or instrumentals, from a style and lyrics (MIT). Fast: 30 s of music in about 10 s.",
+      "python": "/Users/YOU/ai/envs/ace-step/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/ace-step",
+      "port": 8280,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "ACE-Step 1.5 turbo (MLX)",
+          "description": "8 diffusion steps with the 1.7B planning model. About 14 GiB resident; two-minute songs peak near 21 GiB.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "repo_dir": "/Users/YOU/ai/tools/ACE-Step-1.5",
+            "steps": 8
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 22,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "MIT",
+        "code": "ACE-Step: MIT",
+        "note": "MIT code and weights, no territory or revenue clause found; the card says the music may be used commercially. The training-data claim (licensed, royalty-free and synthetic data) is the vendor's own and unverified, so legal review of the data is still advisable.",
+        "url": "https://huggingface.co/ACE-Step/Ace-Step1.5"
+      },
+      "quality": {
+        "metric": "SongBench average (WildSongBench)",
+        "score": 6.01,
+        "estimated": false,
+        "source": "https://huggingface.co/m-a-p/YuE2-3B",
+        "as_of": "2026-11-26",
+        "note": "Scored by the YuE2 authors on WildSongBench, not by ACE-Step's makers. Phoneme error 7.5%. The Artificial Analysis arena leader 'ACE Music v1' is not documented as this model."
+      }
+    },
+    "minimax_music": {
+      "kind": "minimax_music",
+      "name": "MiniMax Music 3",
+      "workload": "music",
+      "description": "Songs with vocals, or instrumentals, from a style and lyrics. Check its licence terms before company use.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/minimax-music",
+      "port": 8290,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "MiniMax Music 3 (MLX, 8-bit)",
+          "description": "The mxfp8 build, 13 GB. About 14 GiB resident for a 30 s song.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/music/MiniMax-Music3-mxfp8"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 20,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "MiniMax-Music3 Community License (MIT-style with commercial terms)",
+        "code": "mlx-audio: MIT",
+        "note": "Free to use. Treated as work use because the app is an internal tool, not a product or service offered to others (the owner's reading, not legal advice). If it becomes one, the licence requires \"MiniMax-Music3\" displayed on the interface, MiniMax's written authorisation above US$20 million yearly revenue from such products or services, safeguards against misuse when offered to third parties, and indemnifying MiniMax for breaches. No territory exclusion.",
+        "url": "https://huggingface.co/MiniMaxAI/MiniMax-Music3/blob/main/LICENSE"
+      },
+      "quality": {
+        "metric": "SongBench average (WildSongBench)",
+        "score": 6.28,
+        "estimated": false,
+        "source": "https://huggingface.co/m-a-p/YuE2-3B",
+        "as_of": "2026-11-26",
+        "note": "Scored by the YuE2 authors on WildSongBench, not by MiniMax. Best lyric accuracy of the three (phoneme error 6.3% against 7.5% ACE-Step and 8.4% YuE2). MiniMax rewrites the style prompt before generating."
+      }
+    },
+    "ltx_video": {
+      "kind": "ltx_video",
+      "name": "LTX-2.5 video",
+      "workload": "video",
+      "description": "Short clips with sound from a description or a first picture. Personal use only: a company above US$10M revenue needs a paid licence.",
+      "python": "/Users/YOU/ai/envs/ltx25/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/ltx-video",
+      "port": 8300,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "LTX-2.5 distilled (MLX, 4-bit)",
+          "description": "Up to 1280x704 and 5 s with sound. About half a minute for a 4 s quick clip, 2.5 minutes sharp. Needs about 14 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/video/ltx25-q4-mrbizarro",
+            "gemma_dir": "/Users/YOU/ai/models/video/ltx25-gemma4-q4",
+            "memory_limit_gib": 26
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 22,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "personal",
+        "weights": "LTX-2.x Community License (paid licence needed above US$10M annual revenue)",
+        "code": "ltx-2-mlx: MIT",
+        "note": "Section 2.1: entities with annual revenues of at least US$10,000,000 (affiliates included) need a paid licence for any use except non-commercial purposes. Section 2.2 limits those to personal hobby use unconnected to any employer, or a company's testing, evaluation and R&D in a non-production environment. So it is personal here; at work only for evaluation.",
+        "url": "https://huggingface.co/Mrbizarro/ltx-2.5-mlx-q4/blob/main/LICENSE-LTX-2.x-Community-License.md"
+      },
+      "quality": {
+        "metric": "Open-weights video arena Elo (Artificial Analysis)",
+        "score": 938,
+        "estimated": true,
+        "source": "https://artificialanalysis.ai/video/leaderboard/text-to-video/open-weights",
+        "as_of": "2026-11-26",
+        "note": "Artificial Analysis rates the hosted LTX-2.5 Fast (938) and Pro (932); this is the 4-bit distilled build, which should be close to Fast but is not rated itself. Blind human votes run by Artificial Analysis."
+      },
+      "rankings": [
+        {
+          "metric": "VBench total (Vchitect, text to video)",
+          "score": 79.35,
+          "estimated": true,
+          "source": "https://benchmarklist.com/benchmarks/vbench_video_generation/",
+          "as_of": "2026-11-27",
+          "note": "ESTIMATE: VBench rates LTX-2 (Diffusers, no prompt optimising), not LTX-2.5 and not this 4-bit build. Self-reported on the VBench leaderboard (read through benchmarklist.com, 2026-10-29)."
+        }
+      ]
+    },
+    "fastmetal_video": {
+      "kind": "fastmetal_video",
+      "name": "FastMetal video",
+      "workload": "video",
+      "description": "Short clips from a description, fast: distilled Wan models, 3 denoise steps (Apache-2.0). No first picture and no sound.",
+      "python": "/Users/YOU/ai/envs/fastmetal/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/fastmetal-video",
+      "port": 8310,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "5b",
+      "presets": {
+        "5b": {
+          "name": "FastMetal 5B (1280x704)",
+          "description": "Wan 2.2 5B distilled. Up to 5 s at 1280x704; a 3 s clip takes about a minute (35 s in faster mode). Needs about 26 GiB while a new description is encoded, 12 GiB after.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "family": "wan22",
+            "model_dir": "/Users/YOU/ai/models/video/fastmetal/5B",
+            "repo_dir": "/Users/YOU/ai/src/FastVideo"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 26,
+            "gpu_min_free_gib": {}
+          }
+        },
+        "14b": {
+          "name": "FastMetal 14B (832x480)",
+          "description": "Wan 2.1 14B distilled. Up to 5 s at 832x480; a 3 s clip takes about 2.5 minutes (67 s in faster mode). About 22 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "family": "t2v",
+            "model_dir": "/Users/YOU/ai/models/video/fastmetal/14B",
+            "repo_dir": "/Users/YOU/ai/src/FastVideo",
+            "memory_limit_gib": 26
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 30,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "FastVideo: Apache-2.0 (TAEHV and RIFE decoders: MIT)",
+        "note": "Distilled from Wan 2.2 TI2V 5B and Wan 2.1 T2V 14B, both Apache-2.0. The first run downloads a small TAEHV decoder file from GitHub once.",
+        "url": "https://huggingface.co/FastVideo/FastMetal-14B-QAD"
+      }
+    },
+    "longcat_video": {
+      "kind": "longcat_video",
+      "name": "LongCat video",
+      "workload": "video",
+      "description": "Short clips from a description, without sound (MIT). Slow: under a minute for the shortest clip.",
+      "python": "/Users/YOU/ai/envs/longcat/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/longcat-video",
+      "port": 8320,
+      "ready_timeout_seconds": 120,
+      "stop_timeout_seconds": 30,
+      "default_preset": "q8",
+      "presets": {
+        "q8": {
+          "name": "LongCat-Video 13.6B (MLX, 8-bit)",
+          "description": "832x480 at 15 fps, 0.6 to 4 seconds, from a description. About 45 seconds for the shortest clip, 6 minutes for four seconds. Needs 19 to 37 GiB while a clip is made.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "weights_dir": "/Users/YOU/ai/models/video/longcat-layout",
+            "variant": "q8",
+            "repo_dir": "/Users/YOU/ai/tools/longcat-video-mlx",
+            "memory_limit_gib": 40
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 40,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "MIT",
+        "code": "longcat-video-mlx: MIT (declared in its pyproject.toml and README; the repository has no LICENSE file)",
+        "note": "Meituan's LongCat-Video is MIT. The MLX port needs two fixes that the worker's driver applies without editing it: merging the fast LoRA into the quantised weights, and giving the first-frame latents timestep 0.",
+        "url": "https://huggingface.co/mlx-community/LongCat-Video-q8"
+      },
+      "rankings": [
+        {
+          "metric": "VBench-2.0 total (Vchitect)",
+          "score": 62.11,
+          "estimated": false,
+          "source": "https://paperswithcode.co/benchmark/vbench-2-0",
+          "as_of": "2026-11-27",
+          "note": "LongCat-Video, second on the VBench-2.0 leaderboard (intrinsic faithfulness: human fidelity, creativity, controllability, physics, commonsense). Run by its authors at full precision; this is the quantised MLX port. No other model here is rated on VBench-2.0, so there is no chart."
+        }
+      ]
+    },
+    "decide_pplx": {
+      "kind": "decide",
+      "name": "pplx-decider 27B",
+      "workload": "decision",
+      "description": "Answers a question about a situation, with pictures, with a probability for each answer. Perplexity's decision model on Qwen3.8 27B.",
+      "python": "/Users/YOU/ai/envs/decide-pplx/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8401,
+      "ready_timeout_seconds": 180,
+      "stop_timeout_seconds": 30,
+      "default_preset": "q8",
+      "presets": {
+        "q8": {
+          "name": "pplx-decider v1.2 (MLX, 8-bit)",
+          "description": "About 0.5 s for a short situation, 3.7 s for 3,000 words. Reads pictures. Needs about 30 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/decision/pplx-decider",
+            "engine": "mlx_decision",
+            "model_name": "pplx-decider 27B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 32,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Apache-2.0 (mlx-decision: MIT)",
+        "note": "Derived from Qwen3.8 27B (Apache-2.0). No use restrictions on the card.",
+        "url": "https://huggingface.co/perplexity-ai/pplx-decider-v1.2"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 80.8,
+        "estimated": true,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "pplx-decider v1.2 on JevBench at full precision; this is the 8-bit build."
+      },
+      "rankings": [
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 67.98,
+          "estimated": true,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "pplx-decider v1.2 on the Decision Index 0.4.1 Full; this is the 8-bit build."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 69.8,
+          "estimated": true,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "pplx-decider v1.2 on the Artificial Analysis decision index (as shown by benchlm.ai); this is the 8-bit build."
+        }
+      ]
+    },
+    "decide_h2o": {
+      "kind": "decide",
+      "name": "H2O-Lightning 4B",
+      "workload": "decision",
+      "description": "A small, fast decision model that also reads pictures, with a probability for each answer.",
+      "python": "/Users/YOU/ai/envs/decide-pplx/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8402,
+      "ready_timeout_seconds": 180,
+      "stop_timeout_seconds": 30,
+      "default_preset": "bf16",
+      "presets": {
+        "bf16": {
+          "name": "H2O-Lightning 4B (MLX, bf16)",
+          "description": "About 0.15 s for a short situation, 1 s for 3,000 words. Reads pictures. Needs about 12 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "model_dir": "/Users/YOU/ai/models/decision/h2o-lightning-4b",
+            "engine": "mlx_decision",
+            "model_name": "H2O-Lightning 4B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 12,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Apache-2.0 (mlx-decision: MIT)",
+        "note": "The 4B is Apache-2.0. H2O-Lightning 31B is a different licence (non-commercial), so do not swap it in.",
+        "url": "https://huggingface.co/h2oai/h2o-lightning-4b"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 75.0,
+        "estimated": false,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "H2O-Lightning 4B on JevBench, run at full precision as here."
+      },
+      "rankings": []
+    },
+    "decide_torchcast": {
+      "kind": "decide",
+      "name": "Torchcast 4B",
+      "workload": "decision",
+      "description": "Answers a question about a situation with a probability for each answer. Text only; small and fast.",
+      "python": "/Users/YOU/ai/envs/decide-torchcast/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8403,
+      "ready_timeout_seconds": 180,
+      "stop_timeout_seconds": 30,
+      "default_preset": "bf16",
+      "presets": {
+        "bf16": {
+          "name": "Torchcast 4B v1.3 (bf16, Mac GPU)",
+          "description": "About 0.15 s for a short situation, 1.5 s for 6,000 tokens. Needs about 14 GiB while it runs.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "torchcast",
+            "model_dir": "/Users/YOU/ai/models/decision/torchcast-4b",
+            "model_name": "Torchcast 4B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 14,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0 (v1.3.1 and later; v1.1 was CC BY-NC)",
+        "code": "Apache-2.0 (torchcast_decision package)",
+        "note": "Based on Qwen3.5-4B (Apache-2.0). Use the v1.3.1 release: earlier releases keep a non-commercial licence. The 12B and 27B Torchcast models are CC BY-NC, so personal use only.",
+        "url": "https://huggingface.co/torchcast-ai/torchcast-decision-4b"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 77.5,
+        "estimated": false,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "Torchcast 4B v1.3 on JevBench, run at bf16 as here."
+      },
+      "rankings": []
+    },
+    "decide_torchcast_31b": {
+      "kind": "decide",
+      "name": "Torchcast 31B",
+      "workload": "decision",
+      "description": "Answers a question about a situation with a probability for each answer. Text only; among the most accurate open models, and it needs most of the memory.",
+      "python": "/Users/YOU/ai/envs/decide-torchcast/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/decide",
+      "port": 8404,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx8",
+      "presets": {
+        "mlx8": {
+          "name": "Torchcast 31B v1.0 (MLX, 8-bit)",
+          "description": "About 0.2 s for a short situation, 9 s for three 2,000-token questions. Needs about 40 GiB while it runs, so stop other large models first.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "torchcast_mlx31",
+            "model_dir": "/Users/YOU/ai/models/decision/torchcast-31b",
+            "weights_dir": "/Users/YOU/ai/models/decision/torchcast-31b-mlx-8bit",
+            "model_name": "Torchcast 31B"
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 40,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Apache-2.0 (torchcast_decision package)",
+        "note": "Based on Gemma 4 31B (Apache-2.0). The 12B and 27B Torchcast models are CC BY-NC, so personal use only. Runs here as an 8-bit MLX copy made by workers/torchcast31_convert.py, with the vendor's bidirectional attention; stock runtimes give wrong answers.",
+        "url": "https://huggingface.co/torchcast-ai/torchcast-decision-31b"
+      },
+      "quality": {
+        "metric": "JevBench Capability Score (benchmarkheaven.com)",
+        "score": 89.5,
+        "estimated": true,
+        "source": "https://benchmarkheaven.com/jev-models",
+        "as_of": "2026-11-26",
+        "note": "Torchcast 31B on JevBench at full precision; this is the 8-bit copy, which stayed within 0.008 of the bf16 probabilities on our checks."
+      },
+      "rankings": []
+    },
+    "qwen3_asr": {
+      "kind": "qwen3_asr",
+      "name": "Qwen3-ASR",
+      "workload": "transcription",
+      "description": "Speech to text in 30 languages, with times. Fast, and takes names to expect.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/qwen3-asr",
+      "port": 8330,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Qwen3-ASR (MLX)",
+          "description": "Stays loaded; the recording is read once and written down in parts.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "qwen3_asr",
+            "model_dir": "/Users/YOU/ai/models/asr/Qwen3-ASR-1.7B-8bit",
+            "diar_python": "/Users/YOU/ai/envs/meeting-worker/bin/python",
+            "segmentation_model": "/Users/YOU/ai/models/diar/sherpa-onnx-pyannote-segmentation-3-0/model.onnx",
+            "embedding_model": "/Users/YOU/ai/models/diar/nemo_en_titanet_small.onnx",
+            "diar_threshold": 0.9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "Apache-2.0",
+        "code": "Qwen3-ASR and mlx-audio: Apache-2.0 and MIT",
+        "note": "Apache-2.0 weights and code.",
+        "url": "https://huggingface.co/Qwen/Qwen3-ASR-1.7B"
+      },
+      "quality": {
+        "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+        "score": 94.24,
+        "estimated": true,
+        "source": "https://speechtotext.dev/leaderboard/",
+        "as_of": "2026-11-28",
+        "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). The leaderboard lists Qwen3-ASR 1.7B and 0.6B together; this is the 1.7B run in 8-bit here, which may score slightly lower. Measured here on a 56 minute test meeting read by two computer voices: 4.4 % error (see docs/transcribe-plan.md); that test flatters every model, so use it to compare them with each other."
+      }
+    },
+    "whisper_asr": {
+      "kind": "whisper_asr",
+      "name": "Whisper large-v3-turbo",
+      "workload": "transcription",
+      "description": "Speech to text in 99 languages, a line at a time with times.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/whisper-asr",
+      "port": 8340,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Whisper large-v3-turbo (MLX)",
+          "description": "Stays loaded; the recording is read once and written down in parts.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "whisper",
+            "model_dir": "/Users/YOU/ai/models/asr/whisper-large-v3-turbo-fp16",
+            "diar_python": "/Users/YOU/ai/envs/meeting-worker/bin/python",
+            "segmentation_model": "/Users/YOU/ai/models/diar/sherpa-onnx-pyannote-segmentation-3-0/model.onnx",
+            "embedding_model": "/Users/YOU/ai/models/diar/nemo_en_titanet_small.onnx",
+            "diar_threshold": 0.9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 5,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "MIT",
+        "code": "Whisper and mlx-audio: MIT",
+        "note": "MIT weights and code.",
+        "url": "https://huggingface.co/openai/whisper-large-v3-turbo"
+      },
+      "quality": {
+        "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+        "score": 92.17,
+        "estimated": false,
+        "source": "https://speechtotext.dev/leaderboard/",
+        "as_of": "2026-11-28",
+        "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Whisper large-v3-turbo; run here as an MLX build. Measured here on a 56 minute test meeting read by two computer voices: 4.0 % (see docs/transcribe-plan.md); that test flatters every model, so use it to compare them with each other."
+      }
+    },
+    "parakeet_asr": {
+      "kind": "parakeet_asr",
+      "name": "Parakeet TDT v3",
+      "workload": "transcription",
+      "description": "The fastest speech to text here: 25 European languages, detected.",
+      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
+      "output_dir": "/Users/YOU/ai/outputs/parakeet-asr",
+      "port": 8350,
+      "ready_timeout_seconds": 300,
+      "stop_timeout_seconds": 30,
+      "default_preset": "mlx",
+      "presets": {
+        "mlx": {
+          "name": "Parakeet TDT v3 (MLX)",
+          "description": "Stays loaded; the recording is read once and written down in parts.",
+          "gpus": [
+            0
+          ],
+          "allowed_gpus": [
+            0
+          ],
+          "options": {
+            "engine": "parakeet",
+            "model_dir": "/Users/YOU/ai/models/asr/parakeet-tdt-0.6b-v3",
+            "diar_python": "/Users/YOU/ai/envs/meeting-worker/bin/python",
+            "segmentation_model": "/Users/YOU/ai/models/diar/sherpa-onnx-pyannote-segmentation-3-0/model.onnx",
+            "embedding_model": "/Users/YOU/ai/models/diar/nemo_en_titanet_small.onnx",
+            "diar_threshold": 0.9
+          },
+          "settings": {},
+          "estimate": {
+            "ram_gib": 6,
+            "gpu_min_free_gib": {}
+          }
+        }
+      },
+      "license": {
+        "use": "work",
+        "weights": "CC-BY-4.0",
+        "code": "mlx-audio: MIT",
+        "note": "CC-BY-4.0 allows commercial use if NVIDIA is credited when the weights are shared. This app runs them internally and its transcripts are not covered by the licence, so it is work use here. Add a credit line (NVIDIA Parakeet TDT 0.6B v3, CC-BY-4.0, converted for MLX by mlx-community) if the app is ever shipped to others.",
+        "url": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"
+      },
+      "quality": {
+        "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+        "score": 94.34,
+        "estimated": false,
+        "source": "https://speechtotext.dev/leaderboard/",
+        "as_of": "2026-11-28",
+        "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Parakeet TDT 0.6B v3. NVIDIA's own model card lists 6.32 from an earlier run (August 2025); the leaderboard has moved since. Measured here on a 56 minute test meeting read by two computer voices: 5.1 % (see docs/transcribe-plan.md); that test flatters every model, so use it to compare them with each other."
       }
     }
-  }
+  },
+  "references": [
+    {
+      "name": "Claude Haiku 5.5",
+      "workload": "text",
+      "scores": [
+        {
+          "metric": "Intelligence Index v5 (Artificial Analysis)",
+          "score": 36.5,
+          "estimated": false,
+          "source": "https://artificialanalysis.ai/models/claude-haiku-5-5",
+          "as_of": "2026-11-26",
+          "note": "Artificial Analysis, at its Max effort setting. A hosted model that is not run here."
+        },
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 48.5,
+          "estimated": false,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "The LLM Stats composite index. A hosted model that is not run here."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 59.9,
+          "estimated": false,
+          "source": "https://www.deepswe.dev/",
+          "as_of": "2026-11-26",
+          "note": "Independent run by Mercor (mini-SWE-agent, 113 tasks, Max effort), not the vendor figure the local models show. A hosted model that is not run here."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1398,
+          "estimated": false,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, overall, published 2026-11-22; Arena rates it at High effort. A hosted model that is not run here."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 77.6,
+          "estimated": false,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0; effort not stated. A hosted model that is not run here."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 86.6,
+          "estimated": false,
+          "source": "https://openrouter.ai/benchmarks/gpqa-diamond",
+          "as_of": "2026-11-26",
+          "note": "Measured by OpenRouter through real provider endpoints, which scores lower than model-card figures for the same model (Qwen3.8 27B: 82.2 there against 89.2 on its card), so compare with the local bars loosely. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 36.36,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. A hosted model that is not run here."
+        }
+      ]
+    },
+    {
+      "name": "Claude Sonnet 5.5",
+      "workload": "text",
+      "scores": [
+        {
+          "metric": "Intelligence Index v5 (Artificial Analysis)",
+          "score": 54.7,
+          "estimated": false,
+          "source": "https://artificialanalysis.ai/models/claude-sonnet-5-5",
+          "as_of": "2026-11-26",
+          "note": "Artificial Analysis, at its Max effort setting. A hosted model that is not run here."
+        },
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 56.3,
+          "estimated": false,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "The LLM Stats composite index. A hosted model that is not run here."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 70.5,
+          "estimated": false,
+          "source": "https://www.deepswe.dev/",
+          "as_of": "2026-11-26",
+          "note": "Independent run by Mercor (mini-SWE-agent, 113 tasks, Max effort), not the vendor figure the local models show. A hosted model that is not run here."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1469,
+          "estimated": false,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, overall, published 2026-11-22; Arena rates it at xHigh effort. A hosted model that is not run here."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 77.2,
+          "estimated": false,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0; effort not stated. A hosted model that is not run here."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 92.8,
+          "estimated": false,
+          "source": "https://openrouter.ai/benchmarks/gpqa-diamond",
+          "as_of": "2026-11-26",
+          "note": "Measured by OpenRouter through real provider endpoints, which scores lower than model-card figures for the same model (Qwen3.8 27B: 82.2 there against 89.2 on its card), so compare with the local bars loosely. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 64.14,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 83.15,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-2-1",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, Terminus 2. A hosted model that is not run here. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models."
+        }
+      ]
+    },
+    {
+      "name": "Claude Opus 5.5",
+      "workload": "text",
+      "scores": [
+        {
+          "metric": "Intelligence Index v5 (Artificial Analysis)",
+          "score": 59.1,
+          "estimated": false,
+          "source": "https://artificialanalysis.ai/models/claude-opus-5-5",
+          "as_of": "2026-11-26",
+          "note": "Artificial Analysis, at its Max effort setting. A hosted model that is not run here."
+        },
+        {
+          "metric": "LLM Stats score (llm-stats.com)",
+          "score": 58.0,
+          "estimated": false,
+          "source": "https://llm-stats.com/leaderboards/llm-leaderboard",
+          "as_of": "2026-11-26",
+          "note": "The LLM Stats composite index. A hosted model that is not run here."
+        },
+        {
+          "metric": "DeepSWE v1.1",
+          "score": 72.3,
+          "estimated": false,
+          "source": "https://www.deepswe.dev/",
+          "as_of": "2026-11-26",
+          "note": "Independent run by Mercor (mini-SWE-agent, 113 tasks, Max effort), not the vendor figure the local models show. A hosted model that is not run here."
+        },
+        {
+          "metric": "Arena text Elo (arena.ai)",
+          "score": 1514,
+          "estimated": false,
+          "source": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+          "as_of": "2026-11-26",
+          "note": "Human preference votes, overall, published 2026-11-22; Arena rates it at High effort. A hosted model that is not run here."
+        },
+        {
+          "metric": "LiveBench coding (release 2026-11-06)",
+          "score": 87.1,
+          "estimated": false,
+          "source": "https://livebench.ai/data/20261106/table.csv",
+          "as_of": "2026-11-26",
+          "note": "The coding category of LiveBench 2.0; effort not stated. A hosted model that is not run here."
+        },
+        {
+          "metric": "GPQA Diamond",
+          "score": 90.2,
+          "estimated": false,
+          "source": "https://openrouter.ai/benchmarks/gpqa-diamond",
+          "as_of": "2026-11-26",
+          "note": "Measured by OpenRouter through real provider endpoints, which scores lower than model-card figures for the same model (Qwen3.8 27B: 82.2 there against 89.2 on its card), so compare with the local bars loosely. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 4.0 (Vals, mini-swe-agent)",
+          "score": 65.15,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-4",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, mini-swe-agent, average of 3 runs, snapshot 2026-11-19. A hosted model that is not run here."
+        },
+        {
+          "metric": "Terminal-Bench 2.1 (mixed sources)",
+          "score": 87.64,
+          "estimated": false,
+          "source": "https://www.vals.ai/benchmarks/terminal-bench-2-1",
+          "as_of": "2026-11-26",
+          "note": "Vals AI, Terminus 2. A hosted model that is not run here. Terminal-Bench 2.1 has no official board and sources differ widely: Qwen3.8 27B scores 58.4 on Vals, 73.0 on its card and 79.8 on Artificial Analysis, so gaps between sources are as large as gaps between models."
+        }
+      ]
+    },
+    {
+      "name": "Jev 1.14 (hosted)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 75.0,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "TypeSafe's hosted model, the baseline; no open weights. Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 60.24,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "TypeSafe's hosted model, the baseline; no open weights. Not run here."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 66.2,
+          "estimated": false,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "TypeSafe's hosted model, the baseline; no open weights. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "MetaDecision-31B-Rain (licence not checked)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 88.3,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Licence not reviewed. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "H2O-Lightning 31B (personal use only)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 87.9,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Non-commercial licence. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "mammoth-1",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 85.2,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "MIT over Apache-2.0. Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 68.44,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "MIT over Apache-2.0. Not run here."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 71.4,
+          "estimated": false,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "MIT over Apache-2.0. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "GLiDE 1.2 (personal use only)",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 84.9,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Written agreement needed above US$10M revenue. Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 73.37,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Written agreement needed above US$10M revenue. Not run here."
+        },
+        {
+          "metric": "Artificial Analysis Decision v2.1",
+          "score": 72.5,
+          "estimated": false,
+          "source": "https://benchlm.ai/",
+          "as_of": "2026-11-26",
+          "note": "Personal use only. Written agreement needed above US$10M revenue. Not run here."
+        }
+      ]
+    },
+    {
+      "name": "d3",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 82.1,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 67.15,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Karpo 31B",
+      "workload": "decision",
+      "scores": [
+        {
+          "metric": "JevBench Capability Score (benchmarkheaven.com)",
+          "score": 87.2,
+          "estimated": false,
+          "source": "https://benchmarkheaven.com/jev-models",
+          "as_of": "2026-11-26",
+          "note": "Apache-2.0, text only. Tried here (community 4-bit MLX port, 18.5 GB, 0.25 s) and removed: Torchcast 31B scores higher, and the 4B and pplx-decider cover the lighter and picture cases."
+        },
+        {
+          "metric": "Decision Index 0.4.1 Full",
+          "score": 73.86,
+          "estimated": false,
+          "source": "https://huggingface.co/spaces/multimodalart/jev-decision-index",
+          "as_of": "2026-11-26",
+          "note": "Apache-2.0, text only. Tried here (community 4-bit MLX port, 18.5 GB, 0.25 s) and removed: Torchcast 31B scores higher, and the 4B and pplx-decider cover the lighter and picture cases."
+        }
+      ]
+    },
+    {
+      "name": "Cohere Transcribe (gated download, not run here)",
+      "workload": "transcription",
+      "scores": [
+        {
+          "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+          "score": 94.58,
+          "estimated": false,
+          "source": "https://speechtotext.dev/leaderboard/",
+          "as_of": "2026-11-28",
+          "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Canary-Qwen 2.5B (not run here)",
+      "workload": "transcription",
+      "scores": [
+        {
+          "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+          "score": 94.37,
+          "estimated": false,
+          "source": "https://speechtotext.dev/leaderboard/",
+          "as_of": "2026-11-28",
+          "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Not run here."
+        }
+      ]
+    },
+    {
+      "name": "Whisper large-v3 (not run here)",
+      "workload": "transcription",
+      "scores": [
+        {
+          "metric": "Open ASR Leaderboard accuracy (100 minus average word error, English)",
+          "score": 92.56,
+          "estimated": false,
+          "source": "https://speechtotext.dev/leaderboard/",
+          "as_of": "2026-11-28",
+          "note": "The leaderboard's average word error rate over its English short-form sets, as 100 minus the error (higher is better). Not run here."
+        }
+      ]
+    }
+  ]
 }

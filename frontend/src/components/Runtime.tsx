@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Download, FileText, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, Pencil, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ArrowUpRight, Ban, Check, CheckCircle2, ChevronDown, Clock, Copy, Download, FileText, Film, HelpCircle, Hourglass, Image as ImageIcon, Loader2, Lock, MessageCircleMore, Music, Pencil, RotateCcw, Sparkles, Trash2, Unlock, X } from 'lucide-react'
 import { formatBytes } from '../api'
-import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeSetting, SettingValue, UploadRecord } from '../types'
+import type { Generation, Host, InputField, Job, JobFile, JobOutput, Launch, Model, ModelMemory, Refusal, Runtime, RuntimeEstimate, RuntimeLicense, RuntimeSetting, SettingValue, UploadRecord } from '../types'
 import { FilePicker, type FileItem } from './FilePicker'
 import { CropEditor, shapeAspect } from './CropEditor'
 import { estimateFit, isUnified } from './Resources'
@@ -9,7 +9,8 @@ import { WorkloadIcon } from './WorkloadIcon'
 import { RefusalDetails } from './Refusal'
 import { StatePill } from './StatePill'
 import { Markdown } from './Markdown'
-import type { VoiceTarget } from '../voiceSample'
+import { MeetingHistory, NotesEditor, type NotesEditRequest } from './MeetingNotes'
+import { spokenLine } from '../voiceSample'
 
 /**
  * How a dropdown option reads: the plugin's own name for it, else the value with a capital first letter.
@@ -109,17 +110,32 @@ export function fieldsFor(generation: Generation, mode?: unknown) {
 }
 
 export type FormStart = { mode?: string; inputs?: Job['inputs']; files?: Record<string, FileItem[]> }
+/** A change a page makes to one field of the form: insert at the cursor, or replace the whole value. `n` makes each one new. */
+export type FieldCommand = { n: number; mode: string; field: string; apply: (current: string, start: number | null, end: number | null) => string }
+/** What a page that hosts the form may want from it: the values as they change, which tab is open, starting values for each tab, and field changes. */
+export type FormHooks = {
+  starts?: Record<string, FormStart>; onValues?: (mode: string, values: Record<string, string>, files: Record<string, FileItem[]>) => void
+  onMode?: (mode: string) => void; command?: FieldCommand
+  /** Which tabs the page shows (a model that serves two pages shows each its own). */
+  showModes?: (mode: string) => boolean
+  /** Write down a voice sample (by its upload ID); the form pre-fills "what the sample says" with it. Speech models only. */
+  transcribe?: (uploadId: string) => Promise<string>
+}
 
 /** The generation form; with several modes, one tab per mode, each keeping its own entries. */
-export function GenerateForm({ runtime, generation, onGenerate, error, initial, ahead = 0, upload }: {
+export function GenerateForm({ runtime, generation, onGenerate, error, initial, ahead = 0, upload, hooks }: {
   runtime: Runtime; generation: Generation; error?: string; onGenerate: GenerateHandlers['onGenerate']
-  initial?: FormStart; ahead?: number; upload: (file: File) => Promise<UploadRecord>
+  initial?: FormStart; ahead?: number; upload: (file: File) => Promise<UploadRecord>; hooks?: FormHooks
 }) {
-  const modes = generation.modes ?? []
+  const modes = (generation.modes ?? []).filter((item) => hooks?.showModes?.(item.key) ?? true)
   const [mode, setMode] = useState(() => modes.find((item) => item.key === initial?.mode)?.key ?? modes[0]?.key ?? '')
   const label = labelOf(generation)
-  if (!modes.length) return <ModeForm runtime={runtime} generation={generation} fields={generation.inputs} onGenerate={onGenerate} error={error} initial={initial} ahead={ahead} upload={upload} label={label} />
   const current = modes.find((item) => item.key === mode) ?? modes[0]
+  const currentKey = current?.key ?? ''
+  // The hosting page hears only changes of tab, not the tab the form opened on (and not the effect run twice in development).
+  const reported = useRef(currentKey)
+  useEffect(() => { if (currentKey !== reported.current) { reported.current = currentKey; hooks?.onMode?.(currentKey) } }, [currentKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!modes.length) return <ModeForm runtime={runtime} generation={generation} fields={generation.inputs} onGenerate={onGenerate} error={error} initial={initial} ahead={ahead} upload={upload} label={label} hooks={hooks} active />
   return <div className="generate-modes">
     {modes.length > 1 && <div className="mode-tabs" role="tablist" aria-label="How to make it">
       {modes.map((item) => <button key={item.key} type="button" role="tab" id={`${runtime.id}-tab-${item.key}`} aria-selected={item.key === current.key}
@@ -128,14 +144,15 @@ export function GenerateForm({ runtime, generation, onGenerate, error, initial, 
     {modes.map((item) => <div key={item.key} role="tabpanel" id={`${runtime.id}-panel-${item.key}`} aria-labelledby={modes.length > 1 ? `${runtime.id}-tab-${item.key}` : undefined} hidden={item.key !== current.key}>
       <p className="mode-help">{item.help}</p>
       <ModeForm runtime={runtime} generation={generation} fields={item.inputs} mode={item.key} onGenerate={onGenerate} error={item.key === current.key ? error : undefined}
-        initial={initial?.mode === item.key || (!initial?.mode && item.key === modes[0].key) ? initial : undefined} ahead={ahead} upload={upload} label={labelOf(generation, item.output_kind ?? generation.output_kind)} />
+        initial={hooks?.starts?.[item.key] ?? (initial?.mode === item.key || (!initial?.mode && item.key === modes[0].key) ? initial : undefined)} ahead={ahead} upload={upload}
+        label={labelOf(generation, item.output_kind ?? generation.output_kind)} hooks={hooks} active={item.key === current.key} />
     </div>)}
   </div>
 }
 
-function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initial, ahead, upload, label }: {
+function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initial, ahead, upload, label, hooks, active }: {
   runtime: Runtime; generation: Generation; fields: InputField[]; mode?: string; onGenerate: GenerateHandlers['onGenerate']; error?: string
-  initial?: FormStart; ahead: number; upload: (file: File) => Promise<UploadRecord>; label: string
+  initial?: FormStart; ahead: number; upload: (file: File) => Promise<UploadRecord>; label: string; hooks?: FormHooks; active?: boolean
 }) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(fields.filter((field) => field.kind !== 'files').map((field) => {
     let start = initial?.inputs?.[field.key] ?? field.default
@@ -143,6 +160,43 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
     return [field.key, start == null || Array.isArray(start) ? '' : String(start)]
   })))
   const [files, setFiles] = useState<Record<string, FileItem[]>>(() => initial?.files ?? {})
+  // A page hosting the form hears the open tab's values as they change, and may change a field (insert a cue, clear one).
+  // A tab that has just become the open one is not heard until its values change, so its blank fields do not overwrite what the page holds.
+  const wasActive = useRef(active)
+  useEffect(() => { if (active && wasActive.current) hooks?.onValues?.(mode ?? '', values, files); wasActive.current = !!active }, [values, files, active]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A voice sample that has just been recorded or chosen is written down, and the words fill "what the sample says" unless the
+  // person has typed their own there; a later sample replaces words this wrote, never words the person typed.
+  const speechRoles = generation.speech && mode !== generation.speech.scene ? generation.speech.roles[mode ?? ''] : undefined
+  const sampleKey = speechRoles?.sample, wordsKey = speechRoles?.sample_text
+  const sampleId = sampleKey ? files[sampleKey]?.find((item) => item.status === 'ready')?.id : undefined
+  const [listening, setListening] = useState(false)
+  const written = useRef('')
+  const valuesNow = useRef(values)
+  valuesNow.current = values
+  const transcribe = hooks?.transcribe
+  useEffect(() => {
+    if (!sampleId || !wordsKey || !transcribe) return
+    const typed = valuesNow.current[wordsKey] ?? ''
+    if (typed && typed !== written.current) return  // the person's own words (or a saved voice's): keep them
+    let stale = false
+    setListening(true)
+    transcribe(sampleId).then((text) => {
+      if (stale || !text) return
+      const before = written.current
+      written.current = text
+      setValues((current) => { const now = current[wordsKey] ?? ''; return !now || now === before ? { ...current, [wordsKey]: text } : current })
+    }, () => undefined).finally(() => { if (!stale) setListening(false) })
+    return () => { stale = true; setListening(false) }
+  }, [sampleId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const lastCommand = useRef(hooks?.command?.n)
+  useEffect(() => {
+    const command = hooks?.command
+    if (!command || command.n === lastCommand.current) return
+    lastCommand.current = command.n
+    if (command.mode !== (mode ?? '')) return
+    const element = document.getElementById(`${runtime.id}-${mode ?? 'input'}-${command.field}`) as HTMLInputElement | HTMLTextAreaElement | null
+    setValues((current) => ({ ...current, [command.field]: command.apply(current[command.field] ?? '', element?.selectionStart ?? null, element?.selectionEnd ?? null) }))
+  }, [hooks?.command?.n]) // eslint-disable-line react-hooks/exhaustive-deps
   const [advanced, setAdvanced] = useState(() => fields.some((field) => field.advanced && initial?.inputs?.[field.key] != null && initial.inputs[field.key] !== field.default))
   const [sending, setSending] = useState(false)
   // Width and height pairs stay in the clip's proportions unless unlocked.
@@ -232,11 +286,12 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
     const shown = field.kind === 'files' ? problem(field) : value && problem(field)
     return <div className={`field ${field.kind === 'textarea' ? 'field-wide' : ''} ${field.kind === 'files' ? 'field-files' : ''}`} key={field.key}>
       <FieldLabel htmlFor={id} label={field.label} suffix={field.required || field.kind === 'files' ? '' : ' (optional)'} help={field.help} />
-      {field.kind === 'files' ? <><FilePicker id={id} field={field} items={files[field.key] ?? []} upload={upload}
+      {field.kind === 'files' ? <><FilePicker id={id} field={field} record={runtime.workload === 'speech' && (field.accept ?? []).join() === 'audio'} items={files[field.key] ?? []} upload={upload}
           onChange={(update) => setFiles((current) => ({ ...current, [field.key]: update(current[field.key] ?? []) }))} />{framing(field)}</>
         : field.kind === 'textarea' ? <textarea id={id} className="text-input generate-textarea" rows={10} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? undefined} value={value} onChange={(event) => set(event.target.value)} />
         : field.kind === 'choice' ? <select id={id} className="text-input" value={value} onChange={(event) => set(event.target.value)}>{field.options.map((option) => <option key={option} value={option}>{optionLabel(option, field.option_labels)}</option>)}</select>
           : <input id={id} className="text-input" type={field.kind === 'text' ? 'text' : 'number'} step={field.kind === 'text' ? undefined : 1} maxLength={field.max_length ?? undefined} placeholder={field.placeholder ?? (field.kind === 'seed' ? 'Random' : undefined)} value={value} onChange={(event) => set(event.target.value)} />}
+      {listening && field.key === wordsKey && <p className="field-help" role="status"><Loader2 size={14} className="spin" aria-hidden="true" /> Writing down what the sample says…</p>}
       {field.guide && field.guide.length > 0 && <details className="field-guide disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Writing guide</summary><ul>
         {field.guide.map((tip) => { const [head, ...rest] = tip.split(': '); return <li key={tip}>{rest.length ? <><strong>{head}:</strong> {rest.join(': ')}</> : tip}</li> })}
       </ul></details>}
@@ -269,7 +324,7 @@ function ModeForm({ runtime, generation, fields, mode, onGenerate, error, initia
 }
 
 export function jobTitle(job: Job) {
-  const text = typeof job.inputs.prompt === 'string' ? job.inputs.prompt : typeof job.inputs.style === 'string' ? job.inputs.style : ''
+  const text = typeof job.inputs.prompt === 'string' ? job.inputs.prompt : typeof job.inputs.style === 'string' ? job.inputs.style : typeof job.inputs.instructions === 'string' ? job.inputs.instructions : ''
   // A meeting has no prompt: it is named after the recording it was made from.
   const recording = Array.isArray(job.inputs.recording) ? job.inputs.recording[0]?.original : undefined
   return text.trim() || recording?.trim() || 'Untitled'
@@ -432,7 +487,7 @@ function InputThumb({ job, file, inputUrl }: { job: Job; file: JobFile; inputUrl
 
 /** Files a result offers as one menu per kind, so six or eight downloads are two buttons. Others keep their own button. */
 const DOWNLOAD_GROUPS: { label: string; files: Record<string, string> }[] = [
-  { label: 'Download transcript', files: { 'transcript.md': 'Readable text (.md)', 'transcript.srt': 'Captions (.srt)', 'transcript.vtt': 'Captions for the web (.vtt)', 'transcript-raw.json': 'Before correction (.json)' } },
+  { label: 'Download transcript', files: { 'transcript.md': 'Readable text (.md)', 'transcript.srt': 'Captions (.srt)', 'transcript.vtt': 'Captions for the web (.vtt)', 'transcript.txt': 'Plain text (.txt)', 'transcript.json': 'With times and speakers, for programs (.json)', 'transcript-raw.json': 'Before correction (.json)' } },
   { label: 'Download notes', files: { 'notes.md': 'Notes (.md)', 'actions.csv': 'Action items, for a spreadsheet (.csv)', 'decisions.csv': 'Decisions, for a spreadsheet (.csv)', 'meeting.json': 'Everything, for programs (.json)' } },
 ]
 
@@ -539,26 +594,54 @@ const formatClock = (seconds: number) => {
     : `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`
 }
 
-export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, voiceTargets = [], onUseVoice }: {
+/** Name a voice and say what its sample says (the model needs the words to clone well). */
+function SaveVoiceForm({ initialText, onSave, onCancel }: { initialText: string; onSave: (name: string, text: string) => Promise<string>; onCancel: () => void }) {
+  const [name, setName] = useState('')
+  const [text, setText] = useState(initialText)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState('')
+  const id = useId()
+  return <form className="job-section save-voice" aria-label="Save as voice" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setProblem(await onSave(name, text)); setBusy(false) }}>
+    <h4>Save as voice</h4>
+    <label htmlFor={`${id}-name`}>Name</label>
+    <input id={`${id}-name`} className="text-input" value={name} maxLength={80} required onChange={(event) => setName(event.target.value)} />
+    <label htmlFor={`${id}-text`}>What the sample says</label>
+    <textarea id={`${id}-text`} className="text-input" rows={3} maxLength={1000} value={text} onChange={(event) => setText(event.target.value)} />
+    <p className="field-help">Only keep voices you have permission to use.</p>
+    {problem && <p className="form-error" role="alert">{problem}</p>}
+    <div className="button-row"><button type="submit" className="button button-primary" disabled={busy || !name.trim()}>{busy ? <Loader2 size={16} className="spin" /> : null}Save voice</button>
+      <button type="button" className="button button-secondary" onClick={onCancel}>Cancel</button></div>
+  </form>
+}
+
+export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse, onDelete, onCancel, onEditTranscript, onEditNotes, onSaveVoice, onUseSong, onUseFrame, onUseClip }: {
   job: Job; runtime: Runtime; generation: Generation; fileUrl: GenerateHandlers['fileUrl']; inputUrl: GenerateHandlers['inputUrl']
   onReuse: (job: Job) => void | Promise<void>; onDelete: (job: Job) => Promise<string>; onCancel: (job: Job) => Promise<string>
   /** Save corrections to a transcript; returns an error message or ''. Only meeting results offer it. */
   onEditTranscript?: (job: Job, edit: TranscriptEditRequest) => Promise<string>
-  /** Speech models that can clone a voice; a finished clip's soundtrack can be sent to one as its voice sample. */
-  voiceTargets?: VoiceTarget[]; onUseVoice?: (job: Job, url: string, target: VoiceTarget) => Promise<string>
+  /** Save a person's version of the notes (summary, action items, decisions); returns an error message or ''. */
+  onEditNotes?: (job: Job, edit: NotesEditRequest) => Promise<string>
+  /** Keep a finished clip's or recording's sound in the voice library under a name, with the words it says; returns an error message or ''. */
+  onSaveVoice?: (job: Job, url: string, name: string, text: string) => Promise<string>
+  /** Put a finished song on the form as the song to start from; returns an error message or ''. Only the Music page offers it. */
+  onUseSong?: (job: Job, url: string) => Promise<string>
+  /** Put a finished clip's last frame on the form as the first picture of the next clip, or the clip itself as the clip to continue; return an error message or ''. Only the Video page offers them. */
+  onUseFrame?: (job: Job, url: string) => Promise<string>
+  onUseClip?: (job: Job, url: string) => Promise<string>
 }) {
-  const [voiceBusy, setVoiceBusy] = useState('')
+  const [savingVoice, setSavingVoice] = useState(false)
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [editingNotes, setEditingNotes] = useState(false)
   const [revision, setRevision] = useState(0) // bumped after an edit is saved, so the files are read again
   const files = job.outputs.filter((output) => !isThumbnail(job, output))
   const media = files.filter((output) => /^(audio|image|video)\//.test(output.mime))
   const others = files.filter((output) => !media.includes(output))
   // Documents shown on the page as well as offered for download: the notes open, the transcript folded away.
-  const shown = ['notes.md', 'transcript.md'].filter((name) => others.some((output) => output.name === name))
+  const shown = ['notes.md', 'transcript.md', 'transcript.txt', 'result.md'].filter((name) => others.some((output) => output.name === name))
   const [docs, setDocs] = useState<Record<string, string>>({})
   useEffect(() => {
     setDocs({})
@@ -570,9 +653,9 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
     return () => { cancelled = true }
     // Read each shown document once its file link is ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job.id, urls['notes.md'], urls['transcript.md']])
+  }, [job.id, urls['notes.md'], urls['transcript.md'], urls['transcript.txt'], urls['result.md']])
 
-  useEffect(() => { setEditing(false) }, [job.id])
+  useEffect(() => { setEditing(false); setEditingNotes(false) }, [job.id])
   useEffect(() => {
     setConfirming(false); setError('')
     if (job.status !== 'done') return
@@ -632,24 +715,42 @@ export function JobDetail({ job, runtime, generation, fileUrl, inputUrl, onReuse
         : output.mime.startsWith('image/') ? <img src={urls[output.name]} alt={title} />
           : <video controls src={urls[output.name]} aria-label={`Play ${title}`} />) : <div className="job-media-loading"><small>Loading…</small></div>}
     </div>)}
-    {docs['notes.md'] && <section className="job-section job-document" aria-label="Notes"><Markdown text={docs['notes.md']} /></section>}
+    {docs['result.md'] && <section className="job-section job-document" aria-label="Decision"><Markdown text={docs['result.md']} /></section>}
+    {docs['notes.md'] && (editingNotes && urls['meeting.json'] && onEditNotes
+      ? <NotesEditor url={urls['meeting.json']} onSave={(edit) => onEditNotes(job, edit)} onClose={(saved) => { setEditingNotes(false); if (saved) setRevision((count) => count + 1) }} />
+      : <section className="job-section job-document" aria-label="Notes"><Markdown text={docs['notes.md']} /></section>)}
     {docs['transcript.md'] && (editing && urls['meeting.json'] && onEditTranscript
       ? <TranscriptEditor url={urls['meeting.json']} onSave={(edit) => onEditTranscript(job, edit)} onClose={(saved) => { setEditing(false); if (saved) setRevision((count) => count + 1) }} />
-      : <details className="job-section job-document disclosure"><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Transcript</summary><Markdown text={docs['transcript.md'].replace(/^# .*\n+/, '')} /></details>)}
+      : <details className="job-section job-document disclosure" open={!urls['meeting.json'] || undefined}><summary><ChevronDown size={16} aria-hidden="true" className="disclosure-chevron" />Transcript</summary><Markdown text={docs['transcript.md'].replace(/^# .*\n+/, '')} /></details>)}
+    {urls['meeting.json'] && (onEditNotes || onEditTranscript) && job.status === 'done' && <MeetingHistory url={urls['meeting.json']} version={revision} />}
     <div className="job-actions">
       <button type="button" className="button button-secondary" onClick={() => void onReuse(job)}><RotateCcw size={16} />Use these settings</button>
+      {onEditNotes && !editingNotes && job.status === 'done' && urls['meeting.json'] && docs['notes.md'] &&
+        <button type="button" className="button button-secondary" onClick={() => { setEditing(false); setEditingNotes(true) }}><Pencil size={16} />Edit notes</button>}
       {onEditTranscript && !editing && job.status === 'done' && urls['meeting.json'] && docs['transcript.md'] &&
-        <button type="button" className="button button-secondary" onClick={() => setEditing(true)}><Pencil size={16} />Edit transcript</button>}
-      {job.status === 'done' && onUseVoice && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).flatMap((output) => voiceTargets.map((target) =>
-        <button key={target.runtime.id} type="button" className="button button-secondary" disabled={!urls[output.name] || !!voiceBusy}
-          title={`Send this clip's sound to ${target.runtime.name} as the voice to speak in${target.ready ? '' : ` (${target.runtime.name} is not running: start it on the Models page)`}`}
-          onClick={async () => { setVoiceBusy(target.runtime.id); setError(''); const problem = await onUseVoice(job, urls[output.name], target); setVoiceBusy(''); if (problem) setError(problem) }}>
-          {voiceBusy === target.runtime.id ? <Loader2 size={16} className="spin" /> : <MessageCircleMore size={16} />}Use voice in {target.runtime.name}</button>))}
+        <button type="button" className="button button-secondary" onClick={() => { setEditingNotes(false); setEditing(true) }}><Pencil size={16} />Edit transcript</button>}
+      {job.status === 'done' && !urls['meeting.json'] && docs['transcript.txt'] &&
+        <button type="button" className="button button-secondary" onClick={() => { void navigator.clipboard.writeText(docs['transcript.txt']).then(() => setError(''), () => setError('The transcript could not be copied.')) }}><Copy size={16} />Copy the text</button>}
+      {job.status === 'done' && onSaveVoice && media.filter((output) => output.mime.startsWith('video/') || output.mime.startsWith('audio/')).slice(0, 1).map((output) =>
+        <button key={output.name} type="button" className="button button-secondary" disabled={!urls[output.name]} aria-expanded={savingVoice}
+          title="Keep the sound of this result as a voice that speech models can speak in" onClick={() => setSavingVoice((open) => !open)}><MessageCircleMore size={16} />Save as voice</button>)}
+      {job.status === 'done' && onUseSong && media.filter((output) => output.mime.startsWith('audio/')).slice(0, 1).map((output) =>
+        <button key={`use-${output.name}`} type="button" className="button button-secondary" disabled={!urls[output.name]}
+          title="Start a new version of this song, or redo a part of it" onClick={async () => { setError(await onUseSong(job, urls[output.name])) }}><Music size={16} />Use as source song</button>)}
+      {job.status === 'done' && onUseFrame && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).map((output) =>
+        <button key={`frame-${output.name}`} type="button" className="button button-secondary" disabled={!urls[output.name]}
+          title="Start the next clip from the last frame of this one" onClick={async () => { setError(await onUseFrame(job, urls[output.name])) }}><ImageIcon size={16} />Use last frame as first picture</button>)}
+      {job.status === 'done' && onUseClip && media.filter((output) => output.mime.startsWith('video/')).slice(0, 1).map((output) =>
+        <button key={`clip-${output.name}`} type="button" className="button button-secondary" disabled={!urls[output.name]}
+          title="Continue this clip" onClick={async () => { setError(await onUseClip(job, urls[output.name])) }}><Film size={16} />Use as source clip</button>)}
       {groups.map((group) => <DownloadMenu key={group.label} label={group.label} items={group.items} />)}
       {[...media, ...others].filter((output) => !grouped.has(output.name)).map((output) => urls[output.name] && <a key={output.name} className="button button-secondary" href={urls[output.name]} download={output.name}><Download size={16} />{output.name}</a>)}
       {active(job) && <button type="button" className="button button-secondary job-delete" disabled={deleting || job.progress === 'Cancelling'}
         onClick={async () => { setDeleting(true); setError(await onCancel(job)); setDeleting(false) }}><X size={16} />{job.progress === 'Cancelling' ? 'Cancelling…' : 'Cancel'}</button>}
     </div>
+    {savingVoice && onSaveVoice && <SaveVoiceForm initialText={spokenLine(job.inputs.prompt) || (typeof job.inputs.prompt === 'string' ? job.inputs.prompt.slice(0, 1000) : '')}
+      onSave={async (name, text) => { const output = media.find((item) => item.mime.startsWith('video/') || item.mime.startsWith('audio/')); const problem = output && urls[output.name] ? await onSaveVoice(job, urls[output.name], name, text) : 'The sound is not loaded yet.'; if (!problem) setSavingVoice(false); return problem }}
+      onCancel={() => setSavingVoice(false)} />}
     {fileFields.length > 0 && <section className="job-section"><h4>References</h4><div className="input-thumbs">
       {fileFields.map((field) => (job.inputs[field.key] as JobFile[]).map((file) => <div key={file.name} className="input-group"><span>{field.label}</span><InputThumb job={job} file={file} inputUrl={inputUrl} /></div>))}
     </div></section>}
@@ -692,6 +793,34 @@ export function JobModal({ open, onClose, title, children }: { open: boolean; on
       {children}
     </div>}
   </dialog>
+}
+
+export const LICENSE_WORD: Record<RuntimeLicense['use'], string> = { work: 'Work use', conditions: 'Check terms', personal: 'Personal use only' }
+const LICENSE_MEANING: Record<RuntimeLicense['use'], string> = {
+  work: 'Free for a company\'s own use as far as its licences say.',
+  conditions: 'Free for company use with limits to check, listed below.',
+  personal: 'Non-commercial or limited by territory: keep it to your own machine and your own use.',
+}
+
+/** The licence verdict as a small label on a model's card. A model with no licence recorded says so. */
+export function LicenseBadge({ license }: { license?: RuntimeLicense | null }) {
+  const use = license?.use ?? 'unreviewed'
+  return <span className={`license-badge license-${use}`} title={license ? `${LICENSE_MEANING[license.use]} Weights: ${license.weights}.` : 'No licence has been recorded for this model.'}>{license ? LICENSE_WORD[license.use] : 'Licence not reviewed'}</span>
+}
+
+/** The licence in the model's details: weights, code, what it allows and where to read it. A reading, not legal advice. */
+export function LicenseDetails({ license }: { license?: RuntimeLicense | null }) {
+  if (!license) return <section className="runtime-license" aria-label="Licence"><h3>Licence</h3><p>No licence has been recorded for this model. Read its terms before anyone else uses it.</p></section>
+  return <section className="runtime-license" aria-label="Licence">
+    <h3>Licence <LicenseBadge license={license} /></h3>
+    <dl>
+      <dt>Weights</dt><dd>{license.weights}</dd>
+      {license.code && <><dt>Code</dt><dd>{license.code}</dd></>}
+    </dl>
+    <p>{LICENSE_MEANING[license.use]}{license.note ? ` ${license.note}` : ''}</p>
+    {license.url && <p><a href={license.url} target="_blank" rel="noreferrer noopener">Read the licence <ArrowUpRight size={14} aria-hidden="true" /></a></p>}
+    <p className="runtime-license-caveat">This is a plain-words reading of the licences, not legal advice.</p>
+  </section>
 }
 
 export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, message, onRun, openHref, aside, usage, color, estimate, onEstimate }: {
@@ -778,6 +907,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
               : fits.every((fit) => fit.fits === true) ? { kind: 'yes', text: 'Fits' } : { kind: 'wait', text: 'Fit unknown' }
   const unified = isUnified(host) // one memory pool: no separate VRAM to show
   const usedVram = usage ? Object.values(usage.gpus).reduce((sum, bytes) => sum + bytes, 0) : 0
+  const license = preset?.license ?? runtime.license
   const summary = preset && <div className="runtime-summary">
     <fieldset className="runtime-chips" disabled={!stopped || pending}>
       <legend className="sr-only">GPUs</legend>
@@ -798,7 +928,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
     </div>
   </div>
   return <article className={`profile-card runtime-card ${open ? 'runtime-card-open' : ''}`}>
-    <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={20} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload}</span></div>
+    <div className="profile-card-main"><div className="model-icon" style={color ? { color, background: `${color}1f` } : undefined}><WorkloadIcon workload={runtime.workload} size={20} /></div><div className="profile-card-title"><div><strong>{runtime.name}</strong><span className="profile-id">{runtime.workload}</span><LicenseBadge license={license} /></div>
       {summary}
       <div className="profile-actions runtime-head-actions">
         {stopped && <button className="button button-primary" disabled={!canStart} title={!fresh ? 'A fresh telemetry sample is required.' : !host?.loading_enabled ? host?.loading_reason : !valid ? 'Fix the highlighted settings first.' : undefined} onClick={() => void onRun(runtime, 'start', launch)}><ArrowUpRight size={16} />Start</button>}
@@ -809,6 +939,7 @@ export function RuntimeCard({ runtime, model, host, fresh, pending, refusal, mes
     {runtime.description && <p className="runtime-description">{runtime.description}</p>}
 
     <div className={`runtime-body ${aside ? 'runtime-body-split' : ''}`}><div className="runtime-controls">
+    <LicenseDetails license={license} />
     {Object.keys(runtime.presets).length > 1 && <fieldset className="runtime-choice" disabled={!stopped || pending}>
       <legend>Model</legend>
       {Object.entries(runtime.presets).map(([key, item]) => <label key={key} title={item.name} className={`runtime-option ${launch.preset === key ? 'runtime-option-on' : ''}`}><input type="radio" name={`${runtime.id}-preset`} checked={launch.preset === key} onChange={() => choosePreset(key)} /><span>{item.name}</span></label>)}

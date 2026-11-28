@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, ModeSpec, TimingSpec
+from .speech import Direction, SpeechInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 # The 9 voices of Qwen3-TTS-12Hz-1.7B-CustomVoice (its README), with their native language.
@@ -79,6 +80,19 @@ class Qwen3TTSPlugin(WorkerPlugin):
         TimingSpec(when={"mode": "design"}, gpu=1, seconds=19, first_seconds=28, note="for about 15 s of speech"),
         TimingSpec(when={"mode": "clone"}, gpu=1, seconds=20, first_seconds=28, note="for about 15 s of speech"),
     )
+    speech: ClassVar[SpeechInfo] = SpeechInfo(
+        voices={"builtin": "builtin", "design": "design", "clone": "clone"},
+        direction=Direction(
+            text=("Say how it should be spoken in plain words under 'How to say it': emotion, speed, volume, attitude. It "
+                  "works with the built-in voices and with described voices, not with a cloned one (a clone keeps the "
+                  "sample's delivery). The words and punctuation set the tone too."),
+            examples=["Angry and fast", "Whisper, slowly", "Sad, with long pauses", "Excited, like a sports commentator"],
+            style_fields={"builtin": "style", "design": "style"}),
+        roles={
+            "builtin": {"text": "prompt", "language": "language", "seed": "seed", "direction": "style", "builtin_voice": "speaker"},
+            "design": {"text": "prompt", "language": "language", "seed": "seed", "direction": "style", "voice_description": "voice"},
+            "clone": {"text": "prompt", "language": "language", "seed": "seed", "sample": "sample", "sample_text": "sample_text"},
+        })
     modes: ClassVar[dict[str, ModeSpec]] = {
         "builtin": ModeSpec(
             label="Built-in voices",

@@ -9,15 +9,17 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from .plugins import get_plugin, plugin_kinds
-from .plugins.base import GIB, BasePreset, BaseRuntime, RuntimePlugin
+from .plugins.base import GIB, BasePreset, BaseRuntime, RuntimePlugin, RuntimeQuality
+from .providers import PROVIDER_ID, ProviderConfig
 
 __all__ = [
     "GIB",
     "Catalog",
     "CatalogError",
+    "ReferenceModel",
     "SettingsError",
     "describe_runtime",
     "estimate_requirements",
@@ -28,9 +30,26 @@ __all__ = [
 ]
 
 
+class ReferenceModel(BaseModel):
+    """A model that is not run here, with published scores, charted beside the local models for context."""
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=80)
+    workload: str = Field(default="text", min_length=1, max_length=40)
+    scores: list[RuntimeQuality] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def one_score_per_metric(self):
+        metrics = [score.metric for score in self.scores]
+        if len(set(metrics)) != len(metrics):
+            raise ValueError(f"{self.name} lists a metric twice.")
+        return self
+
+
 @dataclass
 class Catalog:
     runtimes: dict[str, BaseRuntime] = field(default_factory=dict)
+    references: list[ReferenceModel] = field(default_factory=list)
+    providers: dict[str, ProviderConfig] = field(default_factory=dict)  # hosted chat models, optional (providers.py)
 
     def plugin(self, model_id: str) -> RuntimePlugin:
         return get_plugin(self.runtimes[model_id].kind)
@@ -47,8 +66,8 @@ class SettingsError(ValueError):
 
 
 def parse_catalog(data) -> Catalog:
-    if not isinstance(data, dict) or set(data) - {"runtimes"} or not isinstance(data.get("runtimes", {}), dict):
-        raise CatalogError('The runtime catalog must be {"runtimes": {...}}.')
+    if not isinstance(data, dict) or set(data) - {"runtimes", "references", "providers"} or not isinstance(data.get("runtimes", {}), dict):
+        raise CatalogError('The runtime catalog must be {"runtimes": {...}} with optional "references" and "providers".')
     runtimes = {}
     for model_id, raw in data.get("runtimes", {}).items():
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", model_id):
@@ -64,7 +83,19 @@ def parse_catalog(data) -> Catalog:
         except (ValidationError, ValueError) as exc:
             raise CatalogError(f"Runtime {model_id!r}: {exc}") from exc
         runtimes[model_id] = runtime
-    return Catalog(runtimes)
+    try:
+        references = [ReferenceModel.model_validate(raw) for raw in data.get("references") or []]
+    except (ValidationError, TypeError) as exc:
+        raise CatalogError(f"References: {exc}") from exc
+    providers = {}
+    for provider_id, raw in (data.get("providers") or {}).items():
+        if not PROVIDER_ID.fullmatch(provider_id):
+            raise CatalogError(f"Invalid provider id {provider_id!r}: use lower-case letters, digits, - and _.")
+        try:
+            providers[provider_id] = ProviderConfig.model_validate(raw)
+        except ValidationError as exc:
+            raise CatalogError(f"Provider {provider_id!r}: {exc}") from exc
+    return Catalog(runtimes, references, providers)
 
 
 def load_catalog(path: Path | None) -> Catalog:
@@ -157,21 +188,32 @@ def describe_runtime(model_id: str, runtime: BaseRuntime, host_gpus: list[dict])
             "allowed_gpus": [{"index": i, "name": names.get(i, f"GPU {i}")} for i in preset.allowed_gpus],
             "settings": settings, "estimate": preset.estimate.model_dump(),
             "max_gpus": plugin.gpu_limit(preset), "card_notes": getattr(preset, "card_notes", {}) or {},
+            "license": preset.license.model_dump() if preset.license else None,
+            "quality": preset.quality.model_dump() if preset.quality else None,
+            "rankings": [score.model_dump() for score in preset.rankings],
         }
     generation = None
     if plugin.generates:
         fields = lambda specs: [{"key": key, **spec.model_dump()} for key, spec in specs.items()]
-        generation = {"output_kind": plugin.output_kind, "inputs": fields(plugin.inputs),
+        generation = {"output_kind": plugin.output_kind, "inputs": fields(plugin.inputs if plugin.modes else plugin.mode_inputs(None, runtime)),
                       "make_label": plugin.make_label, "result_noun": plugin.result_noun,
                       "modes": [{"key": key, "label": mode.label, "help": mode.help, "inputs": fields(mode.inputs),
                                  "output_kind": mode.output_kind or plugin.output_kind}
                                 for key, mode in plugin.modes.items()],
-                      "timings": [timing.model_dump() for timing in plugin.timings]}
+                      "timings": [timing.model_dump() for timing in plugin.timings],
+                      "speech": plugin.speech.model_dump() if plugin.speech else None,
+                      "image": plugin.image.for_runtime(lambda mode: plugin.mode_inputs(mode or None, runtime)).model_dump() if plugin.image else None,
+                      "music": plugin.music.for_runtime(lambda mode: plugin.mode_inputs(mode or None, runtime)).model_dump() if plugin.music else None,
+                      "video": plugin.video.for_runtime(lambda mode: plugin.mode_inputs(mode or None, runtime)).model_dump() if plugin.video else None,
+                      "transcribe": plugin.transcribe.for_runtime(lambda mode: plugin.mode_inputs(mode or None, runtime)).model_dump() if plugin.transcribe else None}
     return {"id": model_id, "kind": runtime.kind, "plugin": plugin.title, "name": runtime.name,
             "description": runtime.description or plugin.description or None,
-            "workload": runtime.workload, "port": runtime.port, "default_preset": runtime.default_preset,
+            "workload": runtime.workload, "port": runtime.port, "bind": runtime.host, "default_preset": runtime.default_preset,
             "max_gpus": plugin.max_gpus, "presets": presets, "generation": generation, "chat": plugin.chats,
-            "assistant": bool(runtime.assistant and plugin.chats)}
+            "assistant": bool(runtime.assistant and plugin.chats),
+            "license": runtime.license.model_dump() if runtime.license else None,
+            "quality": runtime.quality.model_dump() if runtime.quality else None,
+            "rankings": [score.model_dump() for score in runtime.rankings]}
 
 
 def _valid_crop(value: str) -> bool:
@@ -183,7 +225,7 @@ def _valid_crop(value: str) -> bool:
     return 0 <= x and 0 <= y and 0.05 <= w and 0.05 <= h and x + w <= 1.0001 and y + h <= 1.0001
 
 
-def validate_inputs(plugin: RuntimePlugin, inputs: dict, uploads=None) -> dict:
+def validate_inputs(plugin: RuntimePlugin, inputs: dict, uploads=None, runtime=None) -> dict:
     """Check generation-form values against the plugin's input specs. Unknown fields are refused.
 
     Plugins with modes need "mode"; only that mode's fields are accepted. `uploads(upload_id)` returns an
@@ -196,7 +238,7 @@ def validate_inputs(plugin: RuntimePlugin, inputs: dict, uploads=None) -> dict:
         mode = inputs.get("mode", next(iter(plugin.modes)))
         if mode not in plugin.modes:
             raise SettingsError([f"mode must be one of {', '.join(plugin.modes)}."])
-    specs = plugin.mode_inputs(mode)
+    specs = plugin.mode_inputs(mode, runtime)
     errors, result, files = [], {}, {}
     for key in inputs:
         if key not in specs and not (key == "mode" and plugin.modes):

@@ -25,6 +25,35 @@ The browser can only choose a preset, choose GPUs from the preset's `allowed_gpu
 
 GPU indices are NVML/`nvidia-smi` order. Plugins that start CUDA programs should set `CUDA_DEVICE_ORDER=PCI_BUS_ID` so the indices match (Basalt does).
 
+Every `runtimes.json` entry should also carry a `license` block, which the Models page shows as a badge and in the model's details:
+
+```json
+"license": {
+  "use": "work",
+  "weights": "Apache-2.0",
+  "code": "mflux: MIT",
+  "note": "The terms that matter, in plain words.",
+  "url": "https://huggingface.co/..."
+}
+```
+
+`use` is `work` (free for a company's own use as far as the licences say), `conditions` (free with limits to check, such as a revenue cap or a ban on hosted services) or `personal` (non-commercial, or limited by territory, so keep it to your own machine). `weights` is required; `code`, `note` and `url` are optional. A preset may carry its own `license` block, which overrides the model's for that version (the Windows meeting notes: Nemotron is work use, the DiariZen version is personal). On the Models page a model with several versions shows under each use its versions allow. An entry without a block is shown as "Licence not reviewed". Read the licence text itself before recording a verdict, and record the clause that decides it in `note`. The verdict is a reading of the licence, not legal advice.
+
+An entry or preset may also carry a `quality` block, a published score the Models page charts against the other models of the same kind:
+
+```json
+"quality": {
+  "metric": "Speech arena Elo (Artificial Analysis)",
+  "score": 1278,
+  "estimated": false,
+  "source": "https://...",
+  "as_of": "2026-11-26",
+  "note": "How it was found, or what it covers."
+}
+```
+
+Scores are compared only within the same `metric`, one chart per kind of model (text, speech, pictures, video, music), one ranking per metric, with buttons to switch between rankings. A model's first score goes in `quality`; further scores on other metrics go in a `rankings` list of the same blocks (a model may not repeat a metric); a kind with fewer than two scored models has no chart, and models missing from the chosen ranking are listed under it as "Not on this ranking". Set `estimated` when the score is not published for the exact build run here (a quant, a smaller sibling), and say how it was derived in `note`; estimates are drawn hatched. A preset's `quality` overrides the model's for that version. Do not invent scores: every one needs a source or an explicit estimate method.
+
 ## Adding a plugin
 
 1. Create `backend/generationstation/plugins/<name>.py` with a `RuntimePlugin` subclass. Narrow `kind` with `Literal["<name>"]` in its runtime model.
@@ -71,3 +100,18 @@ The core API: `POST /api/models/{id}/jobs` with `{"inputs": {...}}` (the model m
 The generation page lists every result of the model in a sidebar with its thumbnail; jobs wait in the worker's queue, and the sidebar shows which one is being made (with its step) and each queued one's place in line, each with a cancel button. Choosing a result opens a modal that shows the file, everything that was typed, what the model actually used, the time it took and the model settings, with "Use these settings" (refills the form), download and delete.
 
 `tests/stub_worker.py` is a stand-in worker (writes a one-second tone) used to test the whole path without a model.
+
+
+## Speech capabilities
+
+A speech plugin declares `speech: ClassVar[SpeechInfo]` (`plugins/speech.py`) so the Speech page can serve it: `voices` (which of builtin, design, clone, own it has, each mapped to the mode that serves it), `scene` (the mode for several voices, if any), `direction` (what the model does with direction, examples for its plain-words field, which field takes them per mode, and `cues` written into the text with their open or closed vocabulary) and `roles` (mode, then role, then the field that holds it: text, language, seed, speed, direction, builtin_voice, voice_description, sample, sample_text). `SpeechInfo.check(plugin)` reports a declaration that names a missing mode or field; a test runs it for every speech plugin.
+
+A speech-to-text plugin declares `transcribe: ClassVar[TranscribeInfo]` (`plugins/transcribe.py`) so the Transcribe page can serve it: `guidance`, `times` (`lines` when each line has times and captions can be written), `speakers` (`turns` when who spoke can be laid over the text), `checked_minutes` and `roles` (the one form, under "": recording, language, terms, speakers). `TranscribeInfo.check(plugin)` reports a declaration that names a missing field; a test runs it for every transcription plugin. The three share `plugins/speech_to_text.py` and `workers/transcribe_mlx_worker.py`; the preset option `engine` picks the model.
+
+A video plugin declares `video: ClassVar[VideoInfo]` (`plugins/video.py`) so the Video page can serve it: `guidance`, `sound` (`none`, `automatic` or `prompted`), `create` (the tab that makes a clip from a description; "" for a plugin with no tabs), optional `picture` (first and last picture), `references` and `extend` (continue a clip) tabs, `seconds` (every length option and how long it is, so a length carries between models) and `roles` (tab, then role, then the field: prompt, shape, resolution, length, quality, speed, negative, sounds, music, seed, first, last, source, references, videos, audio, notes). `VideoInfo.check(plugin)` reports a declaration that names a missing tab, field or length; a test runs it for every video plugin. A model that also paints pictures (H3 on Windows) keeps its picture tabs on the Images page and its clip tabs on this one.
+
+A song plugin declares `music: ClassVar[MusicInfo]` (`plugins/music.py`) so the Music page can serve it: `guidance`, `create` (the tab that makes a song from a style and lyrics; "" for a plugin with no tabs), optional `cover` and `repaint` tabs (a new version of a song, and a redone section of one), and `roles` (tab, then role, then the field: style, lyrics, length, language, tempo, key, time_signature, steps, seed, source, strength, start, end). `MusicInfo.check(plugin)` reports a declaration that names a missing tab or field; a test runs it for every song plugin. `describe_runtime` narrows the roles to the fields the model's form has.
+
+## A worker's own API
+
+`gs_worker.serve(load, generate, api=fn)` lets a worker answer a public API on its port besides the job protocol (the decision worker serves `POST /v1/systemone` this way). `fn(model, method, path, body)` returns `(status, payload)` for a path it handles and `None` for any other; `model` is `None` until the model has loaded. A runtime's `"host"` (`127.0.0.1`, the default, or `0.0.0.0`) is passed to the worker as `config["host"]` and used for the listening address.

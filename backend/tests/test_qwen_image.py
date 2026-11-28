@@ -67,3 +67,24 @@ def test_example_catalog_entry_is_valid():
     entry = catalog.runtimes["qwen_image"]
     assert set(entry.presets) == {"uncensored", "turbo"}
     assert entry.presets["turbo"].options["turbo"] is True
+
+
+def test_mac_entries_are_one_per_model_and_use_the_mflux_worker():
+    catalog = parse_catalog(json.loads((ROOT / "runtimes.mac.example.json").read_text()))
+    expected = {"qwen_image": {"mlx", "qwen21"}, "qwen_image_2512": {"qwen2512"}, "z_image": {"zimage"}}
+    for model_id, presets in expected.items():
+        entry = catalog.runtimes[model_id]
+        assert set(entry.presets) == presets and entry.default_preset in presets
+        assert QWEN.script_path(entry) == ROOT / "workers" / "qwen_image_mflux_worker.py"
+        assert all(p.allowed_gpus == [0] for p in entry.presets.values())
+    assert QWEN.estimate(catalog.runtimes["qwen_image"], catalog.runtimes["qwen_image"].presets["mlx"], {}, [0]) == (14, {})  # the model stays loaded, so a start asks for its peak
+
+
+def test_mflux_worker_sizes_follow_the_shapes_and_snap_to_sixteen(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "workers"))
+    import qwen_image_mflux_worker as worker
+
+    assert worker._size("portrait") == (768, 1152) and worker._size(None) == (1024, 1024)
+    assert worker._size("1000x700") == (992, 688)
+    with pytest.raises(ValueError, match="between 256 and 2048"):
+        worker._size("4096x512")

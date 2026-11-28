@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowUp, ArrowUpRight, Bot, ChevronDown, Loader2, MessageCircleQuestion, Power, RotateCcw, Square } from 'lucide-react'
+import { ArrowUp, ArrowUpRight, Bot, ChevronDown, Loader2, MessageCircleQuestion, RotateCcw, Square } from 'lucide-react'
 import { DraftView, MessageView, useChatTurn, usePinnedScroll } from './ChatParts'
 import type { SavedHost } from '../hosts'
-import { href } from '../routes'
+import { hostedRuntimes } from '../hosted'
+import { href, modelRoute } from '../routes'
 import { type HostStore, useSession } from '../store'
 import type { ChatMessage, Conversation } from '../types'
 
@@ -33,15 +34,16 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
   const launcher = useRef<HTMLButtonElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const connected = state.connection === 'connected'
-  // The thread's own model once loaded; before that, the model marked as the assistant (Inkling), never just the
-  // first text model in the list.
-  const runtime = state.runtimes?.find((item) => item.chat && item.id === loaded?.conversation.model_id)
-    ?? state.runtimes?.find((item) => item.chat && item.assistant)
-    ?? state.runtimes?.find((item) => item.chat && state.models?.find((model) => model.id === item.id)?.state === 'ready')
-    ?? state.runtimes?.find((item) => item.chat)
-  const model = state.models?.find((item) => item.id === runtime?.id)
-  const ready = model?.state === 'ready'
-  const starting = state.pendingModelId === runtime?.id || model?.state === 'loading'
+  // Like the Chat page: only a running text model is named or used. The thread's own model if it is running, else the one
+  // marked for the assistant, else any other that is running. With none running, no model is named: a link goes to the
+  // Models page to start one.
+  const chats = state.runtimes?.filter((item) => item.chat) ?? []
+  const isReady = (id: string) => state.models?.find((model) => model.id === id)?.state === 'ready'
+  // Hosted models are always ready; they come after the local ones that are running.
+  const running = [...chats.filter((item) => isReady(item.id)), ...hostedRuntimes(state.providers)]
+  const runtime = running.find((item) => item.id === loaded?.conversation.model_id) ?? running.find((item) => item.assistant) ?? running[0]
+  const ready = !!runtime
+  const starting = chats.some((item) => state.pendingModelId === item.id || state.models?.find((model) => model.id === item.id)?.state === 'loading')
   const conversationId = loaded?.conversation.id
 
   const setOpenSaved = (next: boolean) => {
@@ -95,7 +97,6 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
   </button>
 
   const busy = sending || !!loaded?.conversation.busy
-  const refusal = runtime ? state.refusals[runtime.id] : undefined
   return <section ref={panel} className="assistant-panel" aria-label="Assistant"
     onKeyDown={(event) => { if (event.key === 'Escape') setOpenSaved(false) }}>
     <header className="assistant-head">
@@ -109,12 +110,12 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
     </header>
     <div className="assistant-thread" ref={thread} aria-live="polite" aria-busy={busy}><div className="chat-thread-body" ref={body}>
       {!connected && <p className="assistant-note">This browser is not connected to the desktop. <a href={href({ page: 'connections' })}>Open Connections</a></p>}
-      {connected && state.runtimes && !runtime && <p className="assistant-note">This desktop has no text model for the assistant.</p>}
-      {connected && runtime && !ready && <div className="assistant-off">
-        <p>The assistant runs on <strong>{runtime.name}</strong>, which is {starting ? 'starting' : 'off'}.</p>
-        <button type="button" className="button button-primary" disabled={starting} onClick={() => void session.runRuntime(runtime, 'start')}>
-          {starting ? <Loader2 size={16} className="spin" aria-hidden="true" /> : <Power size={16} aria-hidden="true" />}{starting ? 'Starting…' : `Start ${runtime.name}`}</button>
-        {refusal && !starting && <p className="operation-error" role="alert">{refusal.message}</p>}
+      {connected && state.runtimes && chats.length === 0 && <p className="assistant-note">This desktop has no text model for the assistant.</p>}
+      {connected && chats.length > 0 && !ready && <div className="assistant-off">
+        <p>{starting ? 'A text model is starting.' : 'No text model is running.'}</p>
+        {starting
+          ? <p className="assistant-starting"><Loader2 size={16} className="spin" aria-hidden="true" /> Starting…</p>
+          : <a className="button button-primary" href={href({ page: 'models', hostId: host.id })} onClick={() => setOpenSaved(false)}>Start one on the Models page <ArrowUpRight size={16} aria-hidden="true" /></a>}
       </div>}
       {loadError && <p className="operation-error" role="alert">{loadError}</p>}
       {connected && loaded && loaded.messages.length === 0 && !draft && <div className="assistant-welcome">
@@ -123,7 +124,7 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
           disabled={!ready || busy} onClick={() => void ask(question)}>{question}</button>)}</div>
       </div>}
       {loaded?.messages.map((message) => <MessageView key={message.id} message={message} session={session} jobs={state.jobs} runtimes={state.runtimes ?? []}
-        onOpenJob={(id) => { const job = state.jobs.find((item) => item.id === id); if (job) { setOpenSaved(false); window.location.hash = href({ page: 'service', hostId: host.id, modelId: job.model_id }) } }} />)}
+        onOpenJob={(id) => { const job = state.jobs.find((item) => item.id === id); if (job) { setOpenSaved(false); window.location.hash = href(modelRoute(host.id, job.model_id, state.runtimes)) } }} />)}
       {draft && <DraftView draft={draft} />}
       {busy && !draft && <div className="chat-msg from-model chat-waiting"><span className="chat-avatar" aria-hidden="true"><Bot size={18} /></span><span><Loader2 size={16} className="spin" aria-hidden="true" /> {activity || 'Reading…'}</span></div>}
       {error && <p className="chat-error" role="alert">{error}</p>}
@@ -131,7 +132,7 @@ export function AssistantBubble({ store, host, where }: { store: HostStore; host
     <form className="assistant-composer" onSubmit={(event) => { event.preventDefault(); void ask(text) }}>
       <label className="sr-only" htmlFor="assistant-input">Ask the assistant</label>
       <textarea id="assistant-input" ref={input} rows={1} value={text} maxLength={20000} disabled={!ready || !connected}
-        placeholder={ready ? 'Ask anything about Generation Station' : 'Start the assistant to ask'}
+        placeholder={ready ? 'Ask anything about Generation Station' : 'Start a text model to ask'}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void ask(text) } }} />
       {busy ? <button type="button" className="icon-button assistant-send" aria-label="Stop" title="Stop" disabled={!sending || stopping}

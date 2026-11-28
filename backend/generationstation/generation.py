@@ -43,7 +43,7 @@ class GenerationManager:
         if state.get("state") != "ready":
             raise LifecycleError("MODEL_NOT_READY", f"Start {runtime.name} first, then try again.", 409)
         try:
-            values = validate_inputs(plugin, inputs, self.uploads.get if self.uploads else None)
+            values = validate_inputs(plugin, inputs, self.uploads.get if self.uploads else None, runtime)
         except SettingsError as exc:
             raise LifecycleError("INPUTS_INVALID", " ".join(exc.errors), 422,
                                  resources=[{"error": e} for e in exc.errors]) from exc
@@ -63,7 +63,7 @@ class GenerationManager:
     def _attach_files(self, plugin, runtime, job_id, values):
         """Copy a request's uploads into the job's own folder. The stored inputs name the copies; the
         worker's inputs also carry their paths."""
-        specs = plugin.mode_inputs(values.get("mode"))
+        specs = plugin.mode_inputs(values.get("mode"), runtime)
         stored, worker = dict(values), dict(values)
         folder = Path(plugin.output_dir(runtime)) / job_id / INPUTS_FOLDER
         index = 0
@@ -168,15 +168,22 @@ class GenerationManager:
 
     def edit_transcript(self, job_id, payload):
         """Correct a finished meeting's transcript (speakers and words). Only plugins that offer it (meeting notes) do."""
+        return self._edit_meeting(job_id, payload, "edit_transcript", "transcript")
+
+    def edit_notes(self, job_id, payload):
+        """Replace a finished meeting's summary, action items or decisions. Only plugins that offer it do."""
+        return self._edit_meeting(job_id, payload, "edit_notes", "notes")
+
+    def _edit_meeting(self, job_id, payload, method, what):
         job = self.store.get_job(job_id)
         runtime = self.catalog.runtimes.get(job["model_id"]) if job else None
-        edit = getattr(self.catalog.plugin(job["model_id"]), "edit_transcript", None) if runtime else None
+        edit = getattr(self.catalog.plugin(job["model_id"]), method, None) if runtime else None
         if job is None or runtime is None or job["status"] != "done" or edit is None:
-            raise LifecycleError("JOB_NOT_FOUND", "There is no transcript to edit here.", 404)
+            raise LifecycleError("JOB_NOT_FOUND", f"There are no {what} to edit here.", 404)
         root = Path(self.catalog.plugin(job["model_id"]).output_dir(runtime)).resolve()
         folder = (root / job_id).resolve()
         if folder.parent != root or not folder.is_dir():
-            raise LifecycleError("JOB_NOT_FOUND", "There is no transcript to edit here.", 404)
+            raise LifecycleError("JOB_NOT_FOUND", f"There are no {what} to edit here.", 404)
         try:
             return edit(folder, payload)
         except ValueError as exc:  # TranscriptEditError

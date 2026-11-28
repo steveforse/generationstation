@@ -5,8 +5,8 @@ import {
 import type { SavedHost } from './hosts'
 import {
   ApiError, type Connection, type Job, type JobOutput, type Launch, type Model,
-  type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord,
-  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult,
+  type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord, type Voice,
+  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult, type ReferenceModel, type HostedProvider, type ProviderSetup,
 } from './types'
 
 /** How many recent results to keep in view (the results sidebar lists them). */
@@ -18,8 +18,12 @@ export type SessionState = {
   snapshot: Snapshot | null
   models: Model[] | null
   runtimes: Runtime[] | null
+  /** Models not run here, with published scores, drawn beside the local ones in the quality charts. */
+  references: ReferenceModel[]
   operations: Operation[]
   jobs: Job[]
+  /** Hosted chat providers the host is set up with (none unless its runtimes file has them). */
+  providers: HostedProvider[]
   catalogError: string
   actionError: string
   pendingModelId: string | null
@@ -28,8 +32,19 @@ export type SessionState = {
   jobErrors: Record<string, string>
 }
 
+/** The reference models a /api/runtimes reply carries (none from a host that predates them). */
+const referencesOf = (reply: object): ReferenceModel[] => {
+  const list = (reply as { references?: unknown }).references
+  return Array.isArray(list) ? list.filter((item): item is ReferenceModel => !!item && typeof (item as ReferenceModel).name === 'string' && Array.isArray((item as ReferenceModel).scores)) : []
+}
+
+const providersOf = (reply: unknown): HostedProvider[] | null => {
+  const list = (reply as { providers?: unknown } | null)?.providers
+  return Array.isArray(list) ? list.filter((item): item is HostedProvider => !!item && typeof (item as HostedProvider).id === 'string' && Array.isArray((item as HostedProvider).models)) : null
+}
+
 const initialState = (message = 'Open Connections to connect this host.'): SessionState => ({
-  connection: 'idle', message, snapshot: null, models: null, runtimes: null, operations: [], jobs: [],
+  connection: 'idle', message, snapshot: null, models: null, runtimes: null, references: [], operations: [], jobs: [], providers: [],
   catalogError: '', actionError: '', pendingModelId: null, refusals: {}, runtimeMessages: {}, jobErrors: {},
 })
 
@@ -213,16 +228,19 @@ export class HostSession {
       if (!this.stillCurrent(generation, signal)) return
       if (!isCatalog(models)) throw new Error('The host returned an invalid model catalog.')
       this.set({ models: models.models, catalogError: '' })
-      const [operations, runtimes, jobs] = await Promise.all([
+      const [operations, runtimes, jobs, providers] = await Promise.all([
         requestApi(base, token, '/api/operations?limit=100', {}, signal).catch(() => null),
         requestApi(base, token, '/api/runtimes', {}, signal).catch(() => null),
         requestApi(base, token, `/api/jobs?limit=${JOB_LIMIT}`, {}, signal).catch(() => null),
+        requestApi(base, token, '/api/providers', {}, signal).catch(() => null),
       ])
       if (!this.stillCurrent(generation, signal)) return
       this.set((state) => ({
         operations: isOperations(operations) ? operations.operations.slice(0, 8) : state.operations,
         runtimes: isRuntimes(runtimes) ? runtimes.runtimes : (state.runtimes ?? []),
+        references: isRuntimes(runtimes) ? referencesOf(runtimes) : state.references,
         jobs: isJobs(jobs) ? jobs.jobs : state.jobs,
+        providers: providersOf(providers) ?? state.providers,
       }))
       this.scheduleBusyPoll()
       this.scheduleJobPoll()
@@ -358,11 +376,16 @@ export class HostSession {
       return await requestApi(ctx.base, ctx.token, path, init, ctx.signal)
     } catch (error) {
       if (this.handleAuthError(error)) throw new Error('Not connected to the host.')
-      if (error instanceof ApiError && error.status === 404 && error.body.detail === 'API route not found') {
-        throw new Error('This host’s service is older than this page. Restart the Generation Station service to update it.')
-      }
       throw error
     }
+  }
+
+  /** Choose which of a provider's models the chat offers, or look the provider's models up again. */
+  async hostedModels(providerId: string, enabled: string[] | null) {
+    const path = `/api/providers/${encodeURIComponent(providerId)}/${enabled ? 'models' : 'refresh'}`
+    const reply = await this.call(path, enabled ? { method: 'PUT', body: JSON.stringify({ enabled }) } : { method: 'POST' })
+    const providers = providersOf(reply)
+    if (providers) this.set({ providers })
   }
 
   async settings(): Promise<HostSettings> {
@@ -375,6 +398,27 @@ export class HostSession {
 
   async testSearch(searxngUrl: string): Promise<SearchTestResult> {
     return await this.call('/api/settings/test-search', { method: 'POST', body: JSON.stringify({ searxng_url: searxngUrl }) }) as SearchTestResult
+  }
+
+  async providerSetups(): Promise<ProviderSetup[]> {
+    // A host that predates hosted providers answers 404 (or the fixtures 401): that is "none", not a lost connection.
+    const ctx = this.context()
+    if (!ctx) return []
+    const reply = await requestApi(ctx.base, ctx.token, '/api/providers/config', {}, ctx.signal).catch(() => null) as { providers?: ProviderSetup[] } | null
+    return reply?.providers ?? []
+  }
+
+  /** Save the providers set up here (the ones from the runtimes file stay as they are), then show their models. */
+  async saveProviderSetups(items: ProviderSetup[]): Promise<ProviderSetup[]> {
+    const body = items.map(({ origin: _origin, ...fields }) => fields)
+    const reply = await this.call('/api/providers/config', { method: 'PUT', body: JSON.stringify({ providers: body }) }) as { providers: ProviderSetup[] }
+    await this.refreshCatalog()
+    return reply.providers
+  }
+
+  async testProvider(item: ProviderSetup): Promise<SearchTestResult> {
+    const { origin: _origin, ...fields } = item
+    return await this.call('/api/providers/test', { method: 'POST', body: JSON.stringify(fields) }) as SearchTestResult
   }
 
   async logs(): Promise<LogEntry[]> {
@@ -432,7 +476,7 @@ export class HostSession {
    * message), start, delta ({content?, reasoning?, tool?}), error and done. The host finishes and saves the
    * answer even if this stream is dropped.
    */
-  async sendMessage(id: string, body: { text: string; attachments: ChatAttachment[]; thinking: boolean | string; where?: string },
+  async sendMessage(id: string, body: { text: string; attachments: ChatAttachment[]; thinking: boolean | string; where?: string; model_id?: string },
     onEvent: (event: string, data: unknown) => void, signal?: AbortSignal) {
     const ctx = this.context()
     if (!ctx) throw new Error('Not connected to the host.')
@@ -491,22 +535,34 @@ export class HostSession {
     }
   }
 
+  /** Save a person's version of a finished meeting's notes. Returns an error message, or '' when it was saved. */
+  async editNotes(job: Job, edit: { revision: number; summary?: string[]; actions?: unknown[]; decisions?: unknown[] }) {
+    const ctx = this.context()
+    if (!ctx) return 'Not connected to the host.'
+    try {
+      await requestApi(ctx.base, ctx.token, `/api/jobs/${encodeURIComponent(job.id)}/notes`, { method: 'PUT', body: JSON.stringify(edit) }, ctx.signal)
+      return ''
+    } catch (error) {
+      if (this.handleAuthError(error)) return 'Not connected to the host.'
+      return error instanceof Error ? error.message : 'The notes could not be saved.'
+    }
+  }
+
+  /** Where a running model listens and, for a chat model, the name it answers to (for a tool that connects to it directly). */
+  async connection(runtime: Runtime): Promise<{ bind: string; port: number; model: string | null }> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected.')
+    const body = await requestApi(ctx.base, ctx.token, `/api/runtimes/${encodeURIComponent(runtime.id)}/connection`, {}, ctx.signal) as { bind: string; port: number; model: string | null }
+    return body
+  }
+
   /** Ask the host what a start with these choices would need. Display only; Start is checked again. */
   async estimateRuntime(runtime: Runtime, launch: Launch, signal?: AbortSignal): Promise<RuntimeEstimate> {
     const ctx = this.context()
     if (!ctx) throw new Error('Not connected.')
-    let body: unknown
-    try {
-      body = await requestApi(ctx.base, ctx.token, `/api/runtimes/${encodeURIComponent(runtime.id)}/estimate`, {
-        method: 'POST', body: JSON.stringify({ preset: launch.preset, settings: launch.settings, gpus: launch.gpus }),
-      }, signal ?? ctx.signal)
-    } catch (error) {
-      // A service started before this feature existed has no estimate route.
-      if (error instanceof ApiError && error.status === 404 && error.body.detail === 'API route not found') {
-        throw new Error('This host’s service is older than this page, so it can’t preview a start. Restart the Generation Station service to update it.')
-      }
-      throw error
-    }
+    const body = await requestApi(ctx.base, ctx.token, `/api/runtimes/${encodeURIComponent(runtime.id)}/estimate`, {
+      method: 'POST', body: JSON.stringify({ preset: launch.preset, settings: launch.settings, gpus: launch.gpus }),
+    }, signal ?? ctx.signal)
     if (!isEstimate(body)) throw new Error('The host returned an invalid estimate.')
     return body
   }
@@ -524,6 +580,68 @@ export class HostSession {
       throw new Error(typeof body?.detail === 'string' ? body.detail : `The file could not be uploaded (${response.status}).`)
     }
     return body as UploadRecord
+  }
+
+  /** What a voice sample says, written down by the speech model's transcriber. Throws when none is set up or it fails. */
+  async transcribe(runtimeId: string, uploadId: string): Promise<string> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    const response = await fetch(apiUrl(ctx.base, `/api/runtimes/${encodeURIComponent(runtimeId)}/transcribe`), {
+      method: 'POST', signal: ctx.signal, body: JSON.stringify({ upload_id: uploadId }),
+      headers: { Authorization: `Bearer ${ctx.token}`, 'Content-Type': 'application/json' },
+    })
+    const body = await response.json().catch(() => null) as { text?: unknown; detail?: unknown } | null
+    if (!response.ok || typeof body?.text !== 'string') throw new Error(typeof body?.detail === 'string' ? body.detail : 'The sample could not be written down.')
+    return body.text
+  }
+
+  /** The saved voices on the host. */
+  async listVoices(): Promise<Voice[]> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    const body = await requestApi(ctx.base, ctx.token, '/api/voices', {}, ctx.signal) as { voices?: Voice[] } | null
+    return Array.isArray(body?.voices) ? body.voices : []
+  }
+
+  /** Save an uploaded sample as a voice. Throws the host's reason when it is refused (a name already used, say). */
+  async saveVoice(name: string, sampleText: string, uploadId: string): Promise<Voice> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    return await requestApi(ctx.base, ctx.token, '/api/voices', { method: 'POST', body: JSON.stringify({ name, sample_text: sampleText, upload_id: uploadId }) }, ctx.signal) as Voice
+  }
+
+  async updateVoice(id: string, name: string, sampleText: string): Promise<Voice> {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    return await requestApi(ctx.base, ctx.token, `/api/voices/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ name, sample_text: sampleText }) }, ctx.signal) as Voice
+  }
+
+  async deleteVoice(id: string) {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected to the host.')
+    await requestApi(ctx.base, ctx.token, `/api/voices/${encodeURIComponent(id)}`, { method: 'DELETE' }, ctx.signal)
+  }
+
+  /** A saved voice's sample. */
+  async voiceBlob(id: string) {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected.')
+    const response = await fetch(apiUrl(ctx.base, `/api/voices/${encodeURIComponent(id)}/sample`), {
+      headers: { Authorization: `Bearer ${ctx.token}` }, signal: ctx.signal, cache: 'no-store',
+    })
+    if (!response.ok) throw new Error(`The voice could not be loaded (${response.status}).`)
+    return response.blob()
+  }
+
+  /** A file attached to a chat message, as a local object URL. */
+  async chatFileUrl(fileId: string) {
+    const ctx = this.context()
+    if (!ctx) throw new Error('Not connected.')
+    const response = await fetch(apiUrl(ctx.base, `/api/chat-files/${encodeURIComponent(fileId)}`), {
+      headers: { Authorization: `Bearer ${ctx.token}` }, signal: ctx.signal, cache: 'no-store',
+    })
+    if (!response.ok) throw new Error(`The file could not be loaded (${response.status}).`)
+    return URL.createObjectURL(await response.blob())
   }
 
   /** A job's reference file (picture, video, audio), as a local object URL. */

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, FileText, Loader2, Menu, MessagesSquare, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { Activity, FileText, Loader2, Menu, MessagesSquare, NotebookPen, Plug, Server, Settings, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { hostedRuntimes } from './hosted'
 import { AssistantBubble } from './components/Assistant'
 import { hostName, StatusDot, stateText } from './components/HostBits'
 import { groupByWorkload, WorkloadIcon } from './components/WorkloadIcon'
@@ -9,7 +10,12 @@ import { OverviewPage } from './pages/Overview'
 import { ChatPage } from './pages/Chat'
 import { LogsPage } from './pages/Logs'
 import { HostSettingsPage } from './pages/HostSettings'
-import { ModelsPage, ServicePage } from './pages/Service'
+import { ImagesPage } from './pages/Images'
+import { MusicPage } from './pages/Music'
+import { TranscribePage } from './pages/Transcribe'
+import { VideoPage } from './pages/Video'
+import { SpeechPage } from './pages/Speech'
+import { DecidePage, ModelsPage, ServicePage } from './pages/Service'
 import { href, type Route, useRoute } from './routes'
 import { HostStore, useHosts, useSession } from './store'
 
@@ -77,6 +83,12 @@ export default function App() {
         {route.page === 'overview' && <OverviewPage store={store} hosts={hosts} />}
         {route.page === 'connections' && <ConnectionsPage store={store} hosts={hosts} />}
         {route.page === 'service' && <ServicePage key={`${route.hostId}:${route.modelId}`} store={store} host={routeHost} modelId={route.modelId} />}
+        {route.page === 'images' && <ImagesPage key={route.hostId} store={store} host={routeHost} />}
+        {route.page === 'music' && <MusicPage key={route.hostId} store={store} host={routeHost} />}
+        {route.page === 'video' && <VideoPage key={route.hostId} store={store} host={routeHost} />}
+        {route.page === 'transcribe' && <TranscribePage key={route.hostId} store={store} host={routeHost} />}
+        {route.page === 'speech' && <SpeechPage key={route.hostId} store={store} host={routeHost} />}
+        {route.page === 'decide' && <DecidePage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'models' && <ModelsPage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'settings' && <HostSettingsPage key={route.hostId} store={store} host={routeHost} />}
         {route.page === 'logs' && <LogsPage key={route.hostId} store={store} host={routeHost} name={route.name} />}
@@ -92,14 +104,14 @@ export default function App() {
 function AssistantSlot({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
   const page = route.page === 'service' ? `the ${state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId} page`
-    : route.page === 'models' ? 'the Models page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
+    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decision page' : route.page === 'speech' ? 'the Speech page' : route.page === 'images' ? 'the Images page' : route.page === 'music' ? 'the Music page' : route.page === 'video' ? 'the Video page' : route.page === 'transcribe' ? 'the Transcription page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
       : route.page === 'settings' ? 'the Host settings page' : route.page === 'connections' ? 'the Connections page' : 'a page'
   return <AssistantBubble store={store} host={host} where={page} />
 }
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
-  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
+  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decision' : route.page === 'speech' ? 'Speech' : route.page === 'images' ? 'Images' : route.page === 'music' ? 'Music' : route.page === 'video' ? 'Video' : route.page === 'transcribe' ? 'Transcription' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
     : state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId
   return <div className="breadcrumb"><span className="crumb-host">{host ? hostName(host, state) : 'Workspace'}</span><span className="crumb-slash" aria-hidden="true">/</span><strong>{title}</strong></div>
 }
@@ -134,31 +146,72 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const runtimes = state.runtimes ?? []
   const running = runtimes.filter((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready').length
   const name = hostName(host, state)
-  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation), (runtime) => runtime.workload)
+  // Decision models are one Decision entry (they all share a page).
+  const decisionRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'decision')
+  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation && runtime.workload !== 'decision' && runtime.workload !== 'speech' && runtime.workload !== 'image' && runtime.workload !== 'music' && runtime.workload !== 'video' && runtime.workload !== 'transcription' && runtime.workload !== 'workflow'), (runtime) => runtime.workload, (runtime) => runtime.name)
+  // Workflows (Meeting notes is the first) are not models: they sit apart, below a rule.
+  const workflowRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'workflow').sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+  const decideOn = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+  const decideLoading = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
+  const decideLink = decisionRuntimes.length > 0 ? <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<WorkloadIcon workload="decision" />} label="Decision"
+    title={decideOn ? 'Decision: a model is running' : 'Decision'} badge={<NavState state={decideOn ? 'ready' : decideLoading ? 'loading' : undefined} />} /> : null
+  // Speech models share one Speech entry.
+  const speechRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'speech')
+  const speechOn = speechRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+  const speechLoading = speechRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
+  // Picture models share one Images entry (a video model with picture tabs counts too).
+  const imageRuntimes = runtimes.filter((runtime) => runtime.generation?.image)
+  const imagesOn = imageRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+  const imagesLoading = imageRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
+  // Song models share one Music entry.
+  const musicRuntimes = runtimes.filter((runtime) => runtime.generation?.music)
+  const musicOn = musicRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+  const musicLoading = musicRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
+  // Video models share one Video entry.
+  const videoRuntimes = runtimes.filter((runtime) => runtime.generation?.video)
+  const videoOn = videoRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+  const videoLoading = videoRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
+  // Speech-to-text models share one Transcribe entry.
+  const transcribeRuntimes = runtimes.filter((runtime) => runtime.generation?.transcribe)
+  const transcribeOn = transcribeRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
+  const transcribeLoading = transcribeRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
   // Chat sits first under Text: it talks to the text model, which can use every other running model.
+  const hostedChat = hostedRuntimes(state.providers)
   const chatRuntimes = runtimes.filter((runtime) => runtime.chat)
-  const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? chatRuntimes[0]
-  const chatState = state.models?.find((item) => item.id === chatRuntime?.id)?.state
-  const chatId = `nav-${host.id}-chat`
+  const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? hostedChat[0] ?? chatRuntimes[0]
+  const chatState = hostedChat.some((runtime) => runtime.id === chatRuntime?.id) ? 'ready' : state.models?.find((item) => item.id === chatRuntime?.id)?.state
+    // The tools that serve several models (or one tool, like meeting notes) sit directly in the sidebar, alphabetical:
+  // Chat, Decision, Images, Music, Speech, Transcribe, Video. Workflows (Meeting notes) follow a rule below them. Only generators with their own page are grouped by what they make.
+  const toolEntries = [
+    ...(chatRuntime ? [{ label: 'Chat', node: <NavLink key="chat" route={{ page: 'chat', hostId: host.id }} current={current} icon={<MessagesSquare size={20} />} label="Chat"
+      title={navStatus(chatState) ? `Chat: ${chatRuntime.name} ${navStatus(chatState)?.toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} /> }] : []),
+    ...(decideLink ? [{ label: 'Decision', node: <Fragment key="decide">{decideLink}</Fragment> }] : []),
+    ...(groups.find((group) => group.key === 'text')?.items ?? []).map((runtime) => {
+      const model = state.models?.find((item) => item.id === runtime.id)
+      const status = navStatus(model?.state)
+      return { label: runtime.name, node: <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
+        icon={<NotebookPen size={20} />} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
+        badge={<NavState state={model?.state} />} /> }
+    }),
+    ...(imageRuntimes.length > 0 ? [{ label: 'Images', node: <NavLink key="images" route={{ page: 'images', hostId: host.id }} current={current} icon={<WorkloadIcon workload="image" />} label="Images"
+      title={imagesOn ? 'Images: a model is running' : 'Images'} badge={<NavState state={imagesOn ? 'ready' : imagesLoading ? 'loading' : undefined} />} /> }] : []),
+    ...(musicRuntimes.length > 0 ? [{ label: 'Music', node: <NavLink key="music" route={{ page: 'music', hostId: host.id }} current={current} icon={<WorkloadIcon workload="music" />} label="Music"
+      title={musicOn ? 'Music: a model is running' : 'Music'} badge={<NavState state={musicOn ? 'ready' : musicLoading ? 'loading' : undefined} />} /> }] : []),
+    ...(videoRuntimes.length > 0 ? [{ label: 'Video', node: <NavLink key="video" route={{ page: 'video', hostId: host.id }} current={current} icon={<WorkloadIcon workload="video" />} label="Video"
+      title={videoOn ? 'Video: a model is running' : 'Video'} badge={<NavState state={videoOn ? 'ready' : videoLoading ? 'loading' : undefined} />} /> }] : []),
+    ...(transcribeRuntimes.length > 0 ? [{ label: 'Transcription', node: <NavLink key="transcribe" route={{ page: 'transcribe', hostId: host.id }} current={current} icon={<WorkloadIcon workload="transcription" />} label="Transcription"
+      title={transcribeOn ? 'Transcription: a model is running' : 'Transcription'} badge={<NavState state={transcribeOn ? 'ready' : transcribeLoading ? 'loading' : undefined} />} /> }] : []),
+    ...(speechRuntimes.length > 0 ? [{ label: 'Speech', node: <NavLink key="speech" route={{ page: 'speech', hostId: host.id }} current={current} icon={<WorkloadIcon workload="speech" />} label="Speech"
+      title={speechOn ? 'Speech: a model is running' : 'Speech'} badge={<NavState state={speechOn ? 'ready' : speechLoading ? 'loading' : undefined} />} /> }] : []),
+  ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
   return <div className="nav-host" aria-label={`Host ${name}`}>
     <div className="nav-host-label"><StatusDot state={state} /><span className="nav-host-name">{name}</span></div>
     {runtimes.length > 0 && <NavLink route={{ page: 'models', hostId: host.id }} current={current} icon={<Server size={20} />} label="Models"
       title={running ? `Models: ${running} running` : 'Models'}
       badge={running ? <span className="nav-state" title={`${running} running`}><span className="nav-state-dot" aria-hidden="true" /><span className="nav-state-text">{running} on</span></span> : undefined} />}
-    {chatRuntime && <div className="nav-group" role="group" aria-labelledby={chatId}>
-      <div className="nav-group-label" id={chatId}><WorkloadIcon workload="text" size={18} /><span>Text</span></div>
-      <NavLink route={{ page: 'chat', hostId: host.id }} current={current} icon={<span className="nav-rail-icon"><MessagesSquare size={20} /></span>} label="Chat"
-        title={navStatus(chatState) ? `Chat: ${chatRuntime.name} ${navStatus(chatState)?.toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} />
-      {/* The other text tools (meeting notes) sit under Chat, in the same group. */}
-      {(groups.find((group) => group.key === 'text')?.items ?? []).map((runtime) => {
-        const model = state.models?.find((item) => item.id === runtime.id)
-        const status = navStatus(model?.state)
-        return <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
-          icon={<span className="nav-rail-icon"><FileText size={20} /></span>} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
-          badge={<NavState state={model?.state} />} />
-      })}
-    </div>}
-    {groups.filter((group) => group.key !== 'text' || !chatRuntime).map((group) => {
+    {toolEntries.length > 0 && runtimes.length > 0 && <hr className="nav-separator" />}
+    {toolEntries.map((entry) => entry.node)}
+    {groups.filter((group) => group.key !== 'text').map((group) => {
       const id = `nav-${host.id}-${group.key}`
       return <div className="nav-group" role="group" aria-labelledby={id} key={group.key}>
         <div className="nav-group-label" id={id}><WorkloadIcon workload={group.key} size={18} /><span>{group.label}</span></div>
@@ -171,6 +224,19 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
         })}
       </div>
     })}
+    {workflowRuntimes.length > 0 && <>
+      <hr className="nav-separator" />
+      <div className="nav-group" role="group" aria-labelledby={`nav-${host.id}-workflow`}>
+        <div className="nav-group-label" id={`nav-${host.id}-workflow`}><WorkloadIcon workload="workflow" size={18} /><span>Workflows</span></div>
+        {workflowRuntimes.map((runtime) => {
+          const model = state.models?.find((item) => item.id === runtime.id)
+          const status = navStatus(model?.state)
+          return <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
+            icon={<NotebookPen size={20} />} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
+            badge={<NavState state={model?.state} />} />
+        })}
+      </div>
+    </>}
     {state.connection !== 'connected' && state.connection !== 'connecting' && state.connection !== 'reconnecting' && <a className="nav-item nav-muted" href={href({ page: 'connections' })} title={state.connection === 'error' ? 'Connection issue' : 'Not connected'}><Plug size={20} /><span className="nav-item-label">{state.connection === 'error' ? 'Connection issue' : 'Not connected'}</span></a>}
   </div>
 }

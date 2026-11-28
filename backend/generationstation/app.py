@@ -17,7 +17,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from .chat import ChatManager
@@ -28,11 +37,14 @@ from .host_settings import HostSettings, SettingsInvalid
 from .lifecycle import IdempotencyConflict, LifecycleError, LifecycleManager
 from .logs import LogNotFound, LogStore
 from .process_worker import ProcessSupervisor
+from .providers import EnvFileEnviron, ProviderRegistry
 from .runtimes import load_catalog
 from .storage import Store
 from .telemetry import Monitor
 from .text_models import TextModelBroker
+from .transcribe import TranscribeError, Transcriber
 from .uploads import UploadError, UploadStore
+from .voices import VoiceError, VoiceLibrary, VoiceNotFound
 
 
 class RequestAccessLogMiddleware:
@@ -189,9 +201,17 @@ class ConversationRename(BaseModel):
 
 
 class ChatAttachment(BaseModel):
+    """A result from the library (`job_id` and the file's `name`), or a file the person uploaded (`file_id`)."""
     model_config = ConfigDict(extra="forbid")
-    job_id: StrictStr = Field(min_length=1, max_length=36)
+    job_id: StrictStr | None = Field(default=None, min_length=1, max_length=36)
+    file_id: StrictStr | None = Field(default=None, min_length=32, max_length=32)
     name: StrictStr = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def one_source(self):
+        if (self.job_id is None) == (self.file_id is None):
+            raise ValueError("An attachment is a result (job_id) or an uploaded file (file_id), not both or neither.")
+        return self
 
 
 class ChatMessageRequest(BaseModel):
@@ -201,6 +221,25 @@ class ChatMessageRequest(BaseModel):
     thinking: StrictBool | Annotated[StrictStr, Field(max_length=20)] = True  # a level the model takes, "off", or true/false
     # The page the person is on, for the help assistant ("MiniMax H3 videos & pictures, tab A picture").
     where: StrictStr | None = Field(default=None, max_length=200)
+    # Answer with this chat model instead of the conversation's, and keep it for the conversation from now on.
+    model_id: StrictStr | None = Field(default=None, min_length=1, max_length=64)
+
+
+class VoiceCreate(BaseModel):
+    name: str = Field(max_length=200)
+    sample_text: str = Field(default="", max_length=5000)
+    upload_id: str
+
+
+class TranscribeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    upload_id: StrictStr = Field(min_length=1, max_length=64)
+    language: StrictStr = Field(default="English", max_length=40)
+
+
+class VoiceUpdate(BaseModel):
+    name: str = Field(max_length=200)
+    sample_text: str = Field(default="", max_length=5000)
 
 
 class SettingsUpdate(BaseModel):
@@ -225,6 +264,30 @@ class TranscriptEdit(BaseModel):
     revision: StrictInt
     segments: list[SegmentEdit] = Field(default_factory=list, max_length=5000)
     rename: dict[Annotated[str, Field(max_length=80)], Annotated[str, Field(max_length=80)]] = Field(default_factory=dict, max_length=200)
+
+
+class ActionItemEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task: StrictStr = Field(max_length=400)
+    owner: StrictStr | None = Field(default=None, max_length=80)
+    due: StrictStr | None = Field(default=None, max_length=80)
+    time: StrictStr | None = Field(default=None, max_length=80)
+
+
+class DecisionEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: StrictStr = Field(max_length=400)
+    by: StrictStr | None = Field(default=None, max_length=80)
+    time: StrictStr | None = Field(default=None, max_length=80)
+
+
+class NotesEdit(BaseModel):
+    """Each list sent replaces the saved one; one left out is not touched."""
+    model_config = ConfigDict(extra="forbid")
+    revision: StrictInt
+    summary: list[Annotated[StrictStr, Field(max_length=600)]] | None = Field(default=None, max_length=50)
+    actions: list[ActionItemEdit] | None = Field(default=None, max_length=200)
+    decisions: list[DecisionEdit] | None = Field(default=None, max_length=200)
 
 
 class JobRequest(BaseModel):
@@ -253,14 +316,29 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     if hasattr(monitor, "watch_processes"):
         monitor.watch_processes(lifecycle.owned_processes, lifecycle.helper_processes)
     uploads = UploadStore(settings.runtime_dir)
+    voices = VoiceLibrary(settings.runtime_dir)
+    transcriber = Transcriber(catalog, uploads)
     generation = GenerationManager(store, catalog, uploads)
     host_settings = HostSettings(store, settings.searxng_url)
     web_tools = WebTools(host_settings.searxng_url)
     host_settings.web = web_tools
     logs = LogStore(settings.runtime_dir, store)
     host_tools = HostTools(store, catalog, lifecycle, lambda: snapshot())
+    def saved_providers():
+        raw = store.get_setting("hosted_providers") if hasattr(store, "get_setting") else None
+        try:
+            data = json.loads(raw) if raw else {}
+        except ValueError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def save_providers(data):
+        store.set_setting("hosted_providers", json.dumps(data))
+
+    providers = ProviderRegistry(catalog.providers, settings.runtime_dir / "providers.json", environ=EnvFileEnviron(ROOT / ".env"),
+                                 saved=saved_providers, save=save_providers if hasattr(store, "set_setting") else None)
     chat = ChatManager(store, catalog, generation, uploads, host_tools=host_tools, web_tools=web_tools,
-                       job_tools=JobTools(store, catalog, generation, logs))
+                       job_tools=JobTools(store, catalog, generation, logs), voices=voices, providers=providers)
     # Text models for worker jobs that ask for one (meeting notes); polls only plugins that declare text_model_jobs.
     broker = TextModelBroker(store, catalog, host_tools, chat)
     access_logger = _access_logger()
@@ -369,15 +447,81 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         return {"models": [model for model in store.list_models()
                            if model["id"] in catalog.runtimes or model["profile"]["id"] is not None]}
 
+    class ProviderModels(BaseModel):
+        enabled: list[StrictStr] = Field(max_length=200)
+
+    @api.get("/providers")
+    def providers_list():
+        """Hosted chat providers (optional) with every model they list and which ones the chat offers."""
+        return {"providers": providers.describe()}
+
+    class ProviderFields(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        id: StrictStr | None = Field(default=None, max_length=32)
+        name: StrictStr = Field(max_length=60)
+        base_url: StrictStr | None = Field(default=None, max_length=300)
+        api_key_env: StrictStr | None = Field(default=None, max_length=80)
+
+    class ProviderConfigs(BaseModel):
+        providers: list[ProviderFields] = Field(max_length=10)
+
+    @api.get("/providers/config")
+    def providers_config():
+        """How each hosted provider is set up (the token is only ever named, by its environment variable)."""
+        return {"providers": providers.configured()}
+
+    @api.put("/providers/config")
+    def providers_set_config(payload: ProviderConfigs):
+        """Replace the providers set up on the Host settings page; those from the runtimes file stay."""
+        try:
+            providers.set_configs([item.model_dump(exclude_none=True) for item in payload.providers])
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"providers": providers.configured()}
+
+    @api.post("/providers/test")
+    def providers_test(payload: ProviderFields):
+        ok, message = providers.test(payload.model_dump(exclude_none=True))
+        return {"ok": ok, "message": message}
+
+    @api.post("/providers/{provider_id}/refresh")
+    def providers_refresh(provider_id: str):
+        if provider_id not in providers.configs:
+            raise HTTPException(404, "Unknown provider")
+        providers.models(provider_id, refresh=True)
+        return {"providers": providers.describe()}
+
+    @api.put("/providers/{provider_id}/models")
+    def providers_choose(provider_id: str, payload: ProviderModels):
+        if provider_id not in providers.configs:
+            raise HTTPException(404, "Unknown provider")
+        try:
+            providers.set_enabled(provider_id, payload.enabled)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"providers": providers.describe()}
+
     @api.get("/runtimes")
     def runtimes():
-        return {"runtimes": lifecycle.runtime_catalog(snapshot())}
+        return {"runtimes": lifecycle.runtime_catalog(snapshot()),
+                "references": [reference.model_dump() for reference in catalog.references]}
 
     @api.post("/runtimes/{model_id}/start", status_code=202)
     def start_runtime(model_id: str, payload: RuntimeStartRequest,
                       idempotency_key: str = Header(alias="Idempotency-Key", min_length=8, max_length=128)):
         return lifecycle.create_runtime_load(model_id, payload.preset, payload.settings, payload.gpus,
                                              idempotency_key, snapshot())
+
+    @api.get("/runtimes/{model_id}/connection")
+    def runtime_connection(model_id: str):
+        """What a tool on the host needs to talk to a running model directly: where it listens, and for a chat model the
+        name it answers to. The model's own server is used as it is; this API does not sit in between."""
+        runtime = catalog.runtimes.get(model_id)
+        if runtime is None:
+            raise HTTPException(404, "Unknown model")
+        plugin = catalog.plugin(model_id)
+        return {"bind": runtime.host, "port": runtime.port,
+                "model": chat._served_model(runtime) if plugin.chats else None}
 
     @api.post("/runtimes/{model_id}/estimate")
     def estimate_runtime(model_id: str, payload: RuntimeStartRequest):
@@ -405,6 +549,64 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         except UploadError as exc:
             raise HTTPException(422, str(exc)) from exc
 
+    def voice_view(record: dict):
+        return {key: record[key] for key in ("id", "name", "sample_text", "mime", "bytes")}
+
+    @api.post("/runtimes/{runtime_id}/transcribe")
+    def transcribe_sample(runtime_id: str, request: TranscribeRequest):
+        """What a voice sample says, written down with the transcriber a speech model is set up with."""
+        try:
+            return {"text": transcriber.transcribe(runtime_id, request.upload_id, request.language)}
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except TranscribeError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @api.get("/voices")
+    def list_voices():
+        return {"voices": [voice_view(record) for record in voices.list()]}
+
+    @api.post("/voices", status_code=201)
+    def create_voice(request: VoiceCreate):
+        """Save an uploaded audio sample, with the words it says, under a name."""
+        upload_record = uploads.get(request.upload_id)
+        if not upload_record:
+            raise HTTPException(422, "That sample was not found. Add it again.")
+        try:
+            return voice_view(voices.create(request.name, request.sample_text, upload_record, uploads.root / upload_record["file"]))
+        except VoiceError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @api.put("/voices/{voice_id}")
+    def update_voice(voice_id: str, request: VoiceUpdate):
+        try:
+            return voice_view(voices.update(voice_id, request.name, request.sample_text))
+        except VoiceNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except VoiceError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @api.delete("/voices/{voice_id}")
+    def delete_voice(voice_id: str):
+        try:
+            voices.delete(voice_id)
+        except VoiceNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"deleted": voice_id}
+
+    @api.get("/voices/{voice_id}/sample")
+    def voice_sample(voice_id: str):
+        try:
+            path, mime, name = voices.sample_path(voice_id)
+        except VoiceNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return FileResponse(path, media_type=mime, filename=name)
+
+    @api.get("/chat-files/{file_id}")
+    def chat_file(file_id: str):
+        path, mime, name = chat.file_path(file_id)
+        return FileResponse(path, media_type=mime, filename=name, content_disposition_type="inline" if mime.startswith("image/") else "attachment")
+
     @api.get("/jobs/{job_id}/inputs/{name}")
     def job_input(job_id: str, name: str):
         path, mime = generation.input_path(job_id, name)
@@ -421,6 +623,10 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     @api.put("/jobs/{job_id}/transcript")
     def edit_transcript(job_id: str, request: TranscriptEdit):
         return generation.edit_transcript(job_id, request.model_dump())
+
+    @api.put("/jobs/{job_id}/notes")
+    def edit_notes(job_id: str, request: NotesEdit):
+        return generation.edit_notes(job_id, request.model_dump())
 
     @api.get("/jobs/{job_id}/files/{name}")
     def job_file(job_id: str, name: str):
@@ -466,7 +672,7 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         """Answer a message as server-sent events: message (each saved message), start, delta, error, done.
         The answer finishes and is saved even if the browser disconnects."""
         turn = chat.start(conversation_id, payload.text, [a.model_dump() for a in payload.attachments],
-                          payload.thinking, payload.where)
+                          payload.thinking, payload.where, payload.model_id)
 
         async def stream():
             while True:

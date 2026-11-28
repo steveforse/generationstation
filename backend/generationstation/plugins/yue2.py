@@ -4,6 +4,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from .base import InputSpec, SettingSpec, TimingSpec
+from .music import MusicInfo
 from .worker import WorkerPlugin, WorkerPreset, WorkerRuntime
 
 
@@ -30,6 +31,8 @@ class YuE2Plugin(WorkerPlugin):
     output_kind = "audio"
     # One measurement: 49 s of audio, verse and chorus, RTX 5090 (2026-11-12).
     timings: ClassVar[tuple[TimingSpec, ...]] = (
+        # Apple silicon (MLX port, 8-bit), M5 Max: a 185 s song took 190 s, about real time.
+        TimingSpec(preset="mlx", gpu=0, seconds=100, note="for a verse and chorus; about as long as the song itself"),
         TimingSpec(gpu=0, seconds=41, note="for a verse and chorus; longer lyrics take longer"),
     )
     settings: ClassVar[dict[str, SettingSpec]] = {
@@ -47,9 +50,15 @@ class YuE2Plugin(WorkerPlugin):
             placeholder="Upbeat indie pop, female vocals, acoustic guitar, warm, summery",
             help="Describe the genre, mood, instruments and voice, separated by commas."),
         "lyrics": InputSpec(
-            label="Lyrics", kind="textarea", required=True, max_length=8000,
+            label="Lyrics", kind="textarea", max_length=8000,
             placeholder="[Verse]\nFirst line of the song\nSecond line\n\n[Chorus]\nThe part everyone sings",
-            help=LYRICS_HELP),
+            help=LYRICS_HELP + " Leave this empty for an instrumental (this model sings, so it often still sings something)."),
+        "source": InputSpec(
+            label="Start from a song", kind="files", accept=("audio",), max_count=1,
+            help=("A new version of a song: its melody and structure are read from the recording and sung again with your style and "
+                  "lyrics (the sound of the original is not kept). Pick one made here or add a file. Leave the lyrics empty for an "
+                  "instrumental version, where the melody is played and not sung. The melody planning below must not be off. "
+                  "Reading a 30 second song and making the new one took about 35 s.")),
         "mode": InputSpec(
             label="Melody planning", kind="choice", options=("full", "melody", "off"), default="full",
             help="'full' plans melody and chords first (best). 'off' is faster but less structured.",
@@ -59,3 +68,27 @@ class YuE2Plugin(WorkerPlugin):
             help="Leave empty for a new song each time. Reuse a seed to get the same song again.",
             advanced=True),
     }
+
+    music: ClassVar[MusicInfo] = MusicInfo(
+        guidance=("Describe the genre, mood, instruments and voice in the style box, separated by commas, and write the lyrics under "
+                  "[Verse] and [Chorus] tags. The song is as long as the lyrics: more parts, a longer song. Leave the lyrics empty "
+                  "for an instrumental (this model sings, so it often still sings something). It can also make a new version of a "
+                  "song: the melody is read from it and sung with your style and lyrics, or played as an instrumental when the lyrics are empty."),
+        create="", cover="",
+        roles={"": {"style": "style", "lyrics": "lyrics", "seed": "seed", "source": "source"}})
+
+    @staticmethod
+    def _mlx(runtime) -> bool:
+        return "mlx" in (runtime.worker_script or "")
+
+    def mode_inputs(self, mode, runtime=None):
+        """Starting from a song is what the Apple-silicon port does (its melody reader is part of it); the Windows worker does not."""
+        inputs = super().mode_inputs(mode, runtime)
+        if runtime is not None and not self._mlx(runtime):
+            return {key: spec for key, spec in inputs.items() if key != "source"}
+        return inputs
+
+    def check_inputs(self, mode, values, files):
+        if files.get("source") and values.get("mode") == "off":
+            return ["A new version of a song follows its melody, so the melody planning cannot be off."]
+        return []

@@ -447,3 +447,69 @@ def test_a_transcript_without_times_is_rewritten_without_captions(tmp_path):
     edit(folder, segments=[{"index": 0, "text": "Hello."}])
     assert (folder / "transcript.md").read_text().strip().endswith("**Anna:** Hello.")
     assert not (folder / "transcript.srt").exists()
+
+
+def edit_notes(folder, **payload):
+    return PLUGIN.edit_notes(folder, {"revision": 1, **payload})
+
+
+def notes_folder(tmp_path):
+    folder = meeting_folder(tmp_path)
+    record = json.loads((folder / "meeting.json").read_text())
+    record.update(summary=["Launch is Friday.", "Budget is fine."],
+                  actions=[{"task": "Book the room", "owner": "Dana", "time": "01:02"}],
+                  decisions=[{"decision": "Ship Friday", "by": "Sam"}])
+    (folder / "meeting.json").write_text(json.dumps(record), encoding="utf-8")
+    return folder
+
+
+def test_editing_the_notes_rewrites_the_files_and_logs_what_changed(tmp_path):
+    folder = notes_folder(tmp_path)
+    result = edit_notes(folder, summary=["Launch is Monday.", "Budget is fine."],
+                        actions=[{"task": "Book the room", "owner": "Dana", "time": "01:02"}, {"task": "Send the invite", "owner": "Sam", "due": "Thu"}],
+                        decisions=[])
+    assert result == {"revision": 2, "changes": 3}
+    record = json.loads((folder / "meeting.json").read_text())
+    assert record["summary"][0] == "Launch is Monday." and record["decisions"] == [] and record["revision"] == 2 and record["edited"]
+    assert record["notes_original"]["summary"][0] == "Launch is Friday." and record["notes_original"]["decisions"][0]["decision"] == "Ship Friday"
+    notes = (folder / "notes.md").read_text()
+    assert "- Launch is Monday." in notes and "- [ ] Send the invite — Sam, due Thu" in notes and "## Decisions\n\nNone recorded." in notes
+    assert (folder / "actions.csv").read_bytes().startswith(b"\xef\xbb\xbfTask,Owner,Due,Time\r\n") and b"Send the invite,Sam,Thu," in (folder / "actions.csv").read_bytes()
+    assert (folder / "decisions.csv").read_bytes().decode("utf-8-sig") == "Decision,By,Time\r\n"
+    (entry,) = record["history"]
+    assert entry["revision"] == 2 and entry["at"].endswith("+00:00")
+    assert {(c["section"], c["kind"]) for c in entry["changes"]} == {("summary", "changed"), ("actions", "added"), ("decisions", "removed")}
+    assert next(c for c in entry["changes"] if c["section"] == "summary") == {"section": "summary", "kind": "changed", "before": "Launch is Friday.", "after": "Launch is Monday."}
+    # A second edit keeps the first note-original and adds to the history.
+    edit_notes_again = PLUGIN.edit_notes(folder, {"revision": 2, "summary": ["Only this."]})
+    assert edit_notes_again["revision"] == 3
+    record = json.loads((folder / "meeting.json").read_text())
+    assert record["notes_original"]["summary"][0] == "Launch is Friday." and [e["revision"] for e in record["history"]] == [2, 3]
+    assert not list(folder.glob("*.tmp"))
+
+
+def test_transcript_edits_are_logged_in_the_same_history(tmp_path):
+    folder = notes_folder(tmp_path)
+    edit(folder, rename={"Speaker 1": "Ivan Cole"}, segments=[{"index": 1, "text": "Welcome, everyone."}])
+    (entry,) = json.loads((folder / "meeting.json").read_text())["history"]
+    kinds = {(c["section"], c["kind"], c.get("detail")) for c in entry["changes"]}
+    assert kinds == {("transcript", "renamed", "2 segments"), ("transcript", "changed", "segment 2")}
+    assert (folder / "notes.md").read_text() == "# Meeting notes\n"
+
+
+def test_bad_notes_edits_are_refused_without_changing_anything(tmp_path):
+    folder = notes_folder(tmp_path)
+    before = (folder / "meeting.json").read_text()
+    for payload, status in [({"revision": 9, "summary": ["x"]}, 409), ({"summary": ["  "]}, 422), ({"summary": ["Launch is Friday.", "Budget is fine."]}, 422),
+                            ({"actions": [{"task": ""}]}, 422), ({"actions": [{"task": "x", "owner": "y" * 81}]}, 422), ({"decisions": ["not an object"]}, 422)]:
+        with pytest.raises(Exception) as caught:
+            PLUGIN.edit_notes(folder, {"revision": 1, **payload})
+        assert caught.value.status == status, payload
+    assert (folder / "meeting.json").read_text() == before and not (folder / "notes.md").read_text().startswith("# Meeting notes\n\n##")
+    transcript_only = tmp_path / "plain"
+    transcript_only.mkdir()
+    (transcript_only / "meeting.json").write_text(json.dumps({"segments": [], "speakers": {}, "revision": 1}), encoding="utf-8")
+    with pytest.raises(Exception) as caught:
+        edit_notes(transcript_only, summary=["x"])
+    assert caught.value.status == 404
+

@@ -15,6 +15,12 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .images import ImageInfo
+from .music import MusicInfo
+from .speech import SpeechInfo
+from .transcribe import TranscribeInfo
+from .video import VideoInfo
+
 GIB = 1024**3
 
 SettingValue = str | int | bool | None
@@ -108,6 +114,31 @@ class Estimate(BaseModel):
     gpu_min_free_gib: dict[int, float] = Field(description="Free VRAM needed per GPU index before start.")
 
 
+class RuntimeLicense(BaseModel):
+    """What a model may be used for, shown on the Models page. A reading of the licences, not legal advice.
+
+    use: "work" is free for a company's own use as far as the licences say; "conditions" is free with limits to check
+    (a revenue cap, a ban on hosted services); "personal" is non-commercial or limited by territory, so keep it to
+    your own machine and your own use."""
+    model_config = ConfigDict(extra="forbid")
+    use: Literal["work", "conditions", "personal"]
+    weights: str = Field(min_length=1, max_length=160, description="The model weights' licence, e.g. Apache-2.0.")
+    code: str | None = Field(default=None, max_length=160, description="The runtime code's licence.")
+    note: str | None = Field(default=None, max_length=700, description="The terms that matter, in plain words.")
+    url: str | None = Field(default=None, max_length=300, pattern=r"^https://", description="Where the licence is.")
+
+
+class RuntimeQuality(BaseModel):
+    """A published quality score for a model, charted on the Models page against others measured the same way."""
+    model_config = ConfigDict(extra="forbid")
+    metric: str = Field(min_length=1, max_length=80, description="What the score is, e.g. 'Arena Elo (TTS Arena)'.")
+    score: float
+    estimated: bool = Field(default=False, description="True when the score is not published for this exact build.")
+    source: str | None = Field(default=None, max_length=300, pattern=r"^https://", description="Where the score is published.")
+    as_of: str | None = Field(default=None, max_length=20, description="When the score was read, e.g. 2026-11-26.")
+    note: str | None = Field(default=None, max_length=500, description="How an estimate was made, or what the score covers.")
+
+
 class BasePreset(BaseModel):
     """Fields every preset has. Plugins subclass this to add their own (model path, flags)."""
     model_config = ConfigDict(extra="forbid")
@@ -117,6 +148,12 @@ class BasePreset(BaseModel):
     allowed_gpus: list[int] | None = None
     settings: dict[str, SettingValue] = Field(default_factory=dict)
     estimate: Estimate
+    license: RuntimeLicense | None = Field(
+        default=None, description="Overrides the model's licence for this preset, when versions differ.")
+    quality: RuntimeQuality | None = Field(
+        default=None, description="Overrides the model's quality score for this preset (for example a smaller quant).")
+    rankings: list[RuntimeQuality] = Field(
+        default_factory=list, description="Further scores on other metrics, charted as extra rankings. Per metric, these replace the model's score for this version.")
 
     @model_validator(mode="after")
     def check_gpus(self):
@@ -137,10 +174,17 @@ class BaseRuntime(BaseModel):
     description: str | None = Field(default=None, max_length=500, description="Overrides the plugin's description.")
     workload: str = Field(min_length=1, max_length=40)
     port: int = Field(ge=1024, le=65535)
+    host: Literal["127.0.0.1", "0.0.0.0"] = Field(
+        default="127.0.0.1", description="Where the model's own server listens: this computer only, or every network interface "
+        "(for tools on other machines; the model's server has no login of its own, so only on a network you trust).")
     ready_timeout_seconds: float = Field(default=1500, gt=0, le=7200)
     stop_timeout_seconds: float = Field(default=30, gt=0, le=600)
     default_preset: str
     presets: dict[str, BasePreset] = Field(min_length=1)
+    license: RuntimeLicense | None = None
+    quality: RuntimeQuality | None = None
+    rankings: list[RuntimeQuality] = Field(
+        default_factory=list, description="Further scores on other metrics, charted as extra rankings next to `quality`.")
     # The text model the help assistant (the bubble on every page) runs on. At most one; a chat model.
     assistant: bool = False
 
@@ -178,6 +222,11 @@ class RuntimePlugin:
     # chosen mode arrives as the input "mode".
     inputs: ClassVar[dict[str, InputSpec]] = {}
     modes: ClassVar[dict[str, ModeSpec]] = {}
+    image: ClassVar[ImageInfo | None] = None  # a picture model's capabilities (plugins/images.py), for the shared Images page
+    music: ClassVar[MusicInfo | None] = None  # a song model's capabilities (plugins/music.py), for the shared Music page
+    video: ClassVar[VideoInfo | None] = None  # a video model's capabilities (plugins/video.py), for the shared Video page
+    transcribe: ClassVar[TranscribeInfo | None] = None  # a transcription model's capabilities (plugins/transcribe.py), for the shared Transcribe page
+    speech: ClassVar[SpeechInfo | None] = None  # a speech model's capabilities (plugins/speech.py), for the shared Speech page
     output_kind: ClassVar[str | None] = None  # "audio", "image", "video" or "document" (text files)
     text_model_jobs: ClassVar[bool] = False  # its jobs may ask the host for a running text model (text_models.py)
     # Other programs whose GPU memory belongs to this model while it runs (display only): Drama 3 runs inside WSL,
@@ -194,8 +243,9 @@ class RuntimePlugin:
     def generates(self) -> bool:
         return bool(self.inputs or self.modes)
 
-    def mode_inputs(self, mode: str | None) -> dict[str, InputSpec] | None:
-        """The fields of a mode (or of the only form, for plugins without modes); None for an unknown mode."""
+    def mode_inputs(self, mode: str | None, runtime: BaseRuntime | None = None) -> dict[str, InputSpec] | None:
+        """The fields of a mode (or of the only form, for plugins without modes); None for an unknown mode. A plugin whose
+        models differ in what they take (some read pictures, some do not) narrows the form to the `runtime`'s."""
         if not self.modes:
             return self.inputs
         return self.modes[mode].inputs if mode in self.modes else None

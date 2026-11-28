@@ -6,20 +6,28 @@ It runs on two kinds of host:
 
 | Host | Models it runs | Guide |
 | --- | --- | --- |
-| Windows 11 desktop with an NVIDIA card | Pictures, songs, speech, video, text models, meeting notes | [docs/development.md](docs/development.md) |
-| Apple-silicon Mac (developed on an M5 Max, 64 GB) | Text models and meeting notes | [docs/setup-macos.md](docs/setup-macos.md) |
+| Windows 11 desktop with an NVIDIA card | Images, songs, speech, video, text models, meeting notes | [docs/development.md](docs/development.md) |
+| Apple-silicon Mac (developed on an M5 Max, 64 GB) | Text models, meeting notes, pictures, songs and speech | [docs/setup-macos.md](docs/setup-macos.md) |
 
 You can browse the dashboard from any other machine on your network or tailnet; only the host needs the models.
 
 ## What it does
 
 - **Models page.** Every model in your `runtimes.json` appears as a card with its presets, memory estimate and a Start or Stop button. A start is checked against live RAM and GPU memory on the host, and it is refused when the model would not fit. The check is made by the API, not the browser, and a stale or missing measurement never allows a start.
-- **Chat.** Talk to a running text model. It can start songs, pictures and the other generators for you, search the web (through a SearXNG instance you run) and read pages.
-- **Generators.** Songs (YuE2), pictures (Qwen Image), video and picture editing (MiniMax H3), and speech (OmniVoice, Qwen3-TTS). Each has a form built from the model's plugin, a queue, and a results list with the settings each result was made with.
-- **Meeting notes.** Add a meeting recording (audio or video; a Zoom MP4 is the tested case) or a transcript file. You get a transcript with who said what, optional correction of misheard words, and a summary with action items and decisions. For Zoom video, speaker names are read from the on-screen name tags. Transcripts can be edited afterwards.
+- **Chat.** Talk to a running text model. Attach pictures, PDFs and text or code files from your computer, or add earlier results (pictures, videos, sounds, meetings, decisions) from the library. It can start songs, pictures and the other generators for you, search the web (through a SearXNG instance you run) and read pages. Optionally it can also use hosted models (Claude through LiteLLM or Bedrock, for one) from a gateway you configure; see `docs/setup-macos.md` section 7a.
+- **Generators.** Songs (one Music page over YuE2, ACE-Step and MiniMax Music 3), pictures (one Images page over the Qwen and Z-Image models), video (one Video page over Wan, FastMetal, LongCat, LTX-2.5 and MiniMax H3, with first and last pictures and continuing a clip), picture editing (MiniMax H3), speech (one Speech page over every speech model, with a saved voice library), and speech to text (one Transcribe page over Qwen3-ASR, Whisper and Parakeet, with captions and who spoke). Each has a form built from the model's plugin, a queue, and a results list with the settings each result was made with.
+- **Meeting notes.** Add a meeting recording (audio or video; a Zoom MP4 is the tested case) or a transcript file. You get a transcript with who said what, optional correction of misheard words, and a summary with action items and decisions. For Zoom video, speaker names are read from the on-screen name tags. The transcript, summary, action items and decisions can all be edited afterwards, and a change history shows what was changed and what it said before.
 - **Logs and host settings** behind the gear menu.
 
 Which of these a host offers depends on its `runtimes.json` and on the models installed there. No model weights are included in this repository.
+
+## Personal models and work models
+
+Some open-weight models may only be used non-commercially or outside certain countries, and some are free for a company's own use. Every model in the catalog records its licence (weights and code) with a verdict, and the Models page shows it as a badge and in the model's details. The filter above the cards narrows the list to **Work use** (free for company use, including models with limits to check) or **Personal use only**.
+
+- Run a personal copy on your own machine with everything, including the personal-use models.
+- For colleagues, keep a `runtimes.json` that lists only the work-appropriate models, or point them at a host where only those are started, and use the filter to see what is fine to use.
+- The verdicts are a plain-words reading of the licences, not legal advice. The details show which clause decides each one. A model with no recorded licence says "Licence not reviewed".
 
 ## How it fits together
 

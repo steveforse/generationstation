@@ -115,7 +115,7 @@ conversations = Table(
     "conversations", metadata,
     Column("id", String(36), primary_key=True),
     Column("title", String(200), nullable=False),
-    Column("model_id", String(64), ForeignKey("models.id", ondelete="CASCADE"), nullable=False),
+    Column("model_id", String(160), nullable=False),  # a local model's id, or "<provider>:<model>" for a hosted one (no row in models)
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("kind", String(20), nullable=False, server_default="chat"),
