@@ -60,7 +60,7 @@ Scores are compared only within the same `metric`, one chart per kind of model (
 2. Add an instance to the tuple in `plugins/__init__.py`.
 3. Add an entry to `runtimes.example.json` and your local `runtimes.json`, with conservative estimates.
 4. Add tests. The parametrized contract test in `backend/tests/test_runtimes.py` checks every registered plugin automatically; add plugin-specific tests for its config and launch output, and a stand-in server (like `tests/fake_basalt.py`) to exercise readiness without loading a model.
-5. Load it for real on the desktop once, record the measured RAM and VRAM in `docs/context.md`, and update the estimates.
+5. Load it for real on the desktop once, record the measured RAM and VRAM in `docs/model-notes.md`, and update the estimates.
 
 `basalt.py` is the reference plugin.
 

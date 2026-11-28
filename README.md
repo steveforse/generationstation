@@ -92,7 +92,8 @@ To stop: Ctrl+C in both terminals, then `docker compose down`. This keeps the da
 | [docs/setup-macos.md](docs/setup-macos.md) | Setting up and running on an Apple-silicon Mac |
 | [docs/development.md](docs/development.md) | Windows setup, each model's install, migrations, tests, backups, Tailscale access |
 | [docs/plugins.md](docs/plugins.md) | Adding a model: the plugin and worker contracts |
-| [docs/context.md](docs/context.md) | Decisions and measured results, newest facts first in each section |
+| [docs/context.md](docs/context.md) | The current state: what it is, what is decided, the hosts and what is open |
+| [docs/model-notes.md](docs/model-notes.md) | Measurements and set-up facts for each model and worker |
 | [docs/plan.md](docs/plan.md) | Architecture and milestones |
 | [docs/ui-redesign.md](docs/ui-redesign.md) | The dashboard's design decisions |
 | [AGENTS.md](AGENTS.md) | How AI coding assistants should work in this repository |

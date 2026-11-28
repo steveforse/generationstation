@@ -54,6 +54,20 @@ were set up; those run on the gateway, not here, and so what is typed in a chat 
    (to make a variation), or **Delete** it. On a clip, **Use last frame as first picture** starts the next clip
    from where this one ended, and **Use as source clip** continues it on a model that can.
 
+# Two tools that work a little differently
+
+- **Decision** answers a question about a situation with a probability for each option. Paste the situation (a
+  message, a ticket, a document excerpt) into **Situation**, optionally add pictures (a receipt, a screenshot), choose
+  the **Question** type (choose one, yes or no, or a scale), write the question under **Ask**, list the options
+  one per line (or the scale levels), and press **Decide**. The result shows how likely each option is. It answers in
+  a fraction of a second; it is for judgments, not for writing.
+- **Meeting notes** (under the line in the menu, and the **Workflows** tab of **Models**) turns a meeting into notes.
+  Add a recording (audio or video, a Zoom MP4 works well) or a transcript file (.vtt, .srt, .txt, .md). Optionally
+  say who was there and add names and terms to expect. Choose **Make** notes or just a transcript, then press **Make notes**. It
+  makes a transcript with who said what (names are read off the video when it is a Zoom recording), a summary, action
+  items and decisions, all downloadable. After it finishes, the transcript, summary, action items and decisions can be
+  edited, and a change history shows what was changed. It uses a text model and starts one if needed.
+
 # When something goes wrong
 
 - "Won't fit" or a start is refused: the graphics card it needs is busy with other models (or a game).
