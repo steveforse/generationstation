@@ -187,7 +187,7 @@ Do not use another machine's hardware as a substitute for the desktop inventory.
 
 ## Documentation workflow
 
-- Keep current status, evidence, unresolved questions, and next steps explicit. Distinguish recommendations from accepted decisions and measured facts.
+- Repository Markdown is authoritative for the plan and technical decisions. Keep current status, evidence, unresolved questions, and next steps explicit. Distinguish recommendations from accepted decisions and measured facts.
 
 ## Current state and next action
 
