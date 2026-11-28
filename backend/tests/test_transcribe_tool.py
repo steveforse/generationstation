@@ -74,4 +74,4 @@ def test_the_chat_offers_one_transcribe_tool_and_starts_a_job_on_the_picked_mode
     assert [tool["function"]["name"] for tool in tools] == ["transcribe"]
     result = chat._call({"name": "transcribe", "arguments": json.dumps({"recording": "ffffffff"})}, handlers)
     assert result["text"].startswith("Not started: There is no finished result ffffffff")
-    assert "Used from the **Transcribe** page" in chat._model_guide()
+    assert "Used from the **Transcription** page" in chat._model_guide()

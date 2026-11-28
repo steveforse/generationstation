@@ -665,7 +665,7 @@ class ChatManager:
     def _model_guide(self):
         """Each model as the person sees it: name, menu group, what it does, its tabs and main fields."""
         states = self.store.runtime_states()
-        lines = ["# The models on this desktop", ""]
+        lines = ["# The models on this computer", ""]
         for model_id, runtime in self.catalog.runtimes.items():
             plugin = self.catalog.plugin(model_id)
             state = (states.get(model_id) or {}).get("state", "unloaded")
@@ -684,7 +684,7 @@ class ChatManager:
                 lines.append("  - Used from the **Music** page, shared by every song model. " + plugin.music.guidance)
                 continue
             if plugin.transcribe:
-                lines.append("  - Used from the **Transcribe** page, shared by every speech-to-text model. " + plugin.transcribe.guidance)
+                lines.append("  - Used from the **Transcription** page, shared by every speech-to-text model. " + plugin.transcribe.guidance)
                 continue
             if plugin.video:
                 lines.append("  - Used from the **Video** page, shared by every video model. " + plugin.video.guidance)
@@ -701,6 +701,12 @@ class ChatManager:
                     lines.append(f"  - Tab **{mode.label}**: {mode.help} Fields: {', '.join(fields)}.")
                 elif fields:
                     lines.append(f"  - Fields: {', '.join(fields)}.")
+        hosted = self.hosted_models()
+        if hosted:
+            lines += ["", "# Hosted chat models", "",
+                      ("These run on a gateway, not on this computer, so they are always ready and use none of its memory. They only chat "
+                       "(and use the tools); what is typed goes to the gateway. The person ticks which ones appear on the Hosted tab of the **Models** page."),
+                      *[f"- {model_id}" for model_id in hosted]]
         return "\n".join(lines)
 
     def _tool_now(self, row):

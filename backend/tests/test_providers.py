@@ -232,3 +232,14 @@ def test_the_assistant_uses_a_running_local_model_first_then_a_hosted_one(tmp_pa
     assert manager.assistant(fresh=True)["conversation"]["model_id"] == "litellm:claude-haiku-5-5"
     store.states = {"basalt": {"state": "ready"}}
     assert manager.assistant_model() == "basalt"
+
+
+def test_the_assistants_model_guide_names_hosted_models_only_when_there_are_some(tmp_path):
+    store = Store()
+    gateway = Gateway()
+    reg = registry(tmp_path, gateway, include=["claude-sonnet-5-5"])
+    manager = ChatManager(store, catalog(tmp_path), Generation(store, tmp_path / "jobs"), UploadStore(tmp_path / "runtime"), opener=gateway, providers=reg)
+    guide = manager._model_guide()
+    assert "# Hosted chat models" in guide and "- litellm:claude-sonnet-5-5" in guide and "claude-haiku-5-5" not in guide
+    plain = ChatManager(store, catalog(tmp_path), Generation(store, tmp_path / "jobs"), UploadStore(tmp_path / "runtime"))
+    assert "Hosted chat models" not in plain._model_guide()
