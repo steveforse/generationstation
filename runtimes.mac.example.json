@@ -1730,54 +1730,6 @@
         "note": "CC-BY-4.0 allows commercial use if NVIDIA is credited, as the licence asks.",
         "url": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"
       }
-    },
-    "nemotron_asr": {
-      "kind": "nemotron_asr",
-      "name": "Nemotron 3.5 Transcribe",
-      "workload": "transcription",
-      "description": "The most accurate speech to text here, in 40 languages. No times and no speaker labels.",
-      "python": "/Users/YOU/ai/envs/mlx-tts/bin/python",
-      "output_dir": "/Users/YOU/ai/outputs/nemotron-asr",
-      "port": 8360,
-      "ready_timeout_seconds": 300,
-      "stop_timeout_seconds": 30,
-      "default_preset": "mlx",
-      "presets": {
-        "mlx": {
-          "name": "Nemotron 3.5 Transcribe (MLX)",
-          "description": "Stays loaded; the recording is read once and written down in parts.",
-          "gpus": [
-            0
-          ],
-          "allowed_gpus": [
-            0
-          ],
-          "options": {
-            "engine": "nemotron",
-            "model_dir": "/Users/YOU/ai/models/asr/Nemotron-3.5-Transcribe-EA-4bit"
-          },
-          "settings": {},
-          "estimate": {
-            "ram_gib": 22,
-            "gpu_min_free_gib": {}
-          }
-        }
-      },
-      "license": {
-        "use": "conditions",
-        "weights": "OpenMDW-1.1",
-        "code": "mlx-audio: MIT",
-        "note": "The model card says it is ready for commercial or non-commercial use under the OpenMDW licence; the licence text has not been reviewed here. This is the community 4-bit export of the early-access checkpoint.",
-        "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
-      },
-      "quality": {
-        "metric": "Open ASR leaderboard, English word error rate (lower is better)",
-        "score": 4.71,
-        "estimated": false,
-        "source": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B",
-        "as_of": "2026-11-27",
-        "note": "Published by NVIDIA for the full-precision checkpoint, nine-dataset mean; the 4-bit export measured 3.1% on this project's own synthetic test (names the model had not seen, numbers ignored)."
-      }
     }
   },
   "references": [

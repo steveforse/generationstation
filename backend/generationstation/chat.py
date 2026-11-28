@@ -468,7 +468,7 @@ class ChatManager:
         """The words of a finished meeting (notes, then transcript) or decision, for a result attached from the library."""
         runtime = self.catalog.runtimes.get(job["model_id"])
         names = {"meeting_notes": ("notes.md", "transcript.md"), "decide": ("result.md",), "qwen3_asr": ("transcript.txt",), "whisper_asr": ("transcript.txt",),
-                 "parakeet_asr": ("transcript.txt",), "nemotron_asr": ("transcript.txt",)}.get(runtime.kind if runtime else None)
+                 "parakeet_asr": ("transcript.txt",)}.get(runtime.kind if runtime else None)
         if not names:
             return None
         chunks, budget = [], MAX_DOC_CHARS

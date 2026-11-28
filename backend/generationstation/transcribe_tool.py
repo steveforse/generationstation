@@ -7,7 +7,7 @@ cannot take is left out and said in the result.
 """
 
 # The order a model is picked in when none is named: the most accurate first.
-ORDER = ("nemotron_asr", "qwen3_asr", "whisper_asr", "parakeet_asr")
+ORDER = ("qwen3_asr", "whisper_asr", "parakeet_asr")
 WORDS = {"language": "the language", "terms": "the words to expect", "speakers": "who spoke"}
 
 

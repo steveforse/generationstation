@@ -1,4 +1,4 @@
-"""Speech to text: the declarations of the four models, the transcript files, and the worker around a stand-in model (no mlx needed)."""
+"""Speech to text: the declarations of the three models, the transcript files, and the worker around a stand-in model (no mlx needed)."""
 import json
 import subprocess
 import sys
@@ -16,7 +16,7 @@ import transcribe_mlx_worker as worker
 import transcript_files
 
 MAC = parse_catalog(json.loads((ROOT / "runtimes.mac.example.json").read_text()))
-KINDS = ["qwen3_asr", "whisper_asr", "parakeet_asr", "nemotron_asr"]
+KINDS = ["qwen3_asr", "whisper_asr", "parakeet_asr"]
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -33,8 +33,7 @@ def test_the_roles_say_what_each_model_takes():
     assert set(info("qwen3_asr")["roles"][""]) == {"recording", "language", "terms", "speakers"}
     assert set(info("whisper_asr")["roles"][""]) == {"recording", "language", "terms", "speakers"}
     assert set(info("parakeet_asr")["roles"][""]) == {"recording", "speakers"}  # it detects the language and takes no word list
-    assert set(info("nemotron_asr")["roles"][""]) == {"recording", "terms"}  # its own speaker tags were not usable, so no speakers
-    assert info("nemotron_asr")["times"] == "none" and info("qwen3_asr")["times"] == "lines"
+    assert info("qwen3_asr")["times"] == "lines" and info("parakeet_asr")["times"] == "lines"
 
 
 def test_who_spoke_needs_speaker_detection_unless_the_model_labels_speakers_itself():
@@ -125,14 +124,10 @@ def test_whisper_lines_with_times_become_captions_and_the_words_to_expect_are_it
     assert job.details["times"] == "yes" and job.details["words"] == 2
 
 
-def test_parakeet_sentences_are_the_lines_and_nemotron_is_text_only(recording, tmp_path):
+def test_parakeet_sentences_are_the_lines(recording, tmp_path):
     sentences = [SimpleNamespace(start=0.0, end=1.5, text=" One."), SimpleNamespace(start=1.5, end=3.0, text=" Two.")]
     _, files = run("parakeet", SimpleNamespace(generate=lambda path, **kw: SimpleNamespace(text="One. Two.", sentences=sentences)), recording, tmp_path)
     assert "**[00:01]** Two." in files["transcript.md"] and "transcript.srt" in files
-    other = tmp_path / "again"
-    other.mkdir()
-    _, files = run("nemotron", SimpleNamespace(generate=lambda path, **kw: SimpleNamespace(text="Good morning. Hello.", finish_reason="stop")), recording, other)
-    assert set(files) == {"transcript.md", "transcript.txt", "transcript.json"} and json.loads(files["transcript.json"])["segments"] == [{"text": "Good morning. Hello."}]
 
 
 def test_a_file_that_is_not_sound_is_refused_in_plain_words(tmp_path):
@@ -140,25 +135,3 @@ def test_a_file_that_is_not_sound_is_refused_in_plain_words(tmp_path):
     bad.write_text("not audio")
     with pytest.raises(ValueError, match="could not be read as audio or video"):
         worker.to_wav(str(bad), tmp_path)
-
-
-def test_nemotron_takes_a_long_recording_in_parts_of_two_minutes_with_a_limit_on_each(recording, tmp_path, monkeypatch):
-    heard = []
-    limits = []
-    parts = [("part-one", 0.0), ("part-two", 120.0), ("part-three", 240.0)]
-    monkeypatch.setattr(worker, "split_parts", lambda wav, seconds: heard.append(seconds) or parts)
-
-    def generate(part, **kwargs):
-        limits.append(kwargs["max_tokens"])
-        return SimpleNamespace(text={"part-one": "First part.", "part-two": "Second part.", "part-three": "Third part."}[part], finish_reason="stop")
-
-    job = Job(tmp_path)
-    state = {"engine": "nemotron", "model": SimpleNamespace(generate=generate), "thread": Thread(), "options": {}}
-    segments, _ = worker.run_nemotron(state, recording, {}, ["Priya"], 3600, job)
-    assert heard == [120] and segments == [{"text": "First part. Second part. Third part."}] and "Listening, part 3 of 3" in job.reports
-    assert limits == [worker.token_budget(120)] * 3 and worker.token_budget(120) == 1140  # a part cannot run on after its audio has ended
-    heard.clear()
-    short = Job(tmp_path)
-    state["model"] = SimpleNamespace(generate=lambda part, **kw: SimpleNamespace(text="Only this.", finish_reason="stop"))
-    segments, _ = worker.run_nemotron(state, recording, {}, [], 90, short)
-    assert heard == [] and segments == [{"text": "Only this."}]  # a recording under two minutes is one piece

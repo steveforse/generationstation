@@ -76,7 +76,7 @@ function videoRuntimeFixture() {
   }
 }
 
-/** Two speech-to-text models: Whisper (language, words to expect, who spoke) and Nemotron (words to expect and its own speaker labels, no times). */
+/** Two speech-to-text models: Whisper (language, words to expect, who spoke) and Parakeet (just the recording: no language, no word list, no speaker labels). */
 function transcribeFixtures() {
   const field = (key: string, label: string, kind: string, extra: Record<string, unknown> = {}) => ({
     key, label, kind, required: false, default: null, minimum: null, maximum: null, max_length: null, options: [], placeholder: null, help: `${label} help`, advanced: false, ...extra,
@@ -94,8 +94,8 @@ function transcribeFixtures() {
   return [
     base('whisper_asr', 'Whisper', [recording, language, terms, speakers], { guidance: 'Whisper: the widest choice of languages.', times: 'lines', speakers: 'turns', checked_minutes: 56,
       roles: { '': { recording: 'recording', language: 'language', terms: 'terms', speakers: 'speakers' } } }, 8340),
-    base('nemotron_asr', 'Nemotron 3.5 Transcribe', [recording, terms], { guidance: 'Nemotron: the most accurate.', times: 'none', speakers: 'none', checked_minutes: 56,
-      roles: { '': { recording: 'recording', terms: 'terms' } } }, 8360),
+    base('parakeet_asr', 'Parakeet', [recording], { guidance: 'Parakeet: the fastest.', times: 'lines', speakers: 'none', checked_minutes: 56,
+      roles: { '': { recording: 'recording' } } }, 8350),
   ]
 }
 
@@ -336,7 +336,7 @@ async function installM2Api(page: Page, options: { initialProfile?: boolean; ref
       ram_headroom_bytes: 4 * 1024 ** 3, gpu_headroom_bytes: 2 * 1024 ** 3, reserved_ram_bytes: 0, reserved_gpu_vram_bytes_by_id: {},
     } })
   })
-  if (options.asr) for (const [id, name] of [['whisper_asr', 'Whisper'], ['nemotron_asr', 'Nemotron 3.5 Transcribe']]) models.push({ id, name, workload: 'transcription', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
+  if (options.asr) for (const [id, name] of [['whisper_asr', 'Whisper'], ['parakeet_asr', 'Parakeet']]) models.push({ id, name, workload: 'transcription', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.clips) models.push({ id: 'longcat_video', name: 'LongCat video', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.videos) models.push({ id: 'minimax_h3', name: 'MiniMax H3 videos', workload: 'video', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
   if (options.music) for (const [id, name] of [['yue2', 'YuE2 songs'], ['ace_step', 'ACE-Step'], ['minimax_music', 'MiniMax Music 3']]) models.push({ id, name, workload: 'music', state: 'ready', loading_enabled: false, profile: { id: null, revision: null } })
@@ -2194,15 +2194,15 @@ test('Transcribe is one entry in the sidebar and one page over the running speec
   await go(page, '#/hosts/local/transcribe')
   await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: /^Transcribe/ })).toContainText('On')
   const picker = page.getByLabel('Model transcribing')
-  await expect(picker.locator('option')).toHaveText(['Whisper (Work use)', 'Nemotron 3.5 Transcribe (Work use)'])
+  await expect(picker.locator('option')).toHaveText(['Whisper (Work use)', 'Parakeet (Work use)'])
   await expect(page.getByText('Each line has its time, and captions (.srt and .vtt) are written.')).toBeVisible()
   await page.getByRole('combobox', { name: /^language/i }).selectOption('French')
   await page.getByRole('textbox', { name: /^words to expect/i }).fill('Zephyrine, Priya')
-  await picker.selectOption('nemotron_asr')
-  await expect(page.getByText('There are no times, so no captions are written.')).toBeVisible()
-  await expect(page.getByRole('textbox', { name: /^words to expect/i })).toHaveValue('Zephyrine, Priya')
+  await picker.selectOption('parakeet_asr')
+  await expect(page.getByRole('textbox', { name: /^words to expect/i })).toHaveCount(0)
   await expect(page.getByRole('combobox', { name: /^language/i })).toHaveCount(0)
-  await expect(page.getByText('has no place for the language')).toBeVisible()
+  await expect(page.getByText(/Parakeet has no place for the language/)).toBeVisible()
+  await expect(page.getByText(/Parakeet has no place for .*words to expect/)).toBeVisible()
   await picker.selectOption('whisper_asr')
   await expect(page.getByRole('combobox', { name: /^language/i })).toHaveValue('French')  // kept for the way back
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /^Add (audio|file|recording)/i }).first().click()])

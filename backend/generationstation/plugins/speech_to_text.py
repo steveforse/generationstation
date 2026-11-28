@@ -1,4 +1,4 @@
-"""Speech to text: a recording becomes a transcript. Qwen3-ASR, Whisper, Parakeet and Nemotron through mlx-audio on Apple silicon."""
+"""Speech to text: a recording becomes a transcript. Qwen3-ASR, Whisper and Parakeet through mlx-audio on Apple silicon."""
 from typing import ClassVar, Literal
 
 from pydantic import Field
@@ -99,7 +99,7 @@ class ParakeetRuntime(SpeechToTextRuntime):
 class ParakeetPlugin(SpeechToTextPlugin):
     kind = "parakeet_asr"
     title = "Parakeet"
-    description = ("The fastest of the four: 25 European languages, detected, a sentence at a time with times. NVIDIA Parakeet TDT 0.6B v3 "
+    description = ("The fastest of the three: 25 European languages, detected, a sentence at a time with times. NVIDIA Parakeet TDT 0.6B v3 "
                    "(CC-BY-4.0, credit NVIDIA) through MLX.")
     runtime_model = ParakeetRuntime
     inputs: ClassVar[dict[str, InputSpec]] = {"recording": RECORDING, "speakers": SPEAKERS, "split": SPLIT}
@@ -108,21 +108,3 @@ class ParakeetPlugin(SpeechToTextPlugin):
         speakers="turns", checked_minutes=56, roles=roles_of(inputs))
     # 2026-11-27, M5 Max: 17 minutes of speech in 4 s, 56 minutes in 12 s (3.9 GiB at the peak).
     timings: ClassVar[tuple[TimingSpec, ...]] = (TimingSpec(when={}, preset=None, gpu=0, seconds=4, note="for 17 minutes of speech"),)
-
-
-class NemotronRuntime(SpeechToTextRuntime):
-    kind: Literal["nemotron_asr"]
-
-
-class NemotronPlugin(SpeechToTextPlugin):
-    kind = "nemotron_asr"
-    title = "Nemotron 3.5 Transcribe"
-    description = ("The most accurate of the four, in 40 languages, with punctuation and numbers written out. "
-                   "NVIDIA Nemotron 3.5 Transcribe 30B (OpenMDW-1.1), 4-bit early-access export through MLX. It has no times and does not label speakers.")
-    runtime_model = NemotronRuntime
-    inputs: ClassVar[dict[str, InputSpec]] = {"recording": RECORDING, "terms": TERMS}
-    transcribe = TranscribeInfo(
-        guidance=("Takes words to expect and writes numbers out in full. It has no times, so no captions, and no speaker labels: its own speaker tags "
-                  "were unreliable in this 4-bit export."), times="none", speakers="none", checked_minutes=56, roles=roles_of(inputs))
-    # 2026-11-27, M5 Max, in parts of two minutes: 56 minutes in 152 s, 17 minutes in about 45 s (19.8 GiB at the peak).
-    timings: ClassVar[tuple[TimingSpec, ...]] = (TimingSpec(when={}, preset=None, gpu=0, seconds=45, note="for 17 minutes of speech"),)

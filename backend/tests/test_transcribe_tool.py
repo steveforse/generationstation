@@ -20,22 +20,25 @@ def running(*model_ids):
 
 
 def test_the_description_lists_each_running_model_and_what_it_takes():
-    schema = TranscribeTool().schema(running("whisper_asr", "nemotron_asr"))
+    schema = TranscribeTool().schema(running("whisper_asr", "parakeet_asr"))
     text = schema["function"]["description"]
-    assert "No times." in text and "With times." in text and "Takes: a language, words to expect, who spoke." in text
+    assert "With times." in text and "No times." not in text
+    assert "Takes: a language, words to expect, who spoke." in text and "Takes: who spoke." in text
     assert schema["function"]["parameters"]["required"] == ["recording"]
-    assert schema["function"]["parameters"]["properties"]["model"]["enum"] == ["whisper_asr", "nemotron_asr"]
+    assert schema["function"]["parameters"]["properties"]["model"]["enum"] == ["whisper_asr", "parakeet_asr"]
     assert "model" not in TranscribeTool().schema(running("whisper_asr"))["function"]["parameters"]["properties"]
     assert TranscribeTool().schema([]) is None
 
 
 def test_the_most_accurate_model_that_takes_what_was_asked_is_picked_and_the_rest_is_left_out_in_words():
     tool = TranscribeTool()
-    pool = running("parakeet_asr", "whisper_asr", "nemotron_asr")
+    pool = running("parakeet_asr", "whisper_asr", "qwen3_asr")
     model_id, _, _, mode, inputs, refs, notes = tool.plan({"recording": "1a2b3c4d", "terms": "Priya"}, pool)
-    assert (model_id, mode, inputs, refs, notes) == ("nemotron_asr", "", {"terms": "Priya"}, {"recording": ["1a2b3c4d"]}, [])
+    assert (model_id, mode, inputs, refs, notes) == ("qwen3_asr", "", {"terms": "Priya"}, {"recording": ["1a2b3c4d"]}, [])
     model_id, *_, inputs, _, _ = tool.plan({"recording": "1a2b3c4d", "language": "french"}, pool)
-    assert model_id == "whisper_asr" and inputs == {"language": "French"}  # Nemotron has no language field
+    assert model_id == "qwen3_asr" and inputs == {"language": "French"}
+    model_id, *_, inputs, _, _ = tool.plan({"recording": "1a2b3c4d", "language": "french"}, running("parakeet_asr", "whisper_asr"))
+    assert model_id == "whisper_asr" and inputs == {"language": "French"}  # Parakeet has no language field, so the order does not decide
     _, _, _, _, inputs, _, notes = tool.plan({"recording": "1a2b3c4d", "language": "French", "terms": "Priya", "model": "parakeet_asr"}, pool)
     assert inputs == {} and any("language" in note for note in notes) and any("words to expect" in note for note in notes)
     _, _, _, _, inputs, _, notes = tool.plan({"recording": "1a2b3c4d", "language": "Klingon", "model": "whisper_asr"}, pool)
@@ -60,7 +63,7 @@ def test_a_missing_or_wrong_request_is_refused():
     with pytest.raises(ValueError, match="in `recording`"):
         tool.plan({"recording": " "}, running("whisper_asr"))
     with pytest.raises(ValueError, match="is not running"):
-        tool.plan({"recording": "1a2b3c4d", "model": "nemotron_asr"}, running("whisper_asr"))
+        tool.plan({"recording": "1a2b3c4d", "model": "parakeet_asr"}, running("whisper_asr"))
 
 
 def test_the_chat_offers_one_transcribe_tool_and_starts_a_job_on_the_picked_model(tmp_path):

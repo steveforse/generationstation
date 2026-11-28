@@ -1,10 +1,9 @@
-"""Speech-to-text worker for Apple silicon, through mlx-audio. Runs in the mlx-audio environment. One worker, four models: the
+"""Speech-to-text worker for Apple silicon, through mlx-audio. Runs in the mlx-audio environment. One worker, three models: the
 `engine` option picks the one this preset loads.
 
     qwen3_asr   Qwen3-ASR 1.7B (8-bit). Cut into 30 second parts at pauses: whole recordings in one go loop and repeat.
     whisper     Whisper large-v3-turbo. Windows of 30 seconds with times; 99 languages.
     parakeet    Parakeet TDT v3. 60 second parts that overlap by 2 seconds; 25 European languages, detected.
-    nemotron    Nemotron 3.5 Transcribe (4-bit early-access export). Two minute parts: an hour in one go repeats and skips. No times, no speakers.
 
 Config options (from runtimes.json, per preset):
     engine, model_dir
@@ -35,9 +34,8 @@ SAMPLE_RATE = 16000
 WHISPER_CODES = {"English": "en", "Spanish": "es", "French": "fr", "German": "de", "Italian": "it", "Portuguese": "pt", "Dutch": "nl", "Polish": "pl",
                  "Russian": "ru", "Japanese": "ja", "Korean": "ko", "Chinese": "zh", "Arabic": "ar", "Hindi": "hi", "Turkish": "tr",
                  "Vietnamese": "vi", "Swedish": "sv", "Czech": "cs", "Greek": "el"}
-NEMOTRON_PART_SECONDS = 120
 MIMES = {"transcript.md": "text/markdown", "transcript.txt": "text/plain", "transcript.srt": "application/x-subrip", "transcript.vtt": "text/vtt"}
-ENGINES = ("qwen3_asr", "whisper", "parakeet", "nemotron")
+ENGINES = ("qwen3_asr", "whisper", "parakeet")
 
 
 def load(config, log=print):
@@ -130,41 +128,6 @@ def run_parakeet(state, wav, inputs, terms, job):
     return [{"text": out.text.strip()}], None
 
 
-def token_budget(seconds):
-    """The most text a part of this length can hold. Without a limit the model sometimes goes on after the audio has ended and repeats
-    itself."""
-    return int(seconds * 7) + 300
-
-
-def split_parts(wav, seconds):
-    """The recording cut at pauses into parts of at most `seconds`, as (samples, offset) pairs."""
-    import soundfile
-    from mlx_audio.stt.models.qwen3_asr.qwen3_asr import split_audio_into_chunks
-
-    audio, rate = soundfile.read(str(wav), dtype="float32")
-    return split_audio_into_chunks(audio, rate, chunk_duration=seconds)
-
-
-def run_nemotron(state, wav, inputs, terms, audio_seconds, job):
-    """Nemotron in parts of two minutes: on a recording of an hour in one go it repeats and skips (word error 0.35 against 0.04 in
-    parts of two minutes; 0.09 at ten minutes). Its own speaker tags were not usable in this 4-bit export (junk before the first
-    word, text skipped, no end), so it does not label speakers."""
-    model = state["model"]
-    parts = [(str(wav), 0.0)] if audio_seconds <= NEMOTRON_PART_SECONDS else split_parts(wav, NEMOTRON_PART_SECONDS)
-    texts, cut = [], False
-    for number, (part, _) in enumerate(parts, 1):
-        if len(parts) > 1:
-            job.report(f"Listening, part {number} of {len(parts)}")
-        if job.cancel_requested:
-            job.report("Cancelling")
-        out = model.generate(part, hotwords=terms or None, max_tokens=token_budget(min(audio_seconds, NEMOTRON_PART_SECONDS)))
-        cut = cut or getattr(out, "finish_reason", None) == "length"
-        texts.append((out.text or "").strip())
-    if cut:
-        job.report("A part reached the model's length limit and may be cut short")
-    return [{"text": " ".join(" ".join(texts).split())}], None
-
-
 def transcribe(state, inputs, job, folder):
     engine, options = state["engine"], state["options"]
     terms = terms_of(inputs.get("terms"))
@@ -184,9 +147,7 @@ def transcribe(state, inputs, job, folder):
             return run_qwen(state, wav, inputs, terms, turns, job)
         if engine == "whisper":
             return run_whisper(state, wav, inputs, terms, job)
-        if engine == "parakeet":
-            return run_parakeet(state, wav, inputs, terms, job)
-        return run_nemotron(state, wav, inputs, terms, seconds, job)
+        return run_parakeet(state, wav, inputs, terms, job)
 
     segments, language = state["thread"].call(work)
     if turns is not None and engine != "qwen3_asr":
