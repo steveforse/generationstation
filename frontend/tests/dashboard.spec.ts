@@ -1725,7 +1725,7 @@ test('the Models page groups models by kind and charts their published quality s
   await connectFixtures(page, 'Fixture desktop', false, { llm: true, songs: true, rated: true })
   await go(page, '#/hosts/local/models')
   // One section per kind, in the sidebar's order.
-  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Text|Speech|Music)/ })).toHaveText(['Text1', 'Music1', 'Speech3'])
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Chat|Speech|Music)/ })).toHaveText(['Chat1', 'Music1', 'Speech3'])
   const speech = page.getByRole('region', { name: 'Speech' })
   // Folded until asked for.
   const chart = speech.getByRole('figure', { name: 'Speech arena Elo' })
@@ -1921,12 +1921,12 @@ test('the Overview names and orders its sections as the Models page and the side
   await connectFixtures(page, 'Fixture desktop', false, { llm: true, decide: true, meeting: true, songs: true, speech: true, videos: true })
   await go(page, '#/overview')
   const sections = page.locator('.overview-services .service-group-label')
-  await expect(sections).toHaveText(['Text', 'Decision', 'Music', 'Speech', 'Video', 'Workflows'])
+  await expect(sections).toHaveText(['Chat', 'Decision', 'Music', 'Speech', 'Video', 'Workflows'])
   await expect(page.getByText('Recent results')).toHaveCount(0)
   await expect(page.locator('.service-group', { hasText: 'Decision' }).locator('a.service-tile').first()).toHaveAttribute('href', '#/hosts/local/decide')
   await expect(page.locator('.service-group', { hasText: 'Workflows' }).getByText('Meeting notes')).toBeVisible()
   await go(page, '#/hosts/local/models')
-  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Text|Decision|Music|Speech|Video|Workflows)/ })).toHaveText(['Text1', 'Decision2', 'Music1', 'Speech1', 'Video1', 'Workflows1'])
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Chat|Decision|Music|Speech|Video|Workflows)/ })).toHaveText(['Chat1', 'Decision2', 'Music1', 'Speech1', 'Video1', 'Workflows1'])
 })
 
 test('Speech is one page over the running speech models; the text carries over and cues are checked per model', async ({ page }) => {

@@ -16,8 +16,8 @@ export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?:
 }
 
 /** The Models page and the Overview group by what a model makes, named and ordered as the sidebar names its entries (text models, which
- * chat, first, then alphabetical, then workflows); anything else goes under "Other", last. */
-export const WORKLOAD_GROUPS: ReadonlyArray<readonly [string, string]> = [['text', 'Text'], ['decision', 'Decision'], ['image', 'Images'], ['music', 'Music'], ['speech', 'Speech'], ['transcription', 'Transcribe'], ['video', 'Video'], ['workflow', 'Workflows']]
+ * chat, first as Chat, then alphabetical, then workflows); anything else goes under "Other", last. */
+export const WORKLOAD_GROUPS: ReadonlyArray<readonly [string, string]> = [['text', 'Chat'], ['decision', 'Decision'], ['image', 'Images'], ['music', 'Music'], ['speech', 'Speech'], ['transcription', 'Transcribe'], ['video', 'Video'], ['workflow', 'Workflows']]
 
 /** Items grouped by workload in WORKLOAD_GROUPS order, keeping their order within a group; empty groups are left out. */
 export function groupByWorkload<T>(items: T[], workloadOf: (item: T) => string, nameOf?: (item: T) => string) {

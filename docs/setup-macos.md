@@ -57,7 +57,7 @@ The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B,
 
 ## Models page: sections and quality chart
 
-The Models page and the Overview are grouped and named like the sidebar: Text, then alphabetical (Decision, Images, Music, Speech, Transcribe, Video), then Workflows (Meeting notes, which is a workflow, not a model; the sidebar sets it apart below a rule). A catalog entry's `workload` picks its section: `text`, `decision`, `image`, `music`, `speech`, `transcription`, `video` or `workflow`. After a group's cards, a folded card ranks the models that have a published score on the same measure:
+The Models page and the Overview are grouped and named like the sidebar: Chat (the text models), then alphabetical (Decision, Images, Music, Speech, Transcribe, Video), then Workflows (Meeting notes, which is a workflow, not a model; the sidebar sets it apart below a rule). A catalog entry's `workload` picks its section: `text`, `decision`, `image`, `music`, `speech`, `transcription`, `video` or `workflow`. After a group's cards, a folded card ranks the models that have a published score on the same measure:
 
 Each section's heading row has a Sort control on its right: default order, name, or quality (using the ranking chosen in the card), with a button to reverse it. Models without a score on that ranking stay last in either direction.
 
