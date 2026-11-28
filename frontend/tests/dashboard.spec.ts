@@ -1926,7 +1926,11 @@ test('the Overview names and orders its sections as the Models page and the side
   await expect(page.locator('.service-group', { hasText: 'Decision' }).locator('a.service-tile').first()).toHaveAttribute('href', '#/hosts/local/decide')
   await expect(page.locator('.service-group', { hasText: 'Workflows' }).getByText('Meeting notes')).toBeVisible()
   await go(page, '#/hosts/local/models')
-  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Chat|Decision|Music|Speech|Video|Workflows)/ })).toHaveText(['Chat1', 'Decision2', 'Music1', 'Speech1', 'Video1', 'Workflows1'])
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Chat|Decision|Music|Speech|Video|Workflows)/ })).toHaveText(['Chat1', 'Decision2', 'Music1', 'Speech1', 'Video1'])
+  // Workflows are a tab of their own, not a section among the models.
+  await expect(page.getByRole('tab', { name: 'Local' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: 'Workflows' }).click()
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Chat|Decision|Music|Speech|Video|Workflows)/ })).toHaveText(['Workflows1'])
 })
 
 test('Speech is one page over the running speech models; the text carries over and cues are checked per model', async ({ page }) => {

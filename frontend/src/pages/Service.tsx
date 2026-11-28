@@ -91,10 +91,13 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
   const [estimates, setEstimates] = useState<Record<string, RuntimeEstimate | null>>({})
   const [focusId, setFocusId] = useState<string | null>(null)
   const [useFilter, setUseFilter] = useState('')
-  // Local models (started and stopped here) or hosted ones (a gateway); the tabs show only when a provider is set up.
-  const [where, setWhere] = useState<'local' | 'hosted'>('local')
-  const hosted = state.providers.length > 0
-  const showing = hosted ? where : 'local'
+  // Local models (started and stopped here), hosted ones (a gateway) and workflows; the tabs show when there is more than one of them.
+  const [where, setWhere] = useState<'local' | 'hosted' | 'workflows'>('local')
+  const tabs: Array<['local' | 'hosted' | 'workflows', string]> = [['local', 'Local'],
+    ...(state.providers.length > 0 ? [['hosted', 'Hosted'] as ['hosted', string]] : []),
+    ...((state.runtimes ?? []).some((runtime) => runtime.workload === 'workflow') ? [['workflows', 'Workflows'] as ['workflows', string]] : [])]
+  const hosted = tabs.length > 1
+  const showing = tabs.some(([key]) => key === where) ? where : 'local'
   if (!host || !session) return <Missing title="Host not found" text="This host is no longer saved on this device." />
   // The sidebar's order: text models first, then speech, pictures, video and music.
   const allRuntimes = groupByWorkload(state.runtimes ?? [], (runtime) => runtime.workload).flatMap((group) => group.items)
@@ -111,21 +114,21 @@ export function ModelsPage({ store, host }: { store: HostStore; host?: SavedHost
     <section className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> {hostName(host, state)}</div><h1>Models</h1><p>Start and stop the model servers on {hostName(host, state)}. Each one holds RAM and VRAM while it runs.</p></div></section>
     {state.connection !== 'connected' && <div className="overview-connect"><ConnectionBanner state={state} /><a className="button button-primary" href={href({ page: 'connections' })}>Open Connections <ArrowUpRight size={16} /></a></div>}
     <div className="models-layout"><div className="models-main">
-    {hosted && <div className="mode-tabs models-where" role="tablist" aria-label="Where the models run">
-      {([['local', 'Local'], ['hosted', 'Hosted']] as const).map(([key, label]) => <button key={key} type="button" role="tab" id={`models-tab-${key}`} aria-selected={showing === key} aria-controls={`models-panel-${key}`}
+    {hosted && <div className="mode-tabs models-where" role="tablist" aria-label="Kinds of models">
+      {tabs.map(([key, label]) => <button key={key} type="button" role="tab" id={`models-tab-${key}`} aria-selected={showing === key} aria-controls={`models-panel-${key}`}
         className={`mode-tab ${showing === key ? 'mode-tab-on' : ''}`} onClick={() => setWhere(key)}>{label}</button>)}
     </div>}
     {showing === 'hosted' && <div role="tabpanel" id="models-panel-hosted" aria-labelledby="models-tab-hosted">
       {state.providers.map((provider) => <HostedProviderSection key={provider.id} provider={provider} onChoose={(ids) => session.hostedModels(provider.id, ids)} onRefresh={() => session.hostedModels(provider.id, null)} />)}
     </div>}
-    <div role={hosted ? 'tabpanel' : undefined} id={hosted ? 'models-panel-local' : undefined} aria-labelledby={hosted ? 'models-tab-local' : undefined} hidden={showing !== 'local'}>
+    <div role={hosted ? 'tabpanel' : undefined} id={hosted ? `models-panel-${showing}` : undefined} aria-labelledby={hosted ? `models-tab-${showing}` : undefined} hidden={showing === 'hosted'}>
     {allRuntimes.some((runtime) => runtime.license) && <div className="models-filter" role="group" aria-label="Show models by licence">
       {USE_FILTERS.map(([key, label]) => <button key={key || 'all'} type="button" className={`button button-small ${useFilter === key ? 'button-primary' : 'button-secondary'}`} aria-pressed={useFilter === key} onClick={() => setUseFilter(key)}>{label}</button>)}
       <span className="models-filter-note">Work use includes models with limits to check. A model with several versions shows under each use its versions allow.</span>
     </div>}
     {state.runtimes && allRuntimes.length === 0 && <div className="empty-models"><div><strong>No model servers</strong><p>This host does not list any model servers.</p></div></div>}
     {allRuntimes.length > 0 && runtimes.length === 0 && <div className="empty-models"><div><strong>No models match</strong><p>None of this host's models are marked for that use.</p></div></div>}
-    {groupByWorkload(runtimes, (runtime) => runtime.workload).map((group) => <ModelGroup key={group.key} id={group.key} label={group.label} items={group.items} references={state.references.filter((reference) => reference.workload === group.key)}>
+    {groupByWorkload(runtimes, (runtime) => runtime.workload).filter((group) => (group.key === 'workflow') === (showing === 'workflows')).map((group) => <ModelGroup key={group.key} id={group.key} label={group.label} items={group.items} references={state.references.filter((reference) => reference.workload === group.key)}>
       {(runtime: Runtime) => {
       const model = state.models?.find((item) => item.id === runtime.id)
       return <section className="model-server" key={runtime.id} aria-label={runtime.name} onMouseEnter={() => setFocusId(runtime.id)} onFocus={() => setFocusId(runtime.id)}>
