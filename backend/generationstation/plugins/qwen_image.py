@@ -77,9 +77,9 @@ class QwenImagePlugin(WorkerPlugin):
             help="Draws a new picture that begins from this one (a variation or a restyle) instead of from nothing. It does "
                  "not follow instructions like \"make the coat blue\"; describe the whole picture you want."),
         "strength": InputSpec(
-            label="How closely it follows the picture", kind="int", minimum=5, maximum=95, placeholder="40",
-            help="Percent (40 if empty). Low: only the rough layout and colours of your picture stay. High: it stays close to it. "
-                 "Used only with a starting picture."),
+            label="How closely it follows the picture", kind="int", minimum=5, maximum=95, placeholder="20",
+            help="Percent (20 if empty). 10 to 20 keeps the layout and colours but lets the style change (an ink drawing, a painting). 40 and up stays close to the picture, with its look. "
+                 "Used only with a starting picture. Z-Image Turbo changes style well at 10 to 20; the Qwen models mostly keep a photo's look and do better at small changes."),
         "quality": InputSpec(
             label="Quality", kind="choice", options=("quick", "best"), default="quick",
             help="'quick' takes a few seconds. 'best' takes 15-45 s and draws finer detail and small lettering. "

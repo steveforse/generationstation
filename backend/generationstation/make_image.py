@@ -60,7 +60,7 @@ class ImageTool:
         }
         if any(self._has(item, "start") for item in running):
             properties["start_picture"] = {"type": "string", "description": "Reference (8 characters, such as 1a2b3c4d) of an earlier picture to begin from, for models that can; the new picture is a variation of it, so describe the whole picture."}
-            properties["strength"] = {"type": "integer", "description": "With start_picture: percent (5 to 95), how closely the result follows it. Default 40."}
+            properties["strength"] = {"type": "integer", "description": "With start_picture: percent (5 to 95), how closely the result follows it. Default 20. About 10 to 20 changes the style (a drawing, a painting) while keeping the layout; 40 and up gives a close variation that keeps the look."}
         if any(item[2].image.edit is not None for item in running):
             properties["pictures"] = {"type": "array", "items": {"type": "string"}, "maxItems": 4,
                                       "description": "References (8 characters, such as 1a2b3c4d) of earlier pictures to start from; the prompt then says what to make with them."}

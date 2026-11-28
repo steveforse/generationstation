@@ -223,7 +223,7 @@ def generate(model, inputs, job):
     if width:
         argv += ["--width", str(width), "--height", str(height)]
     if picture:
-        argv += ["--image", str(picture), str(int(inputs.get("strength") or 40) / 100)]
+        argv += ["--image", str(picture), str(int(inputs.get("strength") or 20) / 100)]
     if model["guidance"] is not None:
         argv += ["--guidance", str(model["guidance"])]
     if model["negative"] and inputs.get("negative_prompt"):
@@ -249,7 +249,7 @@ def generate(model, inputs, job):
 
     model["thread"].call(paint)
     image = Image.open(out)
-    job.detail(seed=seed, steps=step_count, width=image.width, height=image.height, **({"start_strength": int(inputs.get("strength") or 40)} if picture else {}),
+    job.detail(seed=seed, steps=step_count, width=image.width, height=image.height, **({"start_strength": int(inputs.get("strength") or 20)} if picture else {}),
                **({"peak_gib": round(peak["gib"], 1)} if peak else {}))
     job.thumbnail(image, size=1024)
     job.report(f"Done in {time.perf_counter() - started:.0f} s, seed {seed}")
