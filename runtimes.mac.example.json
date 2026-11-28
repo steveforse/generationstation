@@ -488,7 +488,7 @@
     "meeting_notes": {
       "kind": "meeting_notes",
       "name": "Meeting notes",
-      "workload": "text",
+      "workload": "workflow",
       "description": "A recording or transcript in; a transcript with speakers, a summary, action items and decisions out.",
       "python": "/Users/YOU/workspace/generationstation/backend/.venv/bin/python",
       "output_dir": "/Users/YOU/ai/outputs/meeting-notes",

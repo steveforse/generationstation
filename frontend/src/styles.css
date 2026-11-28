@@ -1085,15 +1085,15 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 @media (max-width: 700px) { .runtime-license { margin-left: 0 } }
 .profile-card-title .license-badge { align-self: flex-start; width: max-content; margin: var(--sp-1) 0 0 }
 .models-group { margin-bottom: var(--sp-6) }
-.models-group-heading { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-3); padding-bottom: var(--sp-2); border-bottom: 1px solid var(--border); font-size: var(--fs-h3, 1.125rem); font-weight: 600; color: var(--text) }
+.models-group-heading { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font-size: var(--fs-h3, 1.125rem); font-weight: 600; color: var(--text) }
 .models-group-heading svg { color: var(--text-3) }
 .models-group-count { display: inline-flex; align-items: center; height: 20px; padding: 0 var(--sp-2); border-radius: var(--r-sm); background: var(--neutral-soft); color: var(--text-2); font-size: var(--fs-meta); font-weight: 600 }
-.quality-charts { margin-bottom: var(--sp-4) }
+.quality-charts { margin-bottom: var(--sp-4); padding: var(--sp-2) var(--sp-4); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-card) }
 .quality-charts > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-3); padding: var(--sp-2) 0; font-size: var(--fs-body); font-weight: 600; color: var(--text-2); cursor: pointer }
 .quality-charts > summary small { font-size: var(--fs-meta); font-weight: 500; color: var(--text-3) }
 .quality-charts > summary:hover { color: var(--text) }
-.quality-charts-body { display: grid; gap: var(--sp-3); margin-top: var(--sp-1) }
-.quality-chart { margin: 0; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-surface) }
+.quality-charts-body { display: grid; gap: var(--sp-3); margin: var(--sp-1) 0 var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--border) }
+.quality-chart { margin: 0; padding: var(--sp-2) 0 0 }
 .quality-chart figcaption { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--sp-1) var(--sp-3); margin-bottom: var(--sp-2) }
 .quality-chart figcaption strong { font-size: var(--fs-body); color: var(--text) }
 .quality-chart figcaption span { font-size: var(--fs-meta); color: var(--text-3) }
@@ -1123,7 +1123,7 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .quality-charts[open] > summary::before { transform: rotate(45deg) }
 .quality-tabs { display: flex; flex-wrap: wrap; gap: 6px }
 .quality-tabs small { margin-left: 6px; opacity: .7 }
-.models-group-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3) }
+.models-group-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3); padding-bottom: var(--sp-2); border-bottom: 1px solid var(--border) }
 .models-sort { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-meta); color: var(--text-2) }
 .models-sort label { display: flex; align-items: center; gap: var(--sp-2) }
 .models-sort select { font: inherit; color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px }
@@ -1153,7 +1153,6 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .quality-ref { margin-left: 2px; padding: 0 5px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; color: var(--text-2) }
 .quality-bar-reference { background: transparent !important; border: 2px solid var(--text-3); box-sizing: border-box }
 .models-sort { justify-content: flex-end }
-.models-sort { margin-bottom: var(--sp-4) }
 
 .decide-picker { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-meta); color: var(--text-3); margin-bottom: var(--sp-3) }
 .decide-picker select { font: inherit; color: var(--text-1); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 8px; max-width: 16rem }

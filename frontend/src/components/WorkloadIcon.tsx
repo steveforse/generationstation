@@ -1,4 +1,4 @@
-import { AudioLines, Clapperboard, Image, MessageSquare, Music, Scale, Server, Volume2 } from 'lucide-react'
+import { AudioLines, Clapperboard, Image, MessageSquare, Music, Scale, Server, Volume2, Workflow } from 'lucide-react'
 
 /** The icon for a model by what it makes, from the host's `workload` (text, decision, music, image, video, speech). */
 export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?: number }) {
@@ -9,14 +9,15 @@ export function WorkloadIcon({ workload, size = 20 }: { workload: string; size?:
     case 'image': return <Image size={size} aria-hidden="true" />
     case 'video': return <Clapperboard size={size} aria-hidden="true" />
     case 'transcription': return <AudioLines size={size} aria-hidden="true" />
+    case 'workflow': return <Workflow size={size} aria-hidden="true" />
     case 'speech': return <Volume2 size={size} aria-hidden="true" />
     default: return <Server size={size} aria-hidden="true" />
   }
 }
 
-/** Sidebar, Overview and Models page group by what a model makes, in this order (text models, which chat, first);
- * anything else goes under "Other", last. */
-export const WORKLOAD_GROUPS: ReadonlyArray<readonly [string, string]> = [['text', 'Text'], ['decision', 'Decide'], ['speech', 'Speech'], ['transcription', 'Speech to text'], ['image', 'Images'], ['video', 'Video'], ['music', 'Music']]
+/** The Models page and the Overview group by what a model makes, named and ordered as the sidebar names its entries (text models, which
+ * chat, first, then alphabetical, then workflows); anything else goes under "Other", last. */
+export const WORKLOAD_GROUPS: ReadonlyArray<readonly [string, string]> = [['text', 'Text'], ['decision', 'Decision'], ['image', 'Images'], ['music', 'Music'], ['speech', 'Speech'], ['transcription', 'Transcribe'], ['video', 'Video'], ['workflow', 'Workflows']]
 
 /** Items grouped by workload in WORKLOAD_GROUPS order, keeping their order within a group; empty groups are left out. */
 export function groupByWorkload<T>(items: T[], workloadOf: (item: T) => string, nameOf?: (item: T) => string) {

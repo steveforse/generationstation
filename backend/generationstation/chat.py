@@ -43,7 +43,7 @@ WORDS = {"image": "picture", "video": "video clip", "audio": "sound recording"}
 ASSISTANT_TITLE = "Assistant"
 GUIDE = (Path(__file__).with_name("assistant_guide.md")).read_text(encoding="utf-8").strip()
 # Where each kind of model is in the menu on the left: models that serve several of a kind share one entry; a text tool that is not a chat model has its own.
-GROUPS = {"text": "Chat", "decision": "Decide", "speech": "Speech", "image": "Images", "video": "Video", "music": "Music"}
+GROUPS = {"text": "Chat", "decision": "Decision", "transcription": "Transcribe", "workflow": "Workflows", "speech": "Speech", "image": "Images", "video": "Video", "music": "Music"}
 
 # What every chat is told it can do. Only the help assistant's own conversation is told it is "the assistant" (INTRO_ASSISTANT);
 # the general chat is just a model running on the user's computer and does not call itself the assistant.

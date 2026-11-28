@@ -648,7 +648,7 @@
     "meeting_notes": {
       "kind": "meeting_notes",
       "name": "Meeting notes",
-      "workload": "text",
+      "workload": "workflow",
       "description": "A meeting recording in; a transcript with who said what, a summary, action items and decisions out. The speech model loads for each job and frees its card when done; the notes use a text model, started for the job if none is running.",
       "python": "C:\\Projects\\generationstation\\backend\\.venv\\Scripts\\python.exe",
       "output_dir": "D:\\ai\\outputs\\meeting-notes",

@@ -11,7 +11,7 @@ This guide takes a Mac from a fresh checkout to a dashboard that runs local text
 | Video: MiniMax H3 through h3.c, with sound, from a description or first and last pictures (personal use only) | H3's reference modes and picture editing |
 | Images: Qwen Image 2.1 Turbo, Z-Image Turbo and Qwen-Image 2512 through mflux (MLX) | |
 | Songs: YuE2 through the MLX port (mlx-Yue), ACE-Step 1.5 (MIT, work use) and MiniMax Music 3 (community licence, work use while the app stays internal) | |
-| Decide: Torchcast 4B and 31B (text), pplx-decider 27B and H2O-Lightning 4B (read pictures), all Apache-2.0 and work use; one probability per answer in well under a second | |
+| Decision: Torchcast 4B and 31B (text), pplx-decider 27B and H2O-Lightning 4B (read pictures), all Apache-2.0 and work use; one probability per answer in well under a second | |
 | Speech through mlx-audio: Qwen3-TTS, OmniVoice, Fish Drama 3, Fish S2 Pro, Breeze TTS 2 | |
 | Speech to text through mlx-audio: Qwen3-ASR, Whisper large-v3-turbo, Parakeet TDT v3; a 17 minute recording in 4 to 21 s | |
 | Text models: Qwen3.8 27B, Qwen3.8 Flash-Next, Tencent Hy4-Flash, Inkling 2 Mini | The Basalt runtime and the Windows meeting engines (Nemotron, VibeVoice, DiariZen) |
@@ -57,9 +57,9 @@ The Mac template marks each model with a licence verdict. In short: Qwen3.8 27B,
 
 ## Models page: sections and quality chart
 
-The Models page is grouped like the sidebar (Text, Speech, Images, Video, Music). Above each group's cards, a folded chart ranks the models that have a published score on the same measure:
+The Models page and the Overview are grouped and named like the sidebar: Text, then alphabetical (Decision, Images, Music, Speech, Transcribe, Video), then Workflows (Meeting notes, which is a workflow, not a model; the sidebar sets it apart below a rule). A catalog entry's `workload` picks its section: `text`, `decision`, `image`, `music`, `speech`, `transcription`, `video` or `workflow`. After a group's cards, a folded card ranks the models that have a published score on the same measure:
 
-Each section has a Sort control: default order, name, or quality (using the ranking chosen in the chart), with a button to reverse it. Models without a score on that ranking stay last in either direction.
+Each section's heading row has a Sort control on its right: default order, name, or quality (using the ranking chosen in the card), with a button to reverse it. Models without a score on that ranking stay last in either direction.
 
 Claude Haiku, Sonnet and Opus 5.5 appear on the text rankings as outlined "reference" bars (the `references` list in the catalog): hosted models that are not run here, shown for scale. A group can offer several rankings (a model carries extra scores in `rankings`); buttons above the chart switch between them, and models missing from the chosen ranking are named under it.
 

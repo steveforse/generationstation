@@ -49,17 +49,17 @@ function ModelGroup({ id, label, items, references, children }: { id: string; la
   return <section className="models-group" aria-labelledby={`models-group-${id}`}>
     <div className="models-group-bar">
       <h2 className="models-group-heading" id={`models-group-${id}`}><WorkloadIcon workload={id} size={20} /><span>{label}</span><span className="models-group-count">{items.length}</span></h2>
+      {items.length > 1 && <div className="models-sort">
+        <label>Sort <select value={key} onChange={(event) => choose(event.target.value as SortKey)}>
+          <option value="default">Default order</option>
+          <option value="name">Name</option>
+          {chart && <option value="quality">Quality ({chart[0]})</option>}
+        </select></label>
+        <button type="button" className="button button-small button-secondary" aria-label={`Order: ${descending ? descendingWord : ascendingWord}. Reverse it`} title="Reverse the order" onClick={() => setDescending(!descending)}>
+          {descending ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" />}{descending ? descendingWord : ascendingWord}
+        </button>
+      </div>}
     </div>
-    {items.length > 1 && <div className="models-sort">
-      <label>Sort <select value={key} onChange={(event) => choose(event.target.value as SortKey)}>
-        <option value="default">Default order</option>
-        <option value="name">Name</option>
-        {chart && <option value="quality">Quality ({chart[0]})</option>}
-      </select></label>
-      {<button type="button" className="button button-small button-secondary" aria-label={`Order: ${descending ? descendingWord : ascendingWord}. Reverse it`} title="Reverse the order" onClick={() => setDescending(!descending)}>
-        {descending ? <ArrowDown size={14} aria-hidden="true" /> : <ArrowUp size={14} aria-hidden="true" />}{descending ? descendingWord : ascendingWord}
-      </button>}
-    </div>}
     {sorted.map(children)}
     <QualityChart runtimes={items} references={references} metric={metric} onMetric={setMetric} />
   </section>
@@ -147,7 +147,7 @@ export function DecidePage({ store, host, modelId }: { store: HostStore; host?: 
       <select aria-label="Model answering" value={chosen?.id} onChange={(event) => setPickedId(event.target.value)}>{running.map((runtime) => <option key={runtime.id} value={runtime.id}>{runtime.name}</option>)}</select></label>
     : null
   return <ServicePage store={store} host={host} modelId={chosen?.id ?? ''}
-    group={{ title: 'Decide', description: 'Ask a question about a situation and get a probability for each answer, from whichever decision model is running.', ids: decide.map((runtime) => runtime.id), picker, connect: true, none: decide.length > 0 && running.length === 0 }} />
+    group={{ title: 'Decision', description: 'Ask a question about a situation and get a probability for each answer, from whichever decision model is running.', ids: decide.map((runtime) => runtime.id), picker, connect: true, none: decide.length > 0 && running.length === 0 }} />
 }
 
 /** A page that serves several models as one (Decide, Speech): which models, the control to pick one, and what it adds around the form. */

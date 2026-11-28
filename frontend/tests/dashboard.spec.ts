@@ -288,7 +288,7 @@ function meetingRuntimeFixture() {
   const inputs = [field('recording', 'Recording', 'files', { required: true, accept: ['audio', 'video', 'transcript'], max_count: 1 }),
     field('notes', 'Make', 'choice', { options: ['notes', 'transcript'], default: 'notes', option_labels: { notes: 'Transcript and notes', transcript: 'Transcript only' } })]
   return {
-    id: 'meeting_notes', kind: 'meeting_notes', plugin: 'Meeting notes', name: 'Meeting notes', description: 'Turns a meeting recording into notes.', workload: 'text', port: 8230, default_preset: 'qwen', last_launch: null, max_gpus: 1,
+    id: 'meeting_notes', kind: 'meeting_notes', plugin: 'Meeting notes', name: 'Meeting notes', description: 'Turns a meeting recording into notes.', workload: 'workflow', port: 8230, default_preset: 'qwen', last_launch: null, max_gpus: 1,
     presets: { qwen: { name: 'Fast', gpus: [1], allowed_gpus: [{ index: 0, name: 'Fixture GPU' }, { index: 1, name: 'Second GPU' }], estimate: { ram_gib: 4, gpu_min_free_gib: { 0: 1, 1: 1 } }, settings: [] } },
     generation: { output_kind: 'document', inputs, modes: [{ key: 'notes', label: 'From a recording', help: 'Add a recording.', inputs }], make_label: 'Make notes', result_noun: 'meeting', timings: [] },
   }
@@ -891,8 +891,6 @@ test('makes a song, keeps it in the sidebar with how it was made, reuses its set
   await modal.getByRole('button', { name: 'Close' }).click()
   await expect(modal).toBeHidden()
   await page.screenshot({ path: 'test-results/screenshots/song-rail.png', fullPage: true })
-  await go(page, '#/overview')
-  await expect(page.getByText('Recent results')).toBeVisible()
   await go(page, '#/hosts/local/services/yue2')
   await form.getByLabel(/^style/i).fill('changed')
   await item.click()
@@ -1549,13 +1547,13 @@ test('a text model shows its card choice and plain settings, with tuning folded 
   await page.screenshot({ path: 'test-results/screenshots/text-model-card.png', fullPage: true })
 })
 
-test('lists models in the sidebar order: text models first, then speech, pictures, video and music', async ({ page }) => {
+test('lists models in the sidebar order: text models first, then pictures, music, speech and video', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { llm: true, songs: true, speech: true, videos: true })
   await go(page, '#/hosts/local/models')
   await expect(page.getByRole('region', { name: 'Inkling 2 Mini' })).toBeVisible()
   const names = await page.locator('section.model-server').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')))
   const workloads = names.map((name) => /Inkling/.test(name ?? '') ? 'text' : /speech|OmniVoice/i.test(name ?? '') ? 'speech' : /H3|video/i.test(name ?? '') ? 'video' : /song|YuE/i.test(name ?? '') ? 'music' : 'other')
-  expect(workloads).toEqual([...workloads].sort((a, b) => ['text', 'speech', 'image', 'video', 'music', 'other'].indexOf(a) - ['text', 'speech', 'image', 'video', 'music', 'other'].indexOf(b)))
+  expect(workloads).toEqual([...workloads].sort((a, b) => ['text', 'image', 'music', 'speech', 'video', 'other'].indexOf(a) - ['text', 'image', 'music', 'speech', 'video', 'other'].indexOf(b)))
   expect(workloads[0]).toBe('text')
   expect(new Set(workloads)).toEqual(new Set(['text', 'speech', 'video', 'music']))
 })
@@ -1727,7 +1725,7 @@ test('the Models page groups models by kind and charts their published quality s
   await connectFixtures(page, 'Fixture desktop', false, { llm: true, songs: true, rated: true })
   await go(page, '#/hosts/local/models')
   // One section per kind, in the sidebar's order.
-  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Text|Speech|Music)/ })).toHaveText(['Text1', 'Speech3', 'Music1'])
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Text|Speech|Music)/ })).toHaveText(['Text1', 'Music1', 'Speech3'])
   const speech = page.getByRole('region', { name: 'Speech' })
   // Folded until asked for.
   const chart = speech.getByRole('figure', { name: 'Speech arena Elo' })
@@ -1810,13 +1808,13 @@ test('with two chat models running, a dropdown picks which one answers and the c
   expect(sent[0]).toEqual({ created: { model_id: 'inkling2' } })
 })
 
-test('every decision model is used from one Decide page, with a dropdown over those running', async ({ page }) => {
+test('every decision model is used from one Decision page, with a dropdown over those running', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { decide: true })
   await go(page, '#/hosts/local/decide')
   // One entry in the sidenav, under Text, not one per model.
-  await expect(page.getByRole('navigation').getByRole('link', { name: /^Decide/ })).toHaveCount(1)
+  await expect(page.getByRole('navigation').getByRole('link', { name: /^Decision/ })).toHaveCount(1)
   await expect(page.getByRole('link', { name: /Karpo|Small decider/ })).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: 'Decide', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Decision', level: 1 })).toBeVisible()
   const picker = page.getByRole('combobox', { name: 'Model answering' })
   await expect(picker.locator('option')).toHaveText(['Karpo 31B', 'Small decider'])
   // Only a model that reads pictures offers the picture field.
@@ -1834,13 +1832,17 @@ test('every decision model is used from one Decide page, with a dropdown over th
   await expect(decision.getByText('Confidence: 88.2%')).toBeVisible()
 })
 
-test('the multi-model tools sit directly in the sidenav, alphabetical, with no Text or Speech section', async ({ page }) => {
+test('the multi-model tools sit directly in the sidenav, alphabetical, and workflows follow below a rule', async ({ page }) => {
   await connectFixtures(page, 'Fixture desktop', false, { llm: true, meeting: true, decide: true, speech: true })
   await go(page, '#/overview')
   const nav = page.getByRole('navigation', { name: 'Main navigation' })
   const names = (await nav.getByRole('link').allInnerTexts()).map((text) => text.split('\n')[0].trim())
-  expect(names.filter((name) => ['Chat', 'Decide', 'Meeting notes', 'Speech'].includes(name))).toEqual(['Chat', 'Decide', 'Meeting notes', 'Speech'])
-  await expect(nav.getByRole('group')).toHaveCount(0)
+  // The tools are alphabetical; Meeting notes is a workflow, so it sits last, below its own rule.
+  expect(names.filter((name) => ['Chat', 'Decision', 'Meeting notes', 'Speech'].includes(name))).toEqual(['Chat', 'Decision', 'Speech', 'Meeting notes'])
+  const workflows = nav.getByRole('group', { name: 'Workflows' })
+  await expect(nav.getByRole('group')).toHaveCount(1)
+  await expect(workflows.getByRole('link', { name: /^Meeting notes/ })).toBeVisible()
+  await expect(nav.locator('hr.nav-separator')).toHaveCount(2)
 })
 
 test('Decide shows the model own address and a snippet for the tool picked', async ({ page }) => {
@@ -1915,10 +1917,16 @@ test('the paperclip uploads files from the computer and the library lists meetin
   await expect(page.locator('.chat-thread').getByRole('button', { name: 'notes.txt' })).toBeVisible()
 })
 
-test('links to a decision result, in the recent results and elsewhere, open the Decide page', async ({ page }) => {
-  await connectFixtures(page, 'Fixture desktop', false, { decide: true })
+test('the Overview names and orders its sections as the Models page and the sidebar do, with Decision and workflows on their own', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { llm: true, decide: true, meeting: true, songs: true, speech: true, videos: true })
   await go(page, '#/overview')
-  await expect(page.locator('.overview-recent a').first()).toHaveAttribute('href', '#/hosts/local/decide')
+  const sections = page.locator('.overview-services .service-group-label')
+  await expect(sections).toHaveText(['Text', 'Decision', 'Music', 'Speech', 'Video', 'Workflows'])
+  await expect(page.getByText('Recent results')).toHaveCount(0)
+  await expect(page.locator('.service-group', { hasText: 'Decision' }).locator('a.service-tile').first()).toHaveAttribute('href', '#/hosts/local/decide')
+  await expect(page.locator('.service-group', { hasText: 'Workflows' }).getByText('Meeting notes')).toBeVisible()
+  await go(page, '#/hosts/local/models')
+  await expect(page.getByRole('heading', { level: 2 }).filter({ hasText: /^(Text|Decision|Music|Speech|Video|Workflows)/ })).toHaveText(['Text1', 'Decision2', 'Music1', 'Speech1', 'Video1', 'Workflows1'])
 })
 
 test('Speech is one page over the running speech models; the text carries over and cues are checked per model', async ({ page }) => {

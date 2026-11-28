@@ -103,14 +103,14 @@ export default function App() {
 function AssistantSlot({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
   const page = route.page === 'service' ? `the ${state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId} page`
-    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decide page' : route.page === 'speech' ? 'the Speech page' : route.page === 'images' ? 'the Images page' : route.page === 'music' ? 'the Music page' : route.page === 'video' ? 'the Video page' : route.page === 'transcribe' ? 'the Transcribe page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
+    : route.page === 'models' ? 'the Models page' : route.page === 'decide' ? 'the Decision page' : route.page === 'speech' ? 'the Speech page' : route.page === 'images' ? 'the Images page' : route.page === 'music' ? 'the Music page' : route.page === 'video' ? 'the Video page' : route.page === 'transcribe' ? 'the Transcribe page' : route.page === 'overview' ? 'the Overview page' : route.page === 'logs' ? 'the Logs page'
       : route.page === 'settings' ? 'the Host settings page' : route.page === 'connections' ? 'the Connections page' : 'a page'
   return <AssistantBubble store={store} host={host} where={page} />
 }
 
 function Crumbs({ route, host }: { route: Route; host?: SavedHost }) {
   const state = useSession(host ? store.session(host.id) : undefined)
-  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decide' : route.page === 'speech' ? 'Speech' : route.page === 'images' ? 'Images' : route.page === 'music' ? 'Music' : route.page === 'video' ? 'Video' : route.page === 'transcribe' ? 'Transcribe' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
+  const title = route.page === 'connections' ? 'Connections' : route.page === 'overview' ? 'Overview' : route.page === 'models' ? 'Models' : route.page === 'decide' ? 'Decision' : route.page === 'speech' ? 'Speech' : route.page === 'images' ? 'Images' : route.page === 'music' ? 'Music' : route.page === 'video' ? 'Video' : route.page === 'transcribe' ? 'Transcribe' : route.page === 'chat' ? 'Chat' : route.page === 'logs' ? 'Logs' : route.page === 'settings' ? 'Host settings'
     : state.runtimes?.find((runtime) => runtime.id === route.modelId)?.name ?? route.modelId
   return <div className="breadcrumb"><span className="crumb-host">{host ? hostName(host, state) : 'Workspace'}</span><span className="crumb-slash" aria-hidden="true">/</span><strong>{title}</strong></div>
 }
@@ -145,13 +145,15 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const runtimes = state.runtimes ?? []
   const running = runtimes.filter((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready').length
   const name = hostName(host, state)
-  // Decision models sit under Text, as one Decide entry (they all share a page).
+  // Decision models are one Decision entry (they all share a page).
   const decisionRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'decision')
-  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation && runtime.workload !== 'decision' && runtime.workload !== 'speech' && runtime.workload !== 'image' && runtime.workload !== 'music' && runtime.workload !== 'video' && runtime.workload !== 'transcription'), (runtime) => runtime.workload, (runtime) => runtime.name)
+  const groups = groupByWorkload(runtimes.filter((runtime) => runtime.generation && runtime.workload !== 'decision' && runtime.workload !== 'speech' && runtime.workload !== 'image' && runtime.workload !== 'music' && runtime.workload !== 'video' && runtime.workload !== 'transcription' && runtime.workload !== 'workflow'), (runtime) => runtime.workload, (runtime) => runtime.name)
+  // Workflows (Meeting notes is the first) are not models: they sit apart, below a rule.
+  const workflowRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'workflow').sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
   const decideOn = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
   const decideLoading = decisionRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'loading')
-  const decideLink = decisionRuntimes.length > 0 ? <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<WorkloadIcon workload="decision" />} label="Decide"
-    title={decideOn ? 'Decide: a model is running' : 'Decide'} badge={<NavState state={decideOn ? 'ready' : decideLoading ? 'loading' : undefined} />} /> : null
+  const decideLink = decisionRuntimes.length > 0 ? <NavLink route={{ page: 'decide', hostId: host.id }} current={current} icon={<WorkloadIcon workload="decision" />} label="Decision"
+    title={decideOn ? 'Decision: a model is running' : 'Decision'} badge={<NavState state={decideOn ? 'ready' : decideLoading ? 'loading' : undefined} />} /> : null
   // Speech models share one Speech entry.
   const speechRuntimes = runtimes.filter((runtime) => runtime.generation && runtime.workload === 'speech')
   const speechOn = speechRuntimes.some((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready')
@@ -177,11 +179,11 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
   const chatRuntime = chatRuntimes.find((runtime) => state.models?.find((item) => item.id === runtime.id)?.state === 'ready') ?? chatRuntimes[0]
   const chatState = state.models?.find((item) => item.id === chatRuntime?.id)?.state
     // The tools that serve several models (or one tool, like meeting notes) sit directly in the sidebar, alphabetical:
-  // Chat, Decide, Meeting notes, Speech. Only generators with their own page are grouped by what they make.
+  // Chat, Decision, Images, Music, Speech, Transcribe, Video. Workflows (Meeting notes) follow a rule below them. Only generators with their own page are grouped by what they make.
   const toolEntries = [
     ...(chatRuntime ? [{ label: 'Chat', node: <NavLink key="chat" route={{ page: 'chat', hostId: host.id }} current={current} icon={<MessagesSquare size={20} />} label="Chat"
       title={navStatus(chatState) ? `Chat: ${chatRuntime.name} ${navStatus(chatState)?.toLowerCase()}` : 'Chat'} badge={<NavState state={chatState} />} /> }] : []),
-    ...(decideLink ? [{ label: 'Decide', node: <Fragment key="decide">{decideLink}</Fragment> }] : []),
+    ...(decideLink ? [{ label: 'Decision', node: <Fragment key="decide">{decideLink}</Fragment> }] : []),
     ...(groups.find((group) => group.key === 'text')?.items ?? []).map((runtime) => {
       const model = state.models?.find((item) => item.id === runtime.id)
       const status = navStatus(model?.state)
@@ -220,6 +222,19 @@ function HostNav({ host, current }: { host: SavedHost; current: Route }) {
         })}
       </div>
     })}
+    {workflowRuntimes.length > 0 && <>
+      <hr className="nav-separator" />
+      <div className="nav-group" role="group" aria-labelledby={`nav-${host.id}-workflow`}>
+        <div className="nav-group-label" id={`nav-${host.id}-workflow`}><WorkloadIcon workload="workflow" size={18} /><span>Workflows</span></div>
+        {workflowRuntimes.map((runtime) => {
+          const model = state.models?.find((item) => item.id === runtime.id)
+          const status = navStatus(model?.state)
+          return <NavLink key={runtime.id} route={{ page: 'service', hostId: host.id, modelId: runtime.id }} current={current}
+            icon={<NotebookPen size={20} />} label={runtime.name} title={status ? `${runtime.name}: ${status}` : runtime.name}
+            badge={<NavState state={model?.state} />} />
+        })}
+      </div>
+    </>}
     {state.connection !== 'connected' && state.connection !== 'connecting' && state.connection !== 'reconnecting' && <a className="nav-item nav-muted" href={href({ page: 'connections' })} title={state.connection === 'error' ? 'Connection issue' : 'Not connected'}><Plug size={20} /><span className="nav-item-label">{state.connection === 'error' ? 'Connection issue' : 'Not connected'}</span></a>}
   </div>
 }
