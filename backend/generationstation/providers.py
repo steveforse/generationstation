@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 from typing import Literal
 
+from dotenv import dotenv_values
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PROVIDER_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,31}")
@@ -98,6 +99,29 @@ def read_opencode(path, provider):
     return options.get("baseURL"), (found.group(1) if found else None), names
 
 
+class EnvFileEnviron:
+    """Where a token's variable is looked up: the process environment, then the host's .env file (read each time, so a change to the
+    file needs no restart). Only `get` is used."""
+
+    def __init__(self, env_file=None, environ=None):
+        self.env_file, self.environ = Path(env_file) if env_file else None, os.environ if environ is None else environ
+
+    def get(self, name, default=None):
+        if self.environ.get(name):
+            return self.environ.get(name)
+        if self.env_file and self.env_file.is_file():
+            try:
+                return dotenv_values(self.env_file).get(name) or default
+            except OSError:
+                return default
+        return default
+
+
+def provider_slug(name):
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:32].strip("-")
+    return slug if PROVIDER_ID.fullmatch(slug or "") else "provider"
+
+
 class HostedTarget:
     """Where to send one hosted model's chat requests."""
 
@@ -113,8 +137,11 @@ class HostedTarget:
 
 
 class ProviderRegistry:
-    def __init__(self, configs, state_file, opener=None, environ=None):
-        self.configs = {key: value for key, value in (configs or {}).items()}
+    def __init__(self, configs, state_file, opener=None, environ=None, saved=None, save=None):
+        # `configs` are the providers of the runtimes file; `saved` and `save` read and write the ones set up on the Host settings page
+        # (a dict of id -> config fields), which take the place of a file provider with the same id.
+        self.file_configs = {key: value for key, value in (configs or {}).items()}
+        self._saved, self._save = saved or dict, save
         self.state_file = Path(state_file)
         self.opener = opener or urllib.request.urlopen
         self.environ = environ if environ is not None else os.environ
@@ -123,9 +150,67 @@ class ProviderRegistry:
 
     # ----- settings -----------------------------------------------------------------------------
 
+    @property
+    def configs(self):
+        out = dict(self.file_configs)
+        for key, fields in (self._saved() or {}).items():
+            try:
+                out[key] = ProviderConfig(**fields)
+            except (ValueError, TypeError):
+                continue
+        return out
+
+    def configured(self):
+        """The providers as set up, with where each came from ("settings" can be edited, "file" is the runtimes file's)."""
+        saved = set((self._saved() or {}).keys())
+        return [{"id": key, "origin": "settings" if key in saved else "file", **config.model_dump(exclude={"include"}, exclude_none=True)} for key, config in self.configs.items()]
+
+    def set_configs(self, items):
+        """Replace the providers set up on the Host settings page. Raises ValueError saying what is wrong."""
+        if not isinstance(items, list) or len(items) > 10:
+            raise ValueError("Give a list of up to 10 providers.")
+        out = {}
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError("Each provider needs a name and an address.")  # noqa: TRY004
+            fields = {key: value for key, value in item.items() if key in ProviderConfig.model_fields and key != "include" and value not in (None, "")}
+            try:
+                config = ProviderConfig(**fields)
+            except ValueError as exc:
+                problems = exc.errors() if hasattr(exc, "errors") else []
+                raise ValueError((problems[0]["msg"].removeprefix("Value error, ") if problems else str(exc)) + f" ({fields.get('name', 'a provider')})") from exc
+            key = item.get("id") or provider_slug(config.name)
+            if not isinstance(key, str) or not PROVIDER_ID.fullmatch(key):
+                raise ValueError(f"{config.name} has an invalid id.")
+            if key in out:
+                raise ValueError(f"Two providers are called {config.name}.")
+            out[key] = config.model_dump(exclude={"include"}, exclude_none=True)
+        if self._save is None:
+            raise ValueError("Providers cannot be saved on this host.")
+        self._save(out)
+        with self.lock:
+            self.cache.clear()
+        return self.configured()
+
+    def test(self, item):
+        """Try one provider (as typed, not saved): (ok, message) in plain words."""
+        try:
+            config = ProviderConfig(**{key: value for key, value in (item or {}).items() if key in ProviderConfig.model_fields and key != "include" and value not in (None, "")})
+        except ValueError as exc:
+            problems = exc.errors() if hasattr(exc, "errors") else []
+            return False, problems[0]["msg"].removeprefix("Value error, ") if problems else str(exc)
+        models, error = self._list(config)
+        if error:
+            return False, error
+        if not models:
+            return False, "It answered, but lists no chat models."
+        return True, f"Works: {len(models)} chat models, such as {', '.join(item['id'] for item in models[:3])}."
+
     def _resolve(self, provider_id):
+        return self._resolve_config(self.configs[provider_id])
+
+    def _resolve_config(self, config):
         """(base_url, key_env, {id: name} or None) for a provider, from its config and OpenCode's."""
-        config = self.configs[provider_id]
         base, key_env, names = config.base_url, config.api_key_env, None
         if config.source == "opencode":
             found_base, found_key, names = read_opencode(config.opencode_config, config.opencode_provider)
@@ -153,9 +238,18 @@ class ProviderRegistry:
             cached = self.cache.get(provider_id)
         if cached and not refresh and time.time() - cached[0] < (ERROR_SECONDS if cached[2] else CACHE_SECONDS):
             return cached[1], cached[2]
+        if provider_id not in self.configs:
+            return [], "That provider is not set up."
+        models, error = self._list(self.configs[provider_id])
+        with self.lock:
+            self.cache[provider_id] = (time.time(), models, error)
+        return models, error
+
+    def _list(self, config):
+        """([{id, name}], error) straight from the gateway or OpenCode's config."""
         models, error = [], None
         try:
-            base, key_env, names = self._resolve(provider_id)
+            base, key_env, names = self._resolve_config(config)
             if names:
                 models = [{"id": mid, "name": name} for mid, name in names.items()]
             else:
@@ -172,8 +266,6 @@ class ProviderRegistry:
             error = "The gateway could not be reached."
         except RuntimeError as exc:
             error = str(exc)
-        with self.lock:
-            self.cache[provider_id] = (time.time(), models, error)
         return models, error
 
     def _auth(self, key_env):

@@ -441,22 +441,12 @@ Each model works in parts, because whole recordings go wrong: Qwen3-ASR loops on
 
 The Chat can also use models hosted behind an OpenAI-compatible gateway, such as LiteLLM in front of Bedrock. They run on the gateway, not here, so anything you send in a chat goes there: use it only where your organisation allows that. The chat, its tools (pictures, songs, search and the rest) and the conversation history stay on the Generation Station backend; the browser never sees the gateway token.
 
-Add a `providers` section to `runtimes.json` (the file is not in git). Without it nothing changes.
+Set it up on the **Host settings** page, under Hosted chat models: a name, the gateway's address and the name of the environment variable that holds its token, then Test (it lists the gateway's chat models and says plainly what is wrong) and Save. The providers are kept in the host's database. Nothing is configured by default.
 
-```json
-"providers": {
-  "litellm": {
-    "name": "LiteLLM",
-    "base_url": "https://litellm.example.com",
-    "api_key_env": "ANTHROPIC_AUTH_TOKEN",
-    "include": ["claude-*-5-5"]
-  }
-}
-```
-
-- `api_key_env` is the name of an environment variable, never the token. Set it where the backend starts (`ANTHROPIC_AUTH_TOKEN=... uv run ... uvicorn ...`). The token is read for each request and is not stored or logged.
-- The models come from the gateway's `/v1/models` (chat models only) and are listed on the Models page in a section named after the provider. Tick the ones the Chat should offer; the choice is kept in `providers.json` in the runtime folder. `include` is optional: glob patterns for models that are on until you choose otherwise (here the Claude 5.5 family). With neither, nothing is offered.
-- OpenCode: set `"source": "opencode"` and `"opencode_provider": "<its provider id>"` instead of `base_url` and `api_key_env`. The address, the token's variable (an `{env:NAME}` value) and the model list are read from `~/.config/opencode/opencode.json` (or `opencode_config`). Anything you set in the entry wins. This reads the file format from OpenCode's documentation and has not been tried against a real desktop file yet.
+- **The token is never entered or stored in the app.** The provider names a variable, such as `LITELLM_API_KEY`. The backend looks for it in its environment, then in the `.env` file at the repo root (read for each request, so a change to `.env` needs no restart). Both stay out of git.
+- The models come from the gateway's `/v1/models` (chat models only). Open the **Hosted** tab on the Models page and tick the ones the Chat should offer; the choice is kept in `providers.json` in the runtime folder. Nothing is offered until you tick it.
+- **OpenCode:** choose "OpenCode's config" as the source and give its provider id (and the config file's path if it is not `~/.config/opencode/opencode.json`). The address, the token's variable (an `{env:NAME}` value) and the model list are read from that file on the host. This follows OpenCode's documented format and has not been tried against a real desktop file yet.
+- **Without the page:** a `providers` section in `runtimes.json` (same fields, plus `include` globs such as `"claude-*-5-5"` for models that are on until you choose) still works, and a provider saved on the page takes the place of a file one with the same id.
 - Hosted models are always on. Thinking is sent as a reasoning effort (low, medium, high) or left out when off. Images are assumed to be accepted. Meeting notes and the help assistant still use local models.
 
 ## Files in the chat

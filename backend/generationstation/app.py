@@ -37,7 +37,7 @@ from .host_settings import HostSettings, SettingsInvalid
 from .lifecycle import IdempotencyConflict, LifecycleError, LifecycleManager
 from .logs import LogNotFound, LogStore
 from .process_worker import ProcessSupervisor
-from .providers import ProviderRegistry
+from .providers import EnvFileEnviron, ProviderRegistry
 from .runtimes import load_catalog
 from .storage import Store
 from .telemetry import Monitor
@@ -324,7 +324,19 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
     host_settings.web = web_tools
     logs = LogStore(settings.runtime_dir, store)
     host_tools = HostTools(store, catalog, lifecycle, lambda: snapshot())
-    providers = ProviderRegistry(catalog.providers, settings.runtime_dir / "providers.json")
+    def saved_providers():
+        raw = store.get_setting("hosted_providers") if hasattr(store, "get_setting") else None
+        try:
+            data = json.loads(raw) if raw else {}
+        except ValueError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def save_providers(data):
+        store.set_setting("hosted_providers", json.dumps(data))
+
+    providers = ProviderRegistry(catalog.providers, settings.runtime_dir / "providers.json", environ=EnvFileEnviron(ROOT / ".env"),
+                                 saved=saved_providers, save=save_providers if hasattr(store, "set_setting") else None)
     chat = ChatManager(store, catalog, generation, uploads, host_tools=host_tools, web_tools=web_tools,
                        job_tools=JobTools(store, catalog, generation, logs), voices=voices, providers=providers)
     # Text models for worker jobs that ask for one (meeting notes); polls only plugins that declare text_model_jobs.
@@ -443,16 +455,48 @@ def create_app(settings=None, store=None, monitor=None, worker=None, catalog=Non
         """Hosted chat providers (optional) with every model they list and which ones the chat offers."""
         return {"providers": providers.describe()}
 
+    class ProviderFields(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        id: StrictStr | None = Field(default=None, max_length=32)
+        name: StrictStr = Field(max_length=60)
+        source: Literal["gateway", "opencode"] = "gateway"
+        base_url: StrictStr | None = Field(default=None, max_length=300)
+        api_key_env: StrictStr | None = Field(default=None, max_length=80)
+        opencode_provider: StrictStr | None = Field(default=None, max_length=80)
+        opencode_config: StrictStr | None = Field(default=None, max_length=300)
+
+    class ProviderConfigs(BaseModel):
+        providers: list[ProviderFields] = Field(max_length=10)
+
+    @api.get("/providers/config")
+    def providers_config():
+        """How each hosted provider is set up (the token is only ever named, by its environment variable)."""
+        return {"providers": providers.configured()}
+
+    @api.put("/providers/config")
+    def providers_set_config(payload: ProviderConfigs):
+        """Replace the providers set up on the Host settings page; those from the runtimes file stay."""
+        try:
+            providers.set_configs([item.model_dump(exclude_none=True) for item in payload.providers])
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"providers": providers.configured()}
+
+    @api.post("/providers/test")
+    def providers_test(payload: ProviderFields):
+        ok, message = providers.test(payload.model_dump(exclude_none=True))
+        return {"ok": ok, "message": message}
+
     @api.post("/providers/{provider_id}/refresh")
     def providers_refresh(provider_id: str):
-        if provider_id not in catalog.providers:
+        if provider_id not in providers.configs:
             raise HTTPException(404, "Unknown provider")
         providers.models(provider_id, refresh=True)
         return {"providers": providers.describe()}
 
     @api.put("/providers/{provider_id}/models")
     def providers_choose(provider_id: str, payload: ProviderModels):
-        if provider_id not in catalog.providers:
+        if provider_id not in providers.configs:
             raise HTTPException(404, "Unknown provider")
         try:
             providers.set_enabled(provider_id, payload.enabled)

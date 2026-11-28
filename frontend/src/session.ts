@@ -6,7 +6,7 @@ import type { SavedHost } from './hosts'
 import {
   ApiError, type Connection, type Job, type JobOutput, type Launch, type Model,
   type Operation, type Refusal, type Runtime, type RuntimeEstimate, type Snapshot, type UploadRecord, type Voice,
-  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult, type ReferenceModel, type HostedProvider,
+  type ChatAttachment, type ChatMessage, type Conversation, type LogEntry, type LogText, type HostSettings, type SearchTestResult, type ReferenceModel, type HostedProvider, type ProviderSetup,
 } from './types'
 
 /** How many recent results to keep in view (the results sidebar lists them). */
@@ -398,6 +398,27 @@ export class HostSession {
 
   async testSearch(searxngUrl: string): Promise<SearchTestResult> {
     return await this.call('/api/settings/test-search', { method: 'POST', body: JSON.stringify({ searxng_url: searxngUrl }) }) as SearchTestResult
+  }
+
+  async providerSetups(): Promise<ProviderSetup[]> {
+    // A host that predates hosted providers answers 404 (or the fixtures 401): that is "none", not a lost connection.
+    const ctx = this.context()
+    if (!ctx) return []
+    const reply = await requestApi(ctx.base, ctx.token, '/api/providers/config', {}, ctx.signal).catch(() => null) as { providers?: ProviderSetup[] } | null
+    return reply?.providers ?? []
+  }
+
+  /** Save the providers set up here (the ones from the runtimes file stay as they are), then show their models. */
+  async saveProviderSetups(items: ProviderSetup[]): Promise<ProviderSetup[]> {
+    const body = items.map(({ origin: _origin, ...fields }) => fields)
+    const reply = await this.call('/api/providers/config', { method: 'PUT', body: JSON.stringify({ providers: body }) }) as { providers: ProviderSetup[] }
+    await this.refreshCatalog()
+    return reply.providers
+  }
+
+  async testProvider(item: ProviderSetup): Promise<SearchTestResult> {
+    const { origin: _origin, ...fields } = item
+    return await this.call('/api/providers/test', { method: 'POST', body: JSON.stringify(fields) }) as SearchTestResult
   }
 
   async logs(): Promise<LogEntry[]> {

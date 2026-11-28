@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { HostedSetup } from '../components/HostedSetup'
 import { ConnectionBanner, hostName } from '../components/HostBits'
 import type { SavedHost } from '../hosts'
 import { type HostStore, useSession } from '../store'
@@ -58,5 +59,6 @@ export function HostSettingsPage({ store, host }: { store: HostStore; host?: Sav
       {result && <p className={`settings-result ${result.ok ? 'settings-ok' : 'settings-problem'}`} role="status">
         {result.ok ? <CheckCircle2 size={16} aria-hidden="true" /> : <AlertCircle size={16} aria-hidden="true" />}{result.message}</p>}
     </form>
+    <HostedSetup session={session} connected={connected} />
   </>
 }

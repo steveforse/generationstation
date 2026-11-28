@@ -1211,3 +1211,5 @@ button.chat-chip:hover:not(:disabled) { border-color: var(--accent) }
 .hosted-models code { color: var(--text-3); font-size: var(--fs-meta) }
 .hosted-none { color: var(--text-3) }
 .models-where { margin-bottom: var(--sp-3) }
+.hosted-setup { display: grid; gap: var(--sp-3); margin: 0; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-lg) }
+.hosted-setup legend { padding: 0 var(--sp-2); font-weight: 600; color: var(--text-2) }

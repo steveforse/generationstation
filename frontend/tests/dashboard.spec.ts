@@ -1616,19 +1616,54 @@ test('keeps the search address in host settings: test it, then save it', async (
   if (await gear.getAttribute('aria-expanded') !== 'true') await gear.click()
   await page.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Host settings' }).click()
   await expect(page).toHaveURL(/#\/hosts\/local\/settings$/)
+  const search = page.getByRole('form', { name: 'Web search' })
   const address = page.getByLabel('Search service address')
   await expect(address).toHaveValue('http://env-searx:8080')
   await expect(page.getByText("Set in this host's .env file")).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(search.getByRole('button', { name: 'Save' })).toBeDisabled()
   await address.fill('http://searxng.example.lan/')
-  await page.getByRole('button', { name: 'Test' }).click()
-  await expect(page.getByRole('status')).toContainText('Works: 5 results')
+  await search.getByRole('button', { name: 'Test' }).click()
+  await expect(search.getByRole('status')).toContainText('Works: 5 results')
   expect(tested).toEqual(['http://searxng.example.lan/'])
-  await page.getByRole('button', { name: 'Save' }).click()
-  await expect(page.getByRole('status')).toContainText('Saved. The chat uses it from its next answer.')
+  await search.getByRole('button', { name: 'Save' }).click()
+  await expect(search.getByRole('status')).toContainText('Saved. The chat uses it from its next answer.')
   await expect(address).toHaveValue('http://searxng.example.lan')
   await expect(page.getByText("Set in this host's .env file")).toHaveCount(0)
   await page.screenshot({ path: 'test-results/screenshots/host-settings.png', fullPage: true })
+})
+
+test('hosted chat providers are set up in host settings: tested, saved, and the token only named', async ({ page }) => {
+  await connectFixtures(page, 'Fixture desktop', false, { songs: true })
+  let setups: Array<Record<string, unknown>> = [{ id: 'filed', name: 'From the file', source: 'gateway', base_url: 'https://old.example', api_key_env: 'OLD', origin: 'file' }]
+  let saved: unknown = null
+  const tested: Array<Record<string, unknown>> = []
+  await page.route('**/api/settings', (route) => route.fulfill({ json: { searxng_url: '', searxng_source: 'none' } }))
+  await page.route('**/api/providers/config', async (route) => {
+    if (route.request().method() === 'PUT') {
+      saved = route.request().postDataJSON()
+      const mine = (saved as { providers: Array<Record<string, unknown>> }).providers.map((item) => ({ ...item, id: 'work-gateway', origin: 'settings' }))
+      setups = [...setups.filter((item) => item.origin === 'file'), ...mine]
+    }
+    await route.fulfill({ json: { providers: setups } })
+  })
+  await page.route('**/api/providers/test', (route) => { tested.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ json: { ok: true, message: 'Works: 30 chat models, such as claude-haiku-5-5.' } }) })
+  await go(page, '#/hosts/local/settings')
+  const form = page.getByRole('form', { name: 'Hosted chat models' })
+  await expect(form.getByText('From the file is set up in this host')).toBeVisible()
+  await form.getByRole('button', { name: 'Add a provider' }).click()
+  await form.getByLabel('Name').fill('Work gateway')
+  await form.getByLabel('Gateway address').fill('https://litellm.example.com')
+  await form.getByLabel('Token variable').fill('LITELLM_API_KEY')
+  await form.getByRole('button', { name: 'Test' }).click()
+  await expect(form.getByRole('status')).toContainText('Works: 30 chat models')
+  expect(tested[0]).toMatchObject({ name: 'Work gateway', base_url: 'https://litellm.example.com', api_key_env: 'LITELLM_API_KEY' })
+  await form.getByRole('button', { name: 'Save' }).click()
+  await expect(form.getByRole('status')).toContainText('Saved.')
+  expect(JSON.stringify(saved)).not.toMatch(/token"|secret/i)
+  await expect(form.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await form.getByRole('button', { name: 'Remove' }).click()
+  await form.getByRole('button', { name: 'Save' }).click()
+  await expect(form.getByLabel('Name')).toHaveCount(0)
 })
 
 test('a model that also paints pictures labels each tab and result by what it makes', async ({ page }) => {

@@ -184,3 +184,71 @@ def test_the_endpoints_list_choose_and_refresh_without_the_token_in_view(tmp_pat
         assert client.post("/api/providers/other/refresh", headers=headers).status_code == 404
         assert client.post("/api/providers/work/refresh", headers=headers).status_code == 200
         assert client.get("/api/providers").status_code == 401
+
+
+def test_a_token_is_found_in_the_environment_or_the_env_file_and_nowhere_else(tmp_path):
+    from generationstation.providers import EnvFileEnviron
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("GATEWAY_TOKEN=from-file\nOTHER=1\n")
+    assert EnvFileEnviron(env_file, {}).get("GATEWAY_TOKEN") == "from-file"
+    assert EnvFileEnviron(env_file, {"GATEWAY_TOKEN": "from-env"}).get("GATEWAY_TOKEN") == "from-env"  # the environment first
+    assert EnvFileEnviron(env_file, {}).get("MISSING") is None and EnvFileEnviron(tmp_path / "none.env", {}).get("GATEWAY_TOKEN") is None
+    env_file.write_text("GATEWAY_TOKEN=changed\n")
+    assert EnvFileEnviron(env_file, {}).get("GATEWAY_TOKEN") == "changed"  # read each time: no restart needed
+
+
+def test_providers_set_up_in_the_settings_replace_the_files_and_are_checked_and_tested(tmp_path):
+    kept = {}
+    reg = ProviderRegistry({"litellm": ProviderConfig(name="From file", base_url="https://old.example", api_key_env="OLD")}, tmp_path / "p.json",
+                           opener=Gateway(), environ={"GATEWAY_TOKEN": "secret"}, saved=lambda: kept, save=lambda data: kept.update(data) if data else kept.clear())
+    assert [(p["id"], p["origin"]) for p in reg.configured()] == [("litellm", "file")]
+    done = reg.set_configs([{"name": "Work gateway", "base_url": "https://gateway.example", "api_key_env": "GATEWAY_TOKEN"},
+                            {"id": "litellm", "name": "LiteLLM", "base_url": "https://gateway.example", "api_key_env": "GATEWAY_TOKEN"}])
+    assert sorted((p["id"], p["origin"]) for p in done) == [("litellm", "settings"), ("work-gateway", "settings")]
+    assert reg.configs["litellm"].name == "LiteLLM"  # the setting takes the file's place
+    assert "secret" not in json.dumps(kept)  # only the variable's name is kept
+    for bad, text in (([{"name": "X", "base_url": "https://x"}], "api_key_env"), ([{"name": "X", "source": "opencode"}], "opencode_provider"),
+                      ([{"name": "A", "base_url": "https://x", "api_key_env": "T"}, {"name": "A", "base_url": "https://y", "api_key_env": "T"}], "Two providers"),
+                      ("nope", "list")):
+        with pytest.raises(ValueError, match=text):
+            reg.set_configs(bad)
+    assert reg.test({"name": "T", "base_url": "https://gateway.example", "api_key_env": "GATEWAY_TOKEN"})[0] is True
+    ok, message = reg.test({"name": "T", "base_url": "https://gateway.example", "api_key_env": "UNSET_VARIABLE"})
+    assert not ok and "UNSET_VARIABLE" in message
+    assert reg.test({"name": "T"})[0] is False
+    reg.set_configs([])
+    assert [p["origin"] for p in reg.configured()] == ["file"]
+
+
+def test_the_settings_endpoints_save_test_and_list_providers(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from generationstation.app import create_app
+    from tests.test_app import TOKEN, FakeMonitor, FakeStore, settings
+
+    class Store(FakeStore):
+        def __init__(self):
+            super().__init__()
+            self.kept = {}
+
+        def get_setting(self, key, default=None):
+            return self.kept.get(key, default)
+
+        def set_setting(self, key, value):
+            self.kept[key] = value
+
+    store = Store()
+    app = create_app(settings=settings(runtime_dir=tmp_path / "runtime", runtimes_file=None), store=store, monitor=FakeMonitor())
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+    with TestClient(app) as client:
+        assert client.get("/api/providers/config", headers=headers).json() == {"providers": []}
+        body = {"providers": [{"name": "Work gateway", "base_url": "https://gateway.example", "api_key_env": "GATEWAY_TOKEN"}]}
+        done = client.put("/api/providers/config", json=body, headers=headers)
+        assert done.status_code == 200 and done.json()["providers"][0]["id"] == "work-gateway" and done.json()["providers"][0]["origin"] == "settings"
+        assert "work-gateway" in store.kept["hosted_providers"]
+        assert client.get("/api/providers", headers=headers).json()["providers"][0]["name"] == "Work gateway"
+        assert client.put("/api/providers/config", json={"providers": [{"name": "X"}]}, headers=headers).status_code == 422
+        assert client.put("/api/providers/config", json={"providers": [{"name": "X", "token": "no"}]}, headers=headers).status_code == 422
+        lost = client.post("/api/providers/test", json={"name": "T", "source": "opencode", "opencode_provider": "x", "opencode_config": str(tmp_path / "none.json")}, headers=headers)
+        assert lost.status_code == 200 and lost.json()["ok"] is False and "could not be read" in lost.json()["message"]
